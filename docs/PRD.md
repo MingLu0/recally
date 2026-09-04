@@ -53,7 +53,7 @@ Single user: me (Ming). Designed with `user_id` columns from day one so multi-us
 | Flashcard content | LLM-generated Q&A + cloze | Raw highlights are not reviewable; generation quality is the core value |
 | Quality gate | Critic agent + human approval queue | Bad cards kill retention habits; nothing enters the deck unreviewed |
 | Approval volume | Queue grouped by chapter; Critic `accept` on round 1 may be auto-approved behind a config flag (off by default) | One book yields several hundred cards; hand-approving every one is itself a habit risk. Turn the flag on only if the queue stops draining |
-| Re-exports | Same UUID + same text → skip. UUID missing from a later export → highlight marked `removed`, existing cards untouched. Text or note changed for the same UUID → not observed in real exports; treat as new highlight if it ever happens | Two real exports 10 days apart: 324 UUIDs unchanged, 56 added, 2 removed, 0 edited |
+| Re-exports | Same UUID + same text → skip. UUID missing from a later export → highlight marked `removed`, existing cards untouched. Text or note changed for the same UUID → not observed in real exports; if it ever happens, update the existing row and re-run the Curator on it (the UUID stays the unique key, so it is never a second row) | Two real exports 10 days apart: 324 UUIDs unchanged, 56 added, 2 removed, 0 edited |
 | Spaced repetition | FSRS (py-fsrs) | Modern algorithm, better retention modeling than SM-2 |
 | Review delivery | FCM push | Reminders are essential for a forgetful user (me) |
 | Android | Native Kotlin + Compose | Best notifications/offline support |

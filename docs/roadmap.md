@@ -9,11 +9,14 @@
 ### 1. Backend skeleton + ingestion
 - FastAPI app, SQLAlchemy models, Alembic (batch mode), SQLite.
 - O'Reilly CSV adapter + dedupe + watcher (rename event, debounced).
-- **Gate**: ingest the 25/08 export (326 rows), then the 04/09 export (380 rows) of the same book. Expect 56 new, 2 removed, 0 changed, and a third run of either file adds nothing.
+- Commit fixtures under `backend/tests/fixtures/`: two trimmed exports of the same book (~15 rows each) that between them cover UUID unchanged / added / removed, a mid-word truncated row, and a run of sibling headings. Real exports stay in gitignored `data/`.
+- **Gate (automated)**: pytest ingests fixture A then fixture B and asserts the exact new/removed/updated counts; a third ingest of either adds nothing.
+- **Gate (manual)**: ingest the 2026-08-25 export (326 rows), then the 2026-09-04 export (380 rows) of the same book. Expect 56 new, 2 removed, 0 updated.
 
 ### 2. Agent pipeline
 - Curator → Writer ⇄ Critic with LiteLLM, cost logging, human approval queue.
-- **Gate**: generate cards for Chapter 9; the run of "Stage 1/2/3" headings becomes one grouped card; a truncated row ("…written to the san") produces a card that does not invent the missing text.
+- Agent tests mock `llm.py` with recorded responses; no test touches a provider.
+- **Gate**: generate cards for Chapter 9; the run of "Stage 1/2/3" headings becomes one grouped card; a truncated row ("…written to the san") produces a card that does not invent the missing text. Both rows are in the fixtures so the check is repeatable.
 
 ### 3. FSRS + reviews API
 - py-fsrs engine, `/reviews/due`, `/reviews/{id}/rate`, `/reviews/rate-batch`, scheduler.
@@ -23,11 +26,11 @@
 Use the backend with a minimal client for ~2 weeks. If card quality doesn't sustain a review habit, fix the pipeline before investing in the app.
 
 ### 4. Android MVP
-- Today, Review, Approval Queue screens; Retrofit client; Room cache.
+- Settings (base URL + API key), Today, Review, Approval Queue screens; Retrofit client; Room cache; LAN cleartext network security config.
 - **Gate**: daily reviews happen on the phone.
 
 ### 5. Notifications
-- FCM HTTP v1 push via `firebase-admin`; one-per-day policy; deep links.
+- FCM HTTP v1 push via `firebase-admin`; `push_runs` table; one-per-day and unreviewed-batch policy; deep links.
 
 ### 6. Learner + stats
 - Nightly FSRS optimizer (stage A) as soon as there are a few hundred reviews.
@@ -45,5 +48,5 @@ Use the backend with a minimal client for ~2 weeks. If card quality doesn't sust
 
 - Kindle adapter (My Clippings.txt from the device, or notebook HTML export from read.amazon.com / the mobile app; there is no CSV export).
 - Cross-book decks via topic tags.
-- LangGraph migration if orchestration outgrows plain Python (ADR-001).
+- Orchestration framework if plain Python outgrows itself (revisit triggers in ADR-001).
 - Web/PWA client.

@@ -1,6 +1,6 @@
 # ADR-005: Same-session relearning is client-scheduled, server-scored
 
-**Status**: proposed
+**Status**: accepted
 **Date**: 2026-09-04
 
 ## Context

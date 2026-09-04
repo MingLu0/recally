@@ -28,11 +28,11 @@ UNIQUE (`source`, `external_id`).
 | raw_text | text | as exported |
 | personal_note | text, nullable | O'Reilly "Personal Note" column |
 | color | text, nullable | O'Reilly "Color" column; currently always YELLOW, kept for future filtering |
-| dedupe_key | text UNIQUE | O'Reilly: annotation UUID from the Annotation URL fragment (stable across exports). Kindle: sha256(book+location+text) |
+| dedupe_key | text UNIQUE | O'Reilly: annotation UUID from the Annotation URL fragment (stable across exports). Kindle: sha256(book+location+text). Same key + same text on re-import → skip; same key + different `raw_text`/`personal_note` → update this row and set `processed=false` |
 | source | text | `oreilly` / `kindle` |
 | highlighted_at | date | |
 | export_position | int | row index within the export file. Export order is newest first, and within a day reverse creation order, so this is the only positional signal available |
-| truncated | bool | Curator flag: text is clipped mid-word at start or end |
+| truncated | bool | Curator flag: text is clipped mid-word at start or end. Lives only here; units and cards derive "any source truncated" |
 | processed | bool | Curator has run |
 | removed_at | datetime, nullable | set when the UUID is absent from a later export; cards are kept |
 
@@ -62,11 +62,14 @@ PK (`unit_id`, `highlight_id`). Gives every card full provenance back to each so
 | id | PK | |
 | unit_id | FK curated_units | provenance; source highlights via `curated_unit_highlights` |
 | type | text | `qa` / `cloze` |
-| front | text | |
+| front | text | current text (may be human-edited at approval) |
 | back | text | |
+| original_front | text | Writer output as accepted by the Critic; never changed |
+| original_back | text | |
 | tags | json | inherited + card-specific |
 | status | text | `pending_review` / `needs_human` / `approved` / `rejected` |
-| status_reason | text, nullable | critic critique or human rejection reason (feeds the Learner) |
+| status_reason | text, nullable | critic critique, human rejection reason, or `superseded by <id>` (feeds the Learner) |
+| approved_at | datetime, nullable | when the human approved; `card_state` is created at the same time |
 | generation_rounds | int | Writer⇄Critic rounds used |
 | model | text | generating model (for quality analysis) |
 | guidance_version | int, nullable FK writer_guidance | which Learner guidance was in the Writer prompt |
@@ -130,13 +133,25 @@ Rows are never edited. Cards store the version that generated them.
 | fcm_token | text UNIQUE | |
 | platform | text | `android` |
 | created_at | datetime | |
-| last_push_at | datetime, nullable | enforces the one-push-per-day policy |
+| last_push_at | datetime, nullable | denormalised from `push_runs` for the one-push-per-day check |
+
+### push_runs
+One row per FCM push actually sent. Backs the "no push while the previous push's cards are unreviewed" rule: the notifier skips if any `card_ids` from the latest row has no `review_logs` entry after `sent_at`.
+
+| col | type | notes |
+|---|---|---|
+| id | PK | |
+| device_id | FK devices | |
+| sent_at | datetime | |
+| card_ids | json | ids included in the batch this push announced |
+| due_count | int | number shown in the notification |
 
 ### llm_calls
 | col | type | notes |
 |---|---|---|
 | id | PK | |
 | agent | text | curator / writer / critic / learner |
+| ingest_run_id | FK ingest_runs, nullable | null for Learner calls |
 | model | text | |
 | input_tokens | int | |
 | output_tokens | int | |
@@ -151,8 +166,14 @@ Rows are never edited. Cards store the version that generated them.
 | filename | text | |
 | rows_seen | int | |
 | rows_new | int | |
+| rows_updated | int | same UUID, changed text or note (expected 0) |
 | rows_removed | int | UUIDs present before, absent now |
+| cards_generated | int | cards the pipeline produced for this run's highlights |
+| cost_microusd | int | sum of `llm_calls` for this run |
 | started_at / finished_at | datetime | |
+| error | text, nullable | set if the run aborted |
+
+`rows_unchanged = rows_seen - rows_new - rows_updated`.
 
 Backs `GET /ingest/status`.
 
@@ -162,4 +183,8 @@ Backs `GET /ingest/status`.
 books 1───n highlights n───n curated_units 1───n cards 1───1 card_state
                                                    cards 1───n review_logs
                                    writer_guidance 1───n cards
+                                   devices 1───n push_runs
+                                   ingest_runs 1───n llm_calls
 ```
+
+There is no `users` table in v1. `user_id` is a plain integer column (default 1) with no FK; the table and FKs arrive with multi-user auth (roadmap phase 3).

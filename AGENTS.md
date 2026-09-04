@@ -32,6 +32,7 @@ The docs are the spec. Do not invent behaviour that contradicts them; if a chang
 | Tables, columns, FSRS state | `docs/data-model.md` |
 | REST endpoints and payloads | `docs/api-spec.md` |
 | Android screens, offline sync, push | `docs/android.md` |
+| Env vars and their defaults | `docs/config.md` |
 | Build order and gates | `docs/roadmap.md` |
 | Why we chose X over Y | `docs/decisions/` |
 
@@ -44,10 +45,10 @@ These come from the PRD and ADRs. Do not work around them.
 3. **All LLM calls go through the single `llm.py` LiteLLM wrapper** and are logged to `llm_calls` (model, tokens, cost, latency, agent). Never import a provider SDK directly. Never use provider-specific prompt features (ADR-003).
 4. **No SQLite-specific SQL.** SQLAlchemy ORM + Alembic from the first schema change, `render_as_batch=True`, Postgres-ready (ADR-004). Every table has `user_id` defaulting to 1.
 5. **Server is authoritative for FSRS state.** Offline ratings replay in client-timestamp order via `Scheduler.review_card(review_datetime=...)`. Never let the client compute the next due date as truth.
-6. **Dedupe key for O'Reilly is the annotation UUID** from the Annotation URL. Same UUID + same text → skip. UUID missing from a later export → mark `removed`, keep existing cards. Book dedupe key is the ISBN from the Book URL.
+6. **Dedupe key for O'Reilly is the annotation UUID** from the Annotation URL. Same UUID + same text → skip. Same UUID + different text or note → update the existing row in place and reset `processed=false` (never insert a second row; `dedupe_key` is UNIQUE). UUID missing from a later export → set `removed_at`, keep existing cards. Book dedupe key is the ISBN from the Book URL.
 7. **Do not reconstruct truncated highlights.** Some rows are clipped mid-word and the lost text exists nowhere else. Curator flags `truncated=true`; Writer works from the partial text.
-8. **Push policy: at most one FCM push per day**, inside the configured window, and none while cards from the previous push are still unreviewed.
-9. **Writer ⇄ Critic loop is bounded at 3 rounds**, then `status=needs_human`.
+8. **Push policy: at most one FCM push per day**, inside the configured window, and none while any card listed in the previous `push_runs` row is still unreviewed.
+9. **Writer ⇄ Critic loop is bounded at 3 rounds**, then `status=needs_human`. A Critic `reject` verdict also goes to `needs_human`; the pipeline never sets `rejected` itself.
 10. **`writer_guidance` rows are versioned, never edited in place.** Cards record the `guidance_version` that generated them.
 11. **Plain Python, no orchestration framework** (ADR-001). Do not add LangGraph, CrewAI, etc. without a new ADR.
 12. **Watcher acts on `on_moved` (browser rename after download), not `on_created`**, with a short debounce.
@@ -58,10 +59,13 @@ These come from the PRD and ADRs. Do not work around them.
 - Python ≥ 3.10 (required by `py-fsrs` 6.x). FastAPI, SQLAlchemy, Alembic, `py-fsrs`, LiteLLM, APScheduler 3.x (not 4.x pre-release), `watchdog`.
 - Each agent is a module with one LLM call, a prompt file, and typed structured input/output. Keep prompts in files, not inline strings.
 - Ingestion adapters implement `BaseAdapter.parse(file) -> list[NormalizedHighlight]`. Add new sources (Kindle) as new adapters, never by special-casing the pipeline.
+- `truncated` is a property of a `highlights` row. Units and cards do not store it; derive "any source highlight truncated" when needed.
 - Auth is a single `X-API-Key` header from env. Secrets live in `.env` (gitignored). Never hard-code keys or commit `.env*`.
 - Errors return problem+json: `{ "status": 422, "detail": "..." }`.
-- Costs are stored as `cost_cents` in the DB schema (see `docs/data-model.md`); if you log `cost_microusd` in the wrapper, convert at the boundary and keep one unit in the DB.
+- Costs are stored as `cost_microusd int` (1 USD = 1,000,000) everywhere (`docs/data-model.md`). Do not introduce cents or float dollars.
+- Config comes from env vars, named in `docs/config.md`. Do not invent new names; add them to that doc in the same change.
 - Tooling expected: `ruff` (lint + format), `mypy`, `pytest`. Match whatever `pyproject.toml` defines once it exists.
+- Tests never call a real LLM provider. Agents are tested by mocking `llm.py` (or LiteLLM's mock response) with recorded outputs. Ingestion tests run against the committed fixtures in `backend/tests/fixtures/` (see `docs/roadmap.md`, step 1 gate).
 
 ### Android (Kotlin)
 - Jetpack Compose + Material 3, Retrofit + OkHttp, Room, Hilt, FCM. Package root `dev.recally`, structure in `docs/android.md`.
