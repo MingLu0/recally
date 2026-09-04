@@ -33,7 +33,7 @@ No LLM. Watch folder → adapter → dedupe → `highlights` rows with `processe
 **Output**: per card `verdict[accept|revise|reject]` + critique.
 **Outcomes**:
 - `accept` → `status=pending_review` (or `approved` if `AUTO_APPROVE_ROUND1_ACCEPT` is on and this is round 1).
-- `revise` → back to Writer with the critique; after 3 rounds without `accept` → `status=needs_human`.
+- `revise` → that card only goes back to the Writer with the critique; sibling cards already accepted are kept as they are. After 3 rounds without `accept` → `status=needs_human`. `generation_rounds` is per card.
 - `reject` (unsalvageable, e.g. source is a bare heading) → `status=needs_human` with the critique in `status_reason`. The pipeline never sets `rejected`; only a human does.
 
 ### 5. Human approval queue — me
@@ -60,6 +60,16 @@ No LLM. FSRS due computation + daily batch selection (due cards + up to `NEW_CAR
 - Human edits at approval time (`cards.original_front/original_back` differ from `front/back`) and rejection reasons are inputs too; they are the most direct quality signal available.
 
 Cold start: with one user, a lapse-rate bucket needs on the order of a hundred reviews before it means anything. Stage B is expected to produce its first useful guidance months in, not weeks.
+
+## Pipeline runner and handoffs
+
+Agents never call each other. One runner module (`pipeline.py`) calls them in order and every handoff is either a typed return value or a database row whose state marks it ready for the next stage.
+
+- **Ingestion → Curator: DB state.** The runner selects all `highlights` with `processed=false`, grouped by chapter, regardless of which ingest inserted them. This is what makes re-running the pipeline the retry path: leftover rows from a failed run are picked up next time, without the file having to change.
+- **Curator → Writer → Critic: in memory, within one run.** Curator output is persisted to `curated_units` (with `ingest_run_id`) before any Writer call, then each `keep` unit is passed to the Writer, and each returned card to the Critic. A `revise` verdict feeds the critique back into the next Writer call for that card only.
+- **Critic → human → Scheduler: DB state.** The final verdict is written as `cards.status`; the Scheduler reads only `approved`.
+
+Idempotency: `highlights.processed` flips to `true` only when the unit covering it has reached a terminal outcome (`drop`, or every card written with a status). The runner skips any `keep` unit that already has cards, so a crash between Curator and Writer re-runs the Curator for the remaining unprocessed highlights without generating duplicate cards for units that finished. Before calling the Curator, the runner deletes `keep` units that have no cards and whose highlights are all still `processed=false`; those are orphans from a crashed run and the Curator will recreate them.
 
 ## What is LLM vs deterministic
 
