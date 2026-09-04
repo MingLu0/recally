@@ -136,7 +136,7 @@ Rows are never edited. Cards store the version that generated them.
 | last_push_at | datetime, nullable | denormalised from `push_runs` for the one-push-per-day check |
 
 ### push_runs
-One row per FCM push actually sent. Backs the "no push while the previous push's cards are unreviewed" rule: the notifier skips if any `card_ids` from the latest row has no `review_logs` entry after `sent_at`.
+One row per FCM push actually sent. Backs the "no push while the previous push's cards are unreviewed" rule: the notifier skips if any `card_ids` from the latest row has no `review_logs` entry after `sent_at`. That check loads the latest row and loops over `card_ids` in Python; it is one small batch per day, so a `push_run_cards` join table is deferred to the Postgres cutover (ADR-004).
 
 | col | type | notes |
 |---|---|---|
@@ -147,12 +147,18 @@ One row per FCM push actually sent. Backs the "no push while the previous push's
 | due_count | int | number shown in the notification |
 
 ### llm_calls
+One row per call through `llm.py`. Doubles as the trace and the replay corpus: the full prompt and completion are stored so a bad Critic verdict can be inspected, and so prompts can be re-run against human-labelled cards later (ADR-006).
 | col | type | notes |
 |---|---|---|
 | id | PK | |
 | agent | text | curator / writer / critic / learner |
 | ingest_run_id | FK ingest_runs, nullable | null for Learner calls |
+| unit_id | FK curated_units, nullable | set for Writer and Critic calls; null for Curator (batch) and Learner |
+| card_id | FK cards, nullable | set for Critic calls and for Writer revisions of an existing card |
+| round | int, nullable | Writer ⇄ Critic round (1-based); null outside the loop |
 | model | text | |
+| request | json, nullable | messages sent, after prompt rendering; null when `LLM_LOG_PAYLOADS=false` |
+| response | json, nullable | parsed structured output; null when `LLM_LOG_PAYLOADS=false` |
 | input_tokens | int | |
 | output_tokens | int | |
 | cost_microusd | int | from `litellm.completion_cost`; 0 for Ollama |
@@ -185,6 +191,8 @@ books 1───n highlights n───n curated_units 1───n cards 1──
                                    writer_guidance 1───n cards
                                    devices 1───n push_runs
                                    ingest_runs 1───n llm_calls
+                                   curated_units 1───n llm_calls
+                                   cards 1───n llm_calls
 ```
 
 There is no `users` table in v1. `user_id` is a plain integer column (default 1) with no FK; the table and FKs arrive with multi-user auth (roadmap phase 3).

@@ -63,6 +63,13 @@ FastAPI, single API-key auth (header). See [api-spec.md](api-spec.md). Phase 1 s
 ### Configuration
 All runtime settings are env vars, listed with defaults in [config.md](config.md).
 
+### Observability
+Deliberately minimal for v1; the database is the trace.
+- **LLM trace**: every call through `llm.py` writes an `llm_calls` row with agent, model, tokens, cost, latency, and (by default) the rendered prompt and parsed response, linked to the `ingest_run`, `curated_unit` and `card` it served. This is enough to reconstruct why any card looks the way it does, and is the replay corpus for later evals (ADR-006).
+- **Run correlation**: one `run_id` (the `ingest_runs.id`, or a generated id for scheduler and Learner jobs) is attached to every log line and `llm_calls` row of a job.
+- **Application logs**: stdlib `logging`, JSON-formatted, to stdout; level from `LOG_LEVEL`. No log aggregation or error-tracking service until phase 2.
+- **Failure handling**: exceptions are caught at the agent boundary, recorded in `ingest_runs.error`, and the run is marked finished. The watcher and scheduler keep running; a failed run is retried by re-ingesting the file.
+
 ### Storage
 SQLite now (`data/recally.db`), SQLAlchemy models, Postgres-ready (no SQLite-specific SQL). Alembic runs with `render_as_batch=True` because SQLite cannot ALTER columns in place. See [data-model.md](data-model.md).
 

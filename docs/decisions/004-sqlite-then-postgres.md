@@ -17,3 +17,4 @@ SQLite via SQLAlchemy + Alembic migrations, with no SQLite-specific SQL. All tab
 ## Consequences
 - Single-writer limitation is fine for one user; must migrate before multi-user.
 - Alembic migration discipline required from the first schema change.
+- Some v1 columns hold JSON arrays that would be join tables in Postgres (`push_runs.card_ids`, `cards.tags`); checks over them run in Python. Normalise at the Postgres cutover if they become hot.

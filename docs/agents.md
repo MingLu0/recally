@@ -73,6 +73,16 @@ Cold start: with one user, a lapse-rate bucket needs on the order of a hundred r
 | Learner stage A (optimizer) | No | Parameter fitting is math |
 | Learner stage B | Yes | Pattern synthesis over noisy history |
 
+## Quality signals and evals
+
+v1 has no formal eval suite (ADR-006). The human approval queue is the labelled dataset, and the schema already captures it:
+- `cards.status` and `status_reason` record accept/reject and why.
+- `cards.original_front/original_back` vs `front/back` record every edit made at approval time.
+- `cards.generation_rounds`, `model` and `guidance_version` make quality attributable to a prompt, model and guidance version.
+- `llm_calls.request/response` keep the exact prompts and outputs so they can be replayed.
+
+Formal evals (replaying the Critic over human-labelled cards, golden sets, LLM-as-judge) are added only when a model or prompt change needs a regression check. Until then the roadmap's two-week validation checkpoint is the eval.
+
 ## Cost controls
 
 - Every LLM call logged: model, tokens, cost_microusd, agent, latency.
