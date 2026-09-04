@@ -65,7 +65,7 @@ These come from the PRD and ADRs. Do not work around them.
 - Costs are stored as `cost_microusd int` (1 USD = 1,000,000) everywhere (`docs/data-model.md`). Do not introduce cents or float dollars.
 - Config comes from env vars, named in `docs/config.md`. Do not invent new names; add them to that doc in the same change.
 - Tooling expected: `ruff` (lint + format), `mypy`, `pytest`. Match whatever `pyproject.toml` defines once it exists.
-- Tests never call a real LLM provider. Agents are tested by mocking `llm.py` (or LiteLLM's mock response) with recorded outputs. Ingestion tests run against the committed fixtures in `backend/tests/fixtures/` (see `docs/roadmap.md`, step 1 gate).
+- Tests never call a real LLM provider. Agents are tested by mocking `llm.py` (or LiteLLM's mock response) with recorded outputs. Ingestion tests run against the committed fixtures in `backend/tests/fixtures/` (see `docs/roadmap.md`, step 1). Every roadmap step has a *Tests* gate (merge requirement, output pasted in the PR) and a *You verify* gate the human runs after merge.
 
 ### Android (Kotlin)
 - Jetpack Compose + Material 3, Retrofit + OkHttp, Room, Hilt, FCM. Package root `dev.recally`, structure in `docs/android.md`.
