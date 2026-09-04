@@ -24,6 +24,8 @@ Provider credentials use LiteLLM's own variable names (`ANTHROPIC_API_KEY`, `OPE
 | `LLM_MODEL_LEARNER` | `claude-sonnet-5` | Learner stage B | |
 | `LLM_MAX_ROUNDS` | `3` | Writer ⇄ Critic | Hard rule 9; do not raise without a doc change |
 | `AUTO_APPROVE_ROUND1_ACCEPT` | `false` | pipeline | Hard rule 1 exception; skips the queue for round-1 `accept` |
+| `LLM_LOG_PAYLOADS` | `true` | `llm.py` | Store `request`/`response` on `llm_calls`; turn off only if the table bloats (ADR-006) |
+| `LOG_LEVEL` | `INFO` | all | Python `logging` level for the backend process |
 
 ## Scheduling and push
 

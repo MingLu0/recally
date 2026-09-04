@@ -12,7 +12,7 @@ Turn your reading highlights into lasting memory. Recally ingests O'Reilly annot
 - [Android app](docs/android.md) — screens & sync
 - [Config](docs/config.md) — env vars & defaults
 - [Roadmap](docs/roadmap.md) — build order & productionization
-- [Decisions](docs/decisions/) — ADRs
+- [Decisions](docs/decisions/README.md) — ADR index
 
 ## Repo layout
 

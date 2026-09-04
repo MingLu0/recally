@@ -14,7 +14,7 @@
 - **Gate (manual)**: ingest the 2026-08-25 export (326 rows), then the 2026-09-04 export (380 rows) of the same book. Expect 56 new, 2 removed, 0 updated.
 
 ### 2. Agent pipeline
-- Curator → Writer ⇄ Critic with LiteLLM, cost logging, human approval queue.
+- Curator → Writer ⇄ Critic with LiteLLM, `llm_calls` trace (cost, prompt, response, card linkage), human approval queue.
 - Agent tests mock `llm.py` with recorded responses; no test touches a provider.
 - **Gate**: generate cards for Chapter 9; the run of "Stage 1/2/3" headings becomes one grouped card; a truncated row ("…written to the san") produces a card that does not invent the missing text. Both rows are in the fixtures so the check is repeatable.
 

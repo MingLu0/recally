@@ -42,7 +42,7 @@ These come from the PRD and ADRs. Do not work around them.
 
 1. **Nothing enters FSRS scheduling without human approval.** `cards.status` must pass through `pending_review` or `needs_human` → `approved`. The only exception is the `AUTO_APPROVE_ROUND1_ACCEPT` config flag, default **off**.
 2. **Ingestion, dedupe, FSRS and the notifier are deterministic. No LLM calls there.** Only Curator, Writer, Critic and Learner stage B use an LLM (`docs/agents.md`, "What is LLM vs deterministic").
-3. **All LLM calls go through the single `llm.py` LiteLLM wrapper** and are logged to `llm_calls` (model, tokens, cost, latency, agent). Never import a provider SDK directly. Never use provider-specific prompt features (ADR-003).
+3. **All LLM calls go through the single `llm.py` LiteLLM wrapper** and are logged to `llm_calls` (agent, model, tokens, cost, latency, and by default the rendered prompt and parsed response, linked to the unit/card served; see `docs/data-model.md` and ADR-006). Never import a provider SDK directly. Never use provider-specific prompt features (ADR-003).
 4. **No SQLite-specific SQL.** SQLAlchemy ORM + Alembic from the first schema change, `render_as_batch=True`, Postgres-ready (ADR-004). Every table has `user_id` defaulting to 1.
 5. **Server is authoritative for FSRS state.** Offline ratings replay in client-timestamp order via `Scheduler.review_card(review_datetime=...)`. Never let the client compute the next due date as truth.
 6. **Dedupe key for O'Reilly is the annotation UUID** from the Annotation URL. Same UUID + same text → skip. Same UUID + different text or note → update the existing row in place and reset `processed=false` (never insert a second row; `dedupe_key` is UNIQUE). UUID missing from a later export → set `removed_at`, keep existing cards. Book dedupe key is the ISBN from the Book URL.
@@ -74,7 +74,7 @@ These come from the PRD and ADRs. Do not work around them.
 - Use injected dispatchers, not hard-coded `Dispatchers.IO`. Include exception handlers on coroutines.
 
 ### Docs
-- A design or technology change needs an ADR in `docs/decisions/` (next number, `Status`, `Date`, Context / Decision / Rationale / Consequences). Update the doc that the ADR affects in the same change.
+- A design or technology change needs an ADR in `docs/decisions/` (next number, `Status`, `Date`, Context / Decision / Rationale / Consequences). Update the doc that the ADR affects and the index in `docs/decisions/README.md` in the same change. Small local decisions get a one-sentence "why" inline next to the item instead; the test is whether reversing it would touch more than one doc.
 - Dates in docs use ISO `YYYY-MM-DD`. Times are GMT+12 unless stated.
 - Keep the README doc index in sync when adding a doc.
 

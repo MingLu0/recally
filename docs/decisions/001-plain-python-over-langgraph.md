@@ -16,4 +16,4 @@ Use plain Python modules + LiteLLM + APScheduler. Human-in-the-loop is handled a
 
 ## Consequences
 - Easy to start; each agent is testable in isolation.
-- Revisit LangGraph if we add multi-turn deliberation, branching recovery, or want LangSmith-style run tracing.
+- Revisit LangGraph if we add multi-turn deliberation or branching recovery. Run tracing on its own is not a trigger: `llm_calls` stores the full prompt, response and card linkage (ADR-006), which covers what LangSmith-style tracing would give us.
