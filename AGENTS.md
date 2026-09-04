@@ -34,6 +34,7 @@ The docs are the spec. Do not invent behaviour that contradicts them; if a chang
 | Android screens, offline sync, push | `docs/android.md` |
 | Env vars and their defaults | `docs/config.md` |
 | Build order and gates | `docs/roadmap.md` |
+| How work is tracked, run, and reviewed | `docs/workflow.md` |
 | Why we chose X over Y | `docs/decisions/` |
 
 ## Hard rules
