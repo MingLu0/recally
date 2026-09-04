@@ -68,7 +68,7 @@ Deliberately minimal for v1; the database is the trace.
 - **LLM trace**: every call through `llm.py` writes an `llm_calls` row with agent, model, tokens, cost, latency, and (by default) the rendered prompt and parsed response, linked to the `ingest_run`, `curated_unit` and `card` it served. This is enough to reconstruct why any card looks the way it does, and is the replay corpus for later evals (ADR-006).
 - **Run correlation**: one `run_id` (the `ingest_runs.id`, or a generated id for scheduler and Learner jobs) is attached to every log line and `llm_calls` row of a job.
 - **Application logs**: stdlib `logging`, JSON-formatted, to stdout; level from `LOG_LEVEL`. No log aggregation or error-tracking service until phase 2.
-- **Failure handling**: exceptions are caught at the agent boundary, recorded in `ingest_runs.error`, and the run is marked finished. The watcher and scheduler keep running; a failed run is retried by re-ingesting the file.
+- **Failure handling**: exceptions are caught at the agent boundary, recorded in `ingest_runs.error`, and the run is marked finished. The watcher and scheduler keep running. Retry is the next pipeline run (triggered by any ingest, or `POST /ingest` with the same file): it processes every `highlights` row still `processed=false`, so dedupe skipping the unchanged rows does not block recovery. See `agents.md`, "Pipeline runner and handoffs".
 
 ### Storage
 SQLite now (`data/recally.db`), SQLAlchemy models, Postgres-ready (no SQLite-specific SQL). Alembic runs with `render_as_batch=True` because SQLite cannot ALTER columns in place. See [data-model.md](data-model.md).

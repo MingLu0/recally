@@ -33,7 +33,7 @@ UNIQUE (`source`, `external_id`).
 | highlighted_at | date | |
 | export_position | int | row index within the export file. Export order is newest first, and within a day reverse creation order, so this is the only positional signal available |
 | truncated | bool | Curator flag: text is clipped mid-word at start or end. Lives only here; units and cards derive "any source truncated" |
-| processed | bool | Curator has run |
+| processed | bool | set once the unit covering this highlight reached a terminal outcome (`drop`, or all its cards have a status); not when the Curator merely ran. See `agents.md`, "Pipeline runner and handoffs" |
 | removed_at | datetime, nullable | set when the UUID is absent from a later export; cards are kept |
 
 ### curated_units
@@ -42,6 +42,7 @@ One row per Curator output. Most units wrap a single highlight; a group (e.g. th
 | col | type | notes |
 |---|---|---|
 | id | PK | |
+| ingest_run_id | FK ingest_runs | the run whose Curator call produced this unit; lets orphaned units from a crashed run be found and removed |
 | curated_text | text | after Curator cleanup / grouping |
 | tags | json | topic tags from Curator |
 | decision | text | `keep` / `drop` |
@@ -70,7 +71,7 @@ PK (`unit_id`, `highlight_id`). Gives every card full provenance back to each so
 | status | text | `pending_review` / `needs_human` / `approved` / `rejected` |
 | status_reason | text, nullable | critic critique, human rejection reason, or `superseded by <id>` (feeds the Learner) |
 | approved_at | datetime, nullable | when the human approved; `card_state` is created at the same time |
-| generation_rounds | int | Writer⇄Critic rounds used |
+| generation_rounds | int | Writer⇄Critic rounds used for this card (per card, not per unit) |
 | model | text | generating model (for quality analysis) |
 | guidance_version | int, nullable FK writer_guidance | which Learner guidance was in the Writer prompt |
 | cost_microusd | int | generation cost |
@@ -174,7 +175,7 @@ One row per call through `llm.py`. Doubles as the trace and the replay corpus: t
 | rows_new | int | |
 | rows_updated | int | same UUID, changed text or note (expected 0) |
 | rows_removed | int | UUIDs present before, absent now |
-| cards_generated | int | cards the pipeline produced for this run's highlights |
+| cards_generated | int | cards the pipeline produced during this run; may include leftover highlights from an earlier run, since the runner processes all `processed=false` rows |
 | cost_microusd | int | sum of `llm_calls` for this run |
 | started_at / finished_at | datetime | |
 | error | text, nullable | set if the run aborted |
@@ -191,6 +192,7 @@ books 1───n highlights n───n curated_units 1───n cards 1──
                                    writer_guidance 1───n cards
                                    devices 1───n push_runs
                                    ingest_runs 1───n llm_calls
+                                   ingest_runs 1───n curated_units
                                    curated_units 1───n llm_calls
                                    cards 1───n llm_calls
 ```
