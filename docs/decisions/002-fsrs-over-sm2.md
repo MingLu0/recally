@@ -16,4 +16,7 @@ Use FSRS via the `py-fsrs` library, with card state stored in our own DB (`card_
 
 ## Consequences
 - We own scheduling correctness (mitigated by using the reference library).
+- `card_state` mirrors the library's `Card` fields exactly (state/step/stability/difficulty/due/last_review); FSRS 6 has no `new` state and no `reps`/`lapses` on the card, so those are derived from `review_logs`.
+- The library's optional `Optimizer` fits personal parameters from the same `review_logs`; see agents.md Learner stage A.
+- Learning steps make cards due within minutes; how the client handles that is ADR-005.
 - Anki export could be added later if wanted.

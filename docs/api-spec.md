@@ -5,12 +5,13 @@ Base: FastAPI. Auth: `X-API-Key` header (single user, env-configured). All respo
 ## Reviews
 
 ### GET /reviews/due
-Cards due now (FSRS), plus today's new-card allotment.
+Cards due now (FSRS), plus today's new-card allotment. Returns the FSRS `learning_steps` in effect so the client can re-queue Again/Hard cards inside the session (see ADR-005).
 **Response**
 ```json
 {
   "due_count": 12,
   "new_count": 5,
+  "learning_steps_minutes": [1, 10],
   "cards": [
     {
       "id": 101, "type": "qa",
@@ -25,15 +26,18 @@ Cards due now (FSRS), plus today's new-card allotment.
 
 ### POST /reviews/{card_id}/rate
 ```json
-{ "rating": 3, "response_ms": 8200 }
+{ "rating": 3, "response_ms": 8200, "rated_at": "2026-09-04T08:12:30Z" }
 ```
-`rating`: 1=Again, 2=Hard, 3=Good, 4=Easy. Runs FSRS update, writes review_log.
-**Response**: `{ "next_due": "2026-09-09T08:00:00Z", "state": "review" }`
+`rating`: 1=Again, 2=Hard, 3=Good, 4=Easy. `rated_at` is the client timestamp; required so offline ratings replay in order. Runs FSRS update with `review_datetime=rated_at`, writes review_log. If a rating with an earlier `rated_at` arrives after a later one has been applied, the server recomputes the card from its full log. Duplicate (`card_id`, `rated_at`) is a no-op returning the current state.
+**Response**: `{ "next_due": "2026-09-09T08:00:00Z", "state": "review", "step": null }`
+
+### POST /reviews/rate-batch
+Same body as above as a list; used by the Android sync queue to flush offline ratings in one call. Applied in `rated_at` order per card.
 
 ## Approval queue
 
 ### GET /cards/pending
-`?status=pending_review|needs_human`. Includes critic critique and source highlight for context.
+`?status=pending_review|needs_human&book_id=&chapter=`. Grouped by chapter by default. Includes critic critique and all source highlights (a grouped unit has several) for context.
 ```json
 {
   "cards": [
@@ -42,8 +46,9 @@ Cards due now (FSRS), plus today's new-card allotment.
       "front": "The {{c1::Gulf of Specification}} is the gap between intent and instructions.",
       "back": "—",
       "status_reason": "Critic: potentially ambiguous term; Writer 3 rounds unresolved.",
-      "source_highlight": "The Gulf of Specification is this gap between our intent and our instructions...",
-      "book": "Evals for AI Engineers"
+      "source_highlights": ["The Gulf of Specification is this gap between our intent and our instructions..."],
+      "truncated": false,
+      "book": "Evals for AI Engineers", "chapter": "1. Introduction"
     }
   ]
 }
@@ -85,7 +90,12 @@ Books with card counts and due counts.
 Multipart CSV upload (same pipeline as the watcher; enables HF Spaces phase).
 
 ### GET /ingest/status
-Last run: rows seen, new, dupes, cards generated, cost.
+Last run: rows seen, new, unchanged, removed, cards generated, cost.
+
+## Jobs
+
+### POST /jobs/run
+`{ "job": "notify" | "learner" | "optimizer" }`. Runs a scheduled job on demand. Exists so an external cron can drive scheduling on hosts where the in-process scheduler cannot stay alive (see architecture.md, phase 2).
 
 ## Devices
 
