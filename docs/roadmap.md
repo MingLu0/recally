@@ -13,13 +13,14 @@ Done by hand, once.
 - The two real exports of *30 Agents Every…* (2026-08-25, 326 rows; 2026-09-04, 380 rows) copied from `~/Downloads` into `data/`. They are the source for the fixtures and for every manual gate below.
 
 ### 1. Backend skeleton + ingestion
-- FastAPI app, `X-API-Key` auth, SQLAlchemy models, Alembic (batch mode), SQLite.
+- FastAPI app in the `backend/src/recally/` layout from [backend.md](backend.md), `X-API-Key` auth, SQLAlchemy models, Alembic (batch mode), SQLite.
 - O'Reilly CSV adapter + dedupe + watcher (rename event, debounced).
 - Commit fixtures under `backend/tests/fixtures/`: two trimmed exports of the same book (~15 rows each) that between them cover UUID unchanged / added / removed, a mid-word truncated row (the 160-character Chapter 9 row ending "written to the san") and the Chapter 9 run of "Stage 1/2/3" headings. Real exports stay in gitignored `data/`.
 - **Tests**: pytest ingests fixture A then fixture B and asserts the exact new/removed/updated counts; a third ingest of either adds nothing. A request without `X-API-Key` gets 401.
 - **You verify**: with the server running, copy the 2026-08-25 export into the watched folder, then the 2026-09-04 export, then the 2026-09-04 export again. `GET /ingest/status` after each shows 326 new; then 56 new, 2 removed, 0 updated; then 0 / 0 / 0. `GET /decks` lists one book. A `curl` without the key returns 401.
 
 ### 2. Agent pipeline
+- Role protocols + `(role, variant)` registry + `default` implementations for Curator, Writer, Critic (ADR-007, [backend.md](backend.md)); the pipeline resolves agents through the registry only.
 - Curator → Writer ⇄ Critic with LiteLLM, `llm_calls` trace (cost, prompt, response, card linkage), human approval queue.
 - Agent tests mock `llm.py` with recorded responses; no test touches a provider.
 - **Tests**: a recorded Curator response naming three highlights yields one `curated_units` row with three `curated_unit_highlights` rows and `truncated=true` on the flagged highlight. Three `revise` rounds end in `needs_human`; a Critic `reject` ends in `needs_human`; nothing is ever `rejected` or `approved` by the pipeline with `AUTO_APPROVE_ROUND1_ACCEPT` off. Every call writes an `llm_calls` row with `agent`, `unit_id`, `round` and non-null `request`/`response`.

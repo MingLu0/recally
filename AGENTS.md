@@ -29,6 +29,7 @@ The docs are the spec. Do not invent behaviour that contradicts them; if a chang
 | Why does this exist, what is in/out of scope | `docs/PRD.md` |
 | How the pieces fit, hosting phases | `docs/architecture.md` |
 | What each agent does, LLM vs deterministic | `docs/agents.md` |
+| Backend package layout, agent protocol/registry | `docs/backend.md` |
 | Tables, columns, FSRS state | `docs/data-model.md` |
 | REST endpoints and payloads | `docs/api-spec.md` |
 | Android screens, offline sync, push | `docs/android.md` |

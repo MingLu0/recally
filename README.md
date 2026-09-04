@@ -7,6 +7,7 @@ Turn your reading highlights into lasting memory. Recally ingests O'Reilly annot
 - [PRD](docs/PRD.md) — what we're building and why
 - [Architecture](docs/architecture.md) — system design
 - [Agents](docs/agents.md) — the multi-agent pipeline
+- [Backend](docs/backend.md) — FastAPI app structure & agent modularity
 - [Data model](docs/data-model.md) — schema & FSRS state
 - [API spec](docs/api-spec.md) — REST endpoints
 - [Android app](docs/android.md) — screens & sync
