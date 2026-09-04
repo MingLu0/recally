@@ -1,11 +1,11 @@
 # Recally — API Spec
 
-Base: FastAPI. Auth: `X-API-Key` header (single user, env-configured). All responses JSON.
+Base: FastAPI. Auth: `X-API-Key` header (single user, value from `RECALLY_API_KEY`, see [config.md](config.md)). All responses JSON. Phase 1 is plain HTTP on the LAN; TLS arrives with hosting (phase 2).
 
 ## Reviews
 
 ### GET /reviews/due
-Cards due now (FSRS), plus today's new-card allotment. Returns the FSRS `learning_steps` in effect so the client can re-queue Again/Hard cards inside the session (see ADR-005).
+Cards due now (FSRS), plus today's new-card allotment (capped by `NEW_CARDS_PER_DAY`). Returns the FSRS `learning_steps` in effect so the client can re-queue Again/Hard cards inside the session (see ADR-005).
 **Response**
 ```json
 {
@@ -37,7 +37,7 @@ Same body as above as a list; used by the Android sync queue to flush offline ra
 ## Approval queue
 
 ### GET /cards/pending
-`?status=pending_review|needs_human&book_id=&chapter=`. Grouped by chapter by default. Includes critic critique and all source highlights (a grouped unit has several) for context.
+`?status=pending_review|needs_human&book_id=&chapter=`. Returns a flat list ordered by book, chapter, then `export_position`; the client renders the chapter grouping. Includes critic critique and all source highlights (a grouped unit has several) for context. `truncated` is true if any source highlight is clipped.
 ```json
 {
   "cards": [
@@ -55,7 +55,7 @@ Same body as above as a list; used by the Android sync queue to flush offline ra
 ```
 
 ### POST /cards/{id}/approve
-Optional edits: `{ "front": "...", "back": "..." }` → status `approved`, enters FSRS.
+Optional edits: `{ "front": "...", "back": "..." }` → status `approved`, `approved_at` set, `card_state` row created (enters FSRS). Edits overwrite `front`/`back`; `original_front`/`original_back` keep the Writer's text for the Learner.
 
 ### POST /cards/{id}/reject
 `{ "reason": "..." }` → status `rejected`. Reasons feed the Learner.
@@ -90,7 +90,15 @@ Books with card counts and due counts.
 Multipart CSV upload (same pipeline as the watcher; enables HF Spaces phase).
 
 ### GET /ingest/status
-Last run: rows seen, new, unchanged, removed, cards generated, cost.
+Latest `ingest_runs` row.
+```json
+{
+  "filename": "30-agents-every-oreilly-annotations.csv",
+  "rows_seen": 380, "rows_new": 56, "rows_updated": 0, "rows_unchanged": 322, "rows_removed": 2,
+  "cards_generated": 131, "cost_microusd": 184200,
+  "started_at": "2026-09-04T09:00:00Z", "finished_at": "2026-09-04T09:06:12Z", "error": null
+}
+```
 
 ## Jobs
 

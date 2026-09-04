@@ -24,11 +24,20 @@ Native Android. Kotlin + Jetpack Compose + Material 3.
 ### 5. Stats
 - Streak, retention, forecast chart, lapse rate by card type.
 
+### 6. Settings
+- Backend base URL, API key, connection test. See *Connecting to the backend*.
+
 ## Offline-first sync
 
 - Room DB caches due cards locally; review works fully offline.
 - Ratings recorded locally with the client timestamp (`rated_at`), queued, synced via `POST /reviews/rate-batch` when online. Server is authoritative for FSRS state and replays each rating at its `rated_at`; duplicates are rejected by the (`card_id`, `rated_at`) key so a retried flush is safe.
 - Approval queue requires connectivity (LLM content, no offline need).
+
+## Connecting to the backend
+
+- Base URL and API key are entered once in a Settings screen (reachable from Today) and stored in `EncryptedSharedPreferences`. Nothing is baked into the build.
+- Phase 1 talks plain HTTP to the Mac on the LAN. The app ships a network security config that permits cleartext **only** for private-range hosts (`10.*`, `172.16-31.*`, `192.168.*`, `*.local`); everything else must be HTTPS. Revisit when phase 2 hosting adds TLS.
+- Every request sends `X-API-Key`. A 401 surfaces as a "check settings" banner, not a crash.
 
 ## Push notifications (FCM)
 
@@ -53,7 +62,7 @@ Native Android. Kotlin + Jetpack Compose + Material 3.
 ```
 android/
 └── app/src/main/java/dev/recally/
-    ├── ui/        # compose screens (today, review, approve, decks, stats)
+    ├── ui/        # compose screens (today, review, approve, decks, stats, settings)
     ├── data/      # Room entities, DAOs, Retrofit api, sync worker
     ├── fcm/       # messaging service, token handling
     └── MainActivity.kt

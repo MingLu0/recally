@@ -10,6 +10,7 @@ Turn your reading highlights into lasting memory. Recally ingests O'Reilly annot
 - [Data model](docs/data-model.md) — schema & FSRS state
 - [API spec](docs/api-spec.md) — REST endpoints
 - [Android app](docs/android.md) — screens & sync
+- [Config](docs/config.md) — env vars & defaults
 - [Roadmap](docs/roadmap.md) — build order & productionization
 - [Decisions](docs/decisions/) — ADRs
 
@@ -20,4 +21,5 @@ backend/    FastAPI backend + agent pipeline (Python)
 android/    Android app (Kotlin, Jetpack Compose)
 data/       local SQLite db & ingest drop zone (gitignored)
 docs/       product & engineering documentation
+docs/decisions/   ADRs
 ```
