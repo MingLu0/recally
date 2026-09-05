@@ -14,6 +14,7 @@ Done by hand, once.
 
 ### 1. Backend skeleton + ingestion
 - FastAPI app in the `backend/src/recally/` layout from [backend.md](backend.md), `X-API-Key` auth, SQLAlchemy models, Alembic (batch mode), SQLite.
+- Tooling per backend.md: `.python-version` + committed `uv.lock`; `[tool.ruff]` and `[tool.mypy]` (strict) in `pyproject.toml`; `.pre-commit-config.yaml` (ruff only); `.github/workflows/ci.yml` running ruff, mypy, pytest, bandit and pip-audit on every PR.
 - O'Reilly CSV adapter + dedupe + watcher (rename event, debounced).
 - Commit fixtures under `backend/tests/fixtures/`: two trimmed exports of the same book (~15 rows each) that between them cover UUID unchanged / added / removed, a mid-word truncated row (the 160-character Chapter 9 row ending "written to the san") and the Chapter 9 run of "Stage 1/2/3" headings. Real exports stay in gitignored `data/`.
 - **Tests**: pytest ingests fixture A then fixture B and asserts the exact new/removed/updated counts; a third ingest of either adds nothing. A request without `X-API-Key` gets 401.
