@@ -113,3 +113,11 @@ Every entry point converges on the same functions:
 - **Pipeline**: runs the `default` variants with a mocked `llm.py` against fixture-ingested highlights; asserts statuses, rounds and `llm_calls` rows (roadmap step 2 gates).
 - **API**: router tests with the container overridden (in-memory DB, stub services); a request without `X-API-Key` returns 401.
 - **Scheduling**: FSRS wrapper tested with explicit `review_datetime` values; notifier tested against the `push_runs` policy.
+
+## Tooling
+
+- **Environment: `uv`.** A `.python-version` file at the repo root pins the interpreter (`3.12` — satisfies `py-fsrs` ≥ 3.10 without bleeding edge) so uv uses it everywhere, including the future Docker image. `uv.lock` is committed (this is an app, not a library) so dev, CI and Docker install bit-identical dependencies; upgrades are deliberate (`uv lock --upgrade`), never accidental.
+- **Ruff** (lint + format; replaces Flake8/isort/Autoflake/Black): config in `pyproject.toml` under `[tool.ruff]`, rule sets `E, F, I, UP, B`. Run: `uv run ruff check . && uv run ruff format --check .`.
+- **Mypy, strict on `src/recally/`**: config under `[tool.mypy]` in `pyproject.toml`. Strictness is load-bearing, not taste: ADR-007's protocol boundary only protects the pipeline if mypy rejects a variant that doesn't satisfy its role `Protocol`.
+- **pre-commit, ruff only**: `.pre-commit-config.yaml` runs `ruff check --fix` and `ruff format` on commit. Milliseconds fast; catches "forgot to lint" before CI. Nothing else runs in hooks.
+- **Security scanners, CI only**: Bandit (scans our code for hard-coded secrets and insecure patterns) and pip-audit (dependency CVEs; chosen over Safety — maintained, no account needed) run in GitHub Actions on every PR. Kept out of the local loop: Bandit's false positives and scan latency aren't worth it for a single-user LAN app.
