@@ -1,6 +1,6 @@
 # Recally — Multi-Agent Design
 
-Plain Python modules (no orchestration framework) for v1; see ADR-001. Each "agent" is a module with an LLM call, a prompt file, and structured inputs/outputs.
+Plain Python modules (no orchestration framework) for v1; see ADR-001. Each "agent" is a package behind a `typing.Protocol`, with a prompt file and structured inputs/outputs; variants are swapped via the registry (ADR-007, layout in [backend.md](backend.md)).
 
 ## Roster
 
@@ -12,10 +12,10 @@ No LLM. Watch folder → adapter → dedupe → `highlights` rows with `processe
 **Jobs**:
 - **Filter**: drop low-value highlights — bare headings with no sibling context, navigation text, isolated short phrases. Real data (two exports, 380 rows): ~7% of rows are under 40 characters, none are figure/table references. Junk is a small minority, so the Curator should default to `keep`.
 - **Group**: fold sibling highlights that only make sense together into one curated unit. The observed case is a run of headings highlighted in sequence ("Stage 1: Task assignment", "Stage 2: Code synthesis", "Stage 3: Test synthesis") which becomes one structural card. Grouping is semantic, within the same chapter and day; there is no positional key in the export beyond that ordering.
-- **Flag truncation**: some rows are clipped mid-word at the start or end ("t's also crucial…", "…written to the san"). The missing text does not exist elsewhere in the export, so do not attempt to reconstruct it. Set `truncated=true` on that `highlights` row so the Writer works from the partial text and the Critic checks fidelity against a clipped source.
+- **Flag truncation**: some rows are clipped mid-word at the start or end ("t's also crucial…", "…written to the san"). The missing text does not exist elsewhere in the export, so do not attempt to reconstruct it. Flag the row so the runner sets `truncated=true` on it, the Writer works from the partial text and the Critic checks fidelity against a clipped source.
 - **Tag**: topic tags beyond book/chapter (`evals`, `rag`, `agents`) enabling cross-book decks.
 
-**Output**: curated units, each `{highlight_ids: [...], curated_text, tags, truncated_highlight_ids: [...], decision[keep|drop], reason}`. A unit with more than one `highlight_id` is a group. `truncated_highlight_ids` is written back to the `highlights` rows; the unit itself does not store the flag.
+**Output**: curated units, each `{highlight_ids: [...], curated_text, tags, truncated_highlight_ids: [...], decision[keep|drop], reason}`. A unit with more than one `highlight_id` is a group. `truncated_highlight_ids` is written back to the `highlights` rows by the runner (agents hold no DB session, ADR-007); the unit itself does not store the flag.
 
 ### 3. Card Writer Agent — LLM
 **Input**: one curated unit (one or more source highlights) plus the current `writer_guidance` version.
@@ -63,7 +63,7 @@ Cold start: with one user, a lapse-rate bucket needs on the order of a hundred r
 
 ## Pipeline runner and handoffs
 
-Agents never call each other. One runner module (`pipeline.py`) calls them in order and every handoff is either a typed return value or a database row whose state marks it ready for the next stage.
+Agents never call each other. One runner module (`pipeline.py`) calls them in order and every handoff is either a typed return value or a database row whose state marks it ready for the next stage. The runner depends only on the role protocols and resolves implementations through the registry (ADR-007); agents hold no DB session, so every status transition below is the runner's write.
 
 - **Ingestion → Curator: DB state.** The runner selects all `highlights` with `processed=false`, grouped by chapter, regardless of which ingest inserted them. This is what makes re-running the pipeline the retry path: leftover rows from a failed run are picked up next time, without the file having to change.
 - **Curator → Writer → Critic: in memory, within one run.** Curator output is persisted to `curated_units` (with `ingest_run_id`) before any Writer call, then each `keep` unit is passed to the Writer, and each returned card to the Critic. A `revise` verdict feeds the critique back into the next Writer call for that card only.

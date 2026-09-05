@@ -25,6 +25,10 @@ Provider credentials use LiteLLM's own variable names (`ANTHROPIC_API_KEY`, `OPE
 | `LLM_MAX_ROUNDS` | `3` | Writer ⇄ Critic | Hard rule 9; do not raise without a doc change |
 | `AUTO_APPROVE_ROUND1_ACCEPT` | `false` | pipeline | Hard rule 1 exception; skips the queue for round-1 `accept` |
 | `LLM_LOG_PAYLOADS` | `true` | `llm.py` | Store `request`/`response` on `llm_calls`; turn off only if the table bloats (ADR-006) |
+| `AGENT_CURATOR` | `default` | pipeline | Registered variant for the Curator role (ADR-007) |
+| `AGENT_WRITER` | `default` | pipeline | Registered variant for the Writer role |
+| `AGENT_CRITIC` | `default` | pipeline | Registered variant for the Critic role |
+| `AGENT_LEARNER` | `default` | pipeline | Registered variant for the Learner role |
 | `LOG_LEVEL` | `INFO` | all | Python `logging` level for the backend process |
 
 ## Scheduling and push

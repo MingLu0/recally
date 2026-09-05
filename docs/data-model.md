@@ -152,7 +152,7 @@ One row per call through `llm.py`. Doubles as the trace and the replay corpus: t
 | col | type | notes |
 |---|---|---|
 | id | PK | |
-| agent | text | curator / writer / critic / learner |
+| agent | text | `role/variant`, e.g. `writer/default`; the variant comes from the `AGENT_*` env vars (ADR-007), so the trace names the implementation that made the call |
 | ingest_run_id | FK ingest_runs, nullable | null for Learner calls |
 | unit_id | FK curated_units, nullable | set for Writer and Critic calls; null for Curator (batch) and Learner |
 | card_id | FK cards, nullable | set for Critic calls and for Writer revisions of an existing card |

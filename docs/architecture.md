@@ -49,7 +49,7 @@
 - **Truncation**: some highlights are clipped mid-word at the start or end inside a single row (e.g. a 160-character row ending "written to the san"). The missing text is not in any other row, so nothing downstream should try to reconstruct it; the Curator flags it and the Writer works from what is there.
 
 ### Agent pipeline (LLM, provider-agnostic via LiteLLM)
-See [agents.md](agents.md). Provider selected by env var (Claude / OpenAI / Ollama).
+See [agents.md](agents.md) for behaviour and [backend.md](backend.md) for the package layout and the protocol/registry boundary that makes agents swappable (ADR-007). Provider selected by env var (Claude / OpenAI / Ollama).
 
 ### Scheduling (deterministic)
 - **FSRS engine**: `py-fsrs` 6.x (requires Python ≥ 3.10). Rating → next due date, stability, difficulty, learning step. Default learning steps are 1 and 10 minutes, so a card rated Again is due again inside the same session; see ADR-005 for how the client and server share that.
@@ -58,7 +58,7 @@ See [agents.md](agents.md). Provider selected by env var (Claude / OpenAI / Olla
 - **Notifier**: APScheduler 3.x (4.x is still pre-release) checks due cards hourly but sends at most one FCM push per day, inside a configured window, and none while any card listed in the previous `push_runs` row is still unreviewed. Each push records the card ids it covered so that check is exact. Push → deep link into review session.
 
 ### API
-FastAPI, single API-key auth (header). See [api-spec.md](api-spec.md). Phase 1 serves plain HTTP on the LAN; see [android.md](android.md) for the client side of that.
+FastAPI, single API-key auth (header). See [api-spec.md](api-spec.md) for endpoints and [backend.md](backend.md) for how the app is layered (nothing below `api/` imports FastAPI). Phase 1 serves plain HTTP on the LAN; see [android.md](android.md) for the client side of that.
 
 ### Configuration
 All runtime settings are env vars, listed with defaults in [config.md](config.md).
