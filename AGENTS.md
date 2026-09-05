@@ -55,6 +55,17 @@ These come from the PRD and ADRs. Do not work around them.
 11. **Plain Python, no orchestration framework** (ADR-001). Do not add LangGraph, CrewAI, etc. without a new ADR.
 12. **Watcher acts on `on_moved` (browser rename after download), not `on_created`**, with a short debounce.
 
+## Design invariants
+
+Structural rules from `docs/backend.md` and ADR-007. Verify these in any backend change; violations are bugs, not style.
+
+- Nothing below `api/` imports FastAPI. The pipeline also runs from the watcher, APScheduler, the CLI and `POST /jobs/run`.
+- Agents implement the role protocols in `agents/base.py` and hold **no DB session**; they return typed results. All persistence (statuses, `processed`, `truncated` write-backs, orphan cleanup) is done by `pipeline.py`.
+- `pipeline.py` resolves agents through `agents/registry.py` (`(role, variant)` + `AGENT_*` env vars), never by direct import.
+- `container.py` is the composition root for every entry point; `api/deps.py` only pulls from it.
+- `llm_calls.agent` records `role/variant` — the trace must name the implementation.
+- A new ingestion source is a new file in `ingest/adapters/` plus a documented dedupe-key contract, never a branch in the pipeline.
+
 ## Conventions
 
 ### Backend (Python)
