@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     # No default: the key is the only thing standing between the LAN and the API, so a
     # missing `RECALLY_API_KEY` has to fail startup rather than silently pick a value
     # every reader of this file would know (docs/config.md marks it *required*).
-    api_key: str = Field(validation_alias="RECALLY_API_KEY")
+    api_key: str = Field(min_length=1, validation_alias="RECALLY_API_KEY")
 
 
 @lru_cache(maxsize=1)

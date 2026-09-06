@@ -20,7 +20,7 @@ from logging.config import fileConfig
 
 from alembic import context
 
-from recally.config import get_settings
+from recally.config import Settings
 from recally.db import create_database_engine
 from recally.models import Base
 
@@ -31,8 +31,11 @@ if config.config_file_name is not None:
 
 if not config.get_main_option("sqlalchemy.url", default=None):
     # `%` is the config parser's interpolation character; a URL containing one (a
-    # percent-encoded password, say) has to be escaped before it goes in.
-    config.set_main_option("sqlalchemy.url", get_settings().database_url.replace("%", "%%"))
+    # percent-encoded password, say) has to be escaped before it goes in. Migrations
+    # never authenticate, so the required API key is satisfied with a placeholder
+    # rather than demanded of a fresh clone running `alembic upgrade head`.
+    database_url = Settings(RECALLY_API_KEY="unused-by-migrations").database_url
+    config.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))
 
 target_metadata = Base.metadata
 

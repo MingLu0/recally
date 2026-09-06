@@ -10,11 +10,12 @@ from datetime import datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 from sqlalchemy import create_engine
 from sqlalchemy.pool import StaticPool
 
 from recally.api.deps import container_dependency
-from recally.config import Settings
+from recally.config import Settings, get_settings
 from recally.container import Container
 from recally.main import create_app
 from recally.models import (
@@ -51,11 +52,38 @@ def container() -> Iterator[Container]:
 
 
 @pytest.fixture
-def client(container: Container) -> Iterator[TestClient]:
+def client(container: Container, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
     app = create_app()
     app.dependency_overrides[container_dependency] = lambda: container
-    with TestClient(app) as test_client:
-        yield test_client
+    monkeypatch.setenv("RECALLY_API_KEY", TEST_API_KEY)
+    get_settings.cache_clear()
+    try:
+        with TestClient(app) as test_client:
+            yield test_client
+    finally:
+        get_settings.cache_clear()
+
+
+def test_startup_fails_when_settings_are_invalid(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The step 1e intent: an unusable key fails boot, not the first request with a 500."""
+    monkeypatch.setenv("RECALLY_API_KEY", "")
+    get_settings.cache_clear()
+    try:
+        with pytest.raises(ValidationError), TestClient(create_app()):
+            pass
+    finally:
+        get_settings.cache_clear()
+
+
+def test_an_empty_api_key_fails_settings_validation(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`.env.example` ships `RECALLY_API_KEY=` empty; that must fail like a missing key."""
+    monkeypatch.setenv("RECALLY_API_KEY", "")
+    get_settings.cache_clear()
+    try:
+        with pytest.raises(ValidationError):
+            get_settings()
+    finally:
+        get_settings.cache_clear()
 
 
 def test_request_without_the_api_key_is_rejected(client: TestClient) -> None:

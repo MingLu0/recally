@@ -22,9 +22,10 @@ from recally.db import create_database_engine, create_session_factory
 class Container:
     """The process-wide object graph.
 
-    The engine is built lazily and then reused: a connection pool is expensive to
-    create and must be shared, while tests build their own container against an
-    in-memory database rather than reaching for the global one.
+    The engine and session factory are built once, here, and shared: a connection pool
+    is expensive to create. `get_container` caches the single process-wide instance;
+    tests build their own container against an in-memory database rather than reaching
+    for the global one.
     """
 
     def __init__(self, settings: Settings, engine: Engine | None = None) -> None:

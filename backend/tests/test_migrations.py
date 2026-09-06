@@ -73,6 +73,30 @@ def test_every_table_carries_user_id() -> None:
         assert user_id_column.server_default is not None, table_name
 
 
+def test_alembic_does_not_require_the_api_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`alembic upgrade head` must work on a fresh clone with no `RECALLY_API_KEY`.
+
+    Migrations never authenticate, so only the API entry point may demand the key.
+    """
+    monkeypatch.delenv("RECALLY_API_KEY", raising=False)
+    database_url = f"sqlite:///{tmp_path / 'fresh-clone.db'}"
+    monkeypatch.setenv("RECALLY_DATABASE_URL", database_url)
+    config = Config(str(BACKEND_ROOT / "alembic.ini"))
+    config.set_main_option("script_location", str(BACKEND_ROOT / "alembic"))
+
+    command.upgrade(config, "head")
+
+    engine = create_engine(database_url)
+    try:
+        with engine.connect() as connection:
+            migrated_tables = set(inspect(connection).get_table_names())
+    finally:
+        engine.dispose()
+    assert set(Base.metadata.tables) <= migrated_tables
+
+
 def test_sqlite_parent_directory_is_created(tmp_path: Path) -> None:
     """A fresh clone has no `data/`, and the default URL points inside it.
 
