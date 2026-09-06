@@ -7,7 +7,7 @@ per-field errors. Both are re-rendered by the handlers registered here.
 """
 
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, cast
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -42,19 +42,19 @@ def register_error_handlers(app: FastAPI) -> None:
     """Point FastAPI's error paths at `problem_response`."""
 
     async def handle_problem_detail(_: Request, exc: Exception) -> JSONResponse:
-        assert isinstance(exc, ProblemDetail)
-        return problem_response(exc.status, exc.detail)
+        problem = cast(ProblemDetail, exc)
+        return problem_response(problem.status, problem.detail)
 
     async def handle_http_exception(_: Request, exc: Exception) -> JSONResponse:
-        assert isinstance(exc, StarletteHTTPException)
+        http_exc = cast(StarletteHTTPException, exc)
         # Covers the responses Starlette raises before any route runs — 404 and 405 in
         # particular, which never pass through a handler of ours.
-        headers = getattr(exc, "headers", None)
-        return problem_response(exc.status_code, str(exc.detail), headers)
+        headers = getattr(http_exc, "headers", None)
+        return problem_response(http_exc.status_code, str(http_exc.detail), headers)
 
     async def handle_validation_error(_: Request, exc: Exception) -> JSONResponse:
-        assert isinstance(exc, RequestValidationError)
-        return problem_response(422, _summarize_validation_errors(exc.errors()))
+        validation_error = cast(RequestValidationError, exc)
+        return problem_response(422, _summarize_validation_errors(validation_error.errors()))
 
     async def handle_unexpected_error(_: Request, __: Exception) -> JSONResponse:
         # A crash inside a route keeps the one body shape too, with a fixed detail:
