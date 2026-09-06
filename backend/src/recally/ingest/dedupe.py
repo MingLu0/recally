@@ -8,7 +8,8 @@ The rules, per `docs/data-model.md` and AGENTS.md hard rule 6:
                                           `processed=false` so the pipeline redoes it.
                                           Never a second row; `dedupe_key` is UNIQUE.
 - UUID absent from a later export      -> set `removed_at`. The cards it already
-                                          produced are kept.
+                                          produced are kept. Cleared again if the
+                                          UUID reappears in a later export.
 - New UUID                             -> insert.
 
 Scope is per book: a file covering one book says nothing about highlights of another,
