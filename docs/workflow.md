@@ -90,6 +90,71 @@ Notes that matter here:
 Steps skip individually (`--skip=lint`) when there is a reason. Docs-only branches are the common case: review and
 document earn their keep, `pytest` has nothing to say about a Markdown change.
 
+## Unattended dispatch
+
+An hourly Orca automation ("Roadmap autostart") starts agents on sub-issues that are ready, with no
+human in the loop. It is **disabled until deliberately turned on** and dispatches at most one issue per run.
+
+### What makes an issue dispatchable
+
+`scripts/orca-ready-issues.sh` is the automation's precheck: exit 0 (with the issue on stdout) starts a
+run, anything else skips it. All five conditions must hold.
+
+| # | Condition | Source |
+|---|---|---|
+| 1 | labelled `ready` | a human — the only judgment in the list |
+| 2 | no open blocker | GitHub native issue dependencies |
+| 3 | is a sub-issue, not a parent | GraphQL `parent` / `subIssues` |
+| 4 | unassigned | an assignee means someone owns it |
+| 5 | no open PR already closes it | prevents double dispatch on a retry |
+
+The script fails closed: any error prints nothing and exits 1, so a broken query can never cause a dispatch.
+
+### `ready` vs. a blocker
+
+These are different states and live in different places:
+
+- **Blocked** — waiting on another issue. Recorded in GitHub's native issue dependencies
+  (`gh api repos/{owner}/{repo}/issues/{n}/dependencies/blocked_by`) and *derived*: it resolves itself when
+  the blocker closes. Never a label; a label would go stale.
+- **Not ready** — nothing blocks it, but the spec is not settled. Only a human knows this, so it is the
+  `ready` label.
+
+The label is deliberately **opt-in**. Forgetting to add it means nothing happens (visible on the board);
+an opt-out `needs-spec` label would mean forgetting it lets an agent start on an unsettled spec unattended.
+
+### Auto-merge policy
+
+The dispatched agent runs the no-mistakes gate and may merge its own PR **only** when all four hold:
+
+- outcome is `checks-passed`, and
+- no gate produced an `ask-user` finding, and
+- it never responded `--action skip`, and
+- the issue is a sub-issue.
+
+Anything else leaves the PR open with a comment naming the finding verbatim, for a human. That is the
+expected outcome, not a failure.
+
+Two consequences worth being explicit about:
+
+- **`ready` is now the approval, not a scheduling hint.** Once an issue carries it, work can reach `main`
+  without a human seeing the diff. `auto-fix` findings still auto-merge; they are mechanical by the
+  pipeline's own classification.
+- **Parent step issues are excluded on purpose.** They carry the `You verify` gate, which only a human can
+  run against the real system. Auto-merging one would skip the gate the roadmap says the step is not done
+  without (ADR-010).
+
+### Turning it on
+
+The precheck runs from the repo root of the main checkout, so `scripts/` must be on `main` first.
+
+```sh
+orca automations list                       # find the id
+orca automations edit <id> --enabled
+orca automations run <id>                   # dry run now, without waiting for the hour
+orca automations runs <id>                  # history, including skipped runs
+```
+
 ## Parallelism per step
 
 Contracts are fixed up front (`api-spec.md`, `data-model.md`, `agents.md`), so work inside a step can fan out once the blocking piece lands.
