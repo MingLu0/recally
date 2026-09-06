@@ -1,8 +1,11 @@
-"""Composition root for non-HTTP and HTTP entry points (ADR-007).
+"""Composition root: the source of truth for how services are resolved (ADR-007).
 
-The watcher deliberately gets its database access here rather than constructing an
-engine or session itself.  Future pipeline and API services join this same object
-graph, so all ways of receiving an export converge on one ingestion operation.
+Every entry point converges here — `api/deps.py`, the watcher, APScheduler, the CLI —
+because most of them are not HTTP requests and so cannot be served by FastAPI's
+`Depends`. Nothing in this module imports FastAPI, and nothing in it is request-scoped;
+it holds the process-wide object graph and hands out sessions on demand.
+
+Agent resolution joins this container in roadmap step 2, when the registry exists.
 """
 
 from collections.abc import Iterator
@@ -21,7 +24,13 @@ from recally.models import IngestRun
 
 
 class Container:
-    """The process-wide object graph shared by every entry point."""
+    """The process-wide object graph.
+
+    The engine and session factory are built once, here, and shared: a connection pool
+    is expensive to create. `get_container` caches the single process-wide instance;
+    tests build their own container against an in-memory database rather than reaching
+    for the global one.
+    """
 
     def __init__(self, settings: Settings, engine: Engine | None = None) -> None:
         self.settings = settings
@@ -38,7 +47,7 @@ class Container:
 
     @contextmanager
     def session(self) -> Iterator[Session]:
-        """Return a session scoped to one operation."""
+        """A session scoped to one unit of work, closed however the block exits."""
         session = self._session_factory()
         try:
             yield session
@@ -60,5 +69,5 @@ class Container:
 
 @lru_cache(maxsize=1)
 def get_container() -> Container:
-    """Return the lazily built process-wide container."""
+    """The process-wide container, built on first use."""
     return Container(get_settings())
