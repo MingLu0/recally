@@ -43,9 +43,9 @@ issues_json=$(gh api graphql \
 [ -n "$issues_json" ] || exit 1
 
 # Issue numbers already claimed by an open PR, so a retry never double-dispatches.
-linked_issue_numbers=$(gh pr list --repo "$REPOSITORY" --state open \
+linked_issue_numbers=$(gh pr list --repo "$REPOSITORY" --state open --limit 100 \
   --json closingIssuesReferences \
-  -q '[.[].closingIssuesReferences[].number] | join(" ")' 2>/dev/null) || linked_issue_numbers=""
+  -q '[.[].closingIssuesReferences[].number] | join(" ")' 2>/dev/null) || exit 1
 
 candidate_numbers=$(printf '%s' "$issues_json" | jq -r --arg claimed "$linked_issue_numbers" '
   ($claimed | split(" ") | map(select(length > 0) | tonumber)) as $claimed_numbers
