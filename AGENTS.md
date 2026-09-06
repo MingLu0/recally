@@ -8,7 +8,7 @@ Recally turns O'Reilly reading highlights into flashcards. A watched folder pick
 
 ## Current state
 
-**Step 1 in progress.** `backend/` has the tooling baseline (uv, ruff, mypy, pytest, CI) and the SQLAlchemy models plus the initial Alembic migration for every table in `docs/data-model.md`. Still to come in step 1: the FastAPI app and `X-API-Key` auth, the O'Reilly CSV adapter, dedupe and the watcher. `android/` is still a placeholder README. Build order is in `docs/roadmap.md`. When code lands, update the *Commands* section below.
+**Step 1 in progress.** `backend/` has the tooling baseline (uv, ruff, mypy, pytest, CI) and the SQLAlchemy models plus the initial Alembic migration for every table in `docs/data-model.md`. Still to come in step 1: the FastAPI app and `X-API-Key` auth, and the watcher. The O'Reilly CSV adapter, the annotation-UUID dedupe and the committed fixtures are in. `android/` is still a placeholder README. Build order is in `docs/roadmap.md`. When code lands, update the *Commands* section below.
 
 ## Repo layout
 
