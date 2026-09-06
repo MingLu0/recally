@@ -83,7 +83,8 @@ Notes that matter here:
   `on_moved` instead of `on_created` (hard rule 12). Say so in the intent.
 - **Never fix a finding by hand mid-run.** The pipeline owns both the finding and the fix; editing the worktree
   under it discards its work. Respond with `--action fix`.
-- `checks-passed` means the PR is green and waiting for a human merge — that is the agent's stopping point.
+- `checks-passed` means the PR is green and waiting for a human merge — that is the agent's stopping point, except
+  for a dispatched unattended run, which may auto-merge under the policy in "Unattended dispatch".
 - **`--yes` is off by default here.** It auto-resolves `ask-user` findings without asking, which is precisely the
   class of finding that would let an agent quietly overrule a hard rule. Use it only when explicitly asked.
 
@@ -183,6 +184,9 @@ Steps 5–6 are small and depend on real review data; do not fan them out.
 Steps 4–5 need the Mac: Gradle, emulator or device, FCM tokens. Keep them in local Orca worktrees. Backend and Android run as two parallel tracks from here on, since the API contract is proven by the checkpoint.
 
 ## Optional: unattended work
+
+The default unattended mechanism is the local hourly automation in "Unattended dispatch". The options below are
+for running agents on a machine other than this Mac.
 
 Steps 1–3 are plain Python and do not depend on the Mac. If progress is wanted while away, either:
 
