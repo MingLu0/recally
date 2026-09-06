@@ -34,7 +34,7 @@ UNIQUE (`source`, `external_id`).
 | export_position | int | row index within the export file. Export order is newest first, and within a day reverse creation order, so this is the only positional signal available |
 | truncated | bool | Curator flag: text is clipped mid-word at start or end. Lives only here; units and cards derive "any source truncated" |
 | processed | bool | set once the unit covering this highlight reached a terminal outcome (`drop`, or all its cards have a status); not when the Curator merely ran. See `agents.md`, "Pipeline runner and handoffs" |
-| removed_at | datetime, nullable | set when the UUID is absent from a later export; cards are kept |
+| removed_at | datetime, nullable | set when the UUID is absent from a later export; cards are kept. Cleared if the UUID reappears in a later export |
 
 ### curated_units
 One row per Curator output. Most units wrap a single highlight; a group (e.g. three sibling headings) wraps several. This is where `curated_text` lives, not on `highlights`, because a group has one curated text and several sources.
