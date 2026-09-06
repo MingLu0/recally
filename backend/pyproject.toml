@@ -1,0 +1,49 @@
+[project]
+name = "recally"
+version = "0.1.0"
+description = "Turns O'Reilly reading highlights into scheduled flashcards"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "sqlalchemy>=2.0",
+    "alembic>=1.14",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    # The library the docs call "py-fsrs" (its repo name) publishes as `fsrs` on PyPI.
+    "fsrs>=6,<7",
+    "litellm>=1.55",
+    # APScheduler 4.x is a pre-release with a different API; stay on 3.x (roadmap step 0).
+    "apscheduler>=3.10,<4",
+    "watchdog>=6",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.8",
+    "mypy>=1.13",
+    "pytest>=8.3",
+    "pre-commit>=4",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/recally"]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.mypy]
+python_version = "3.12"
+files = ["src/recally"]
+strict = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

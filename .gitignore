@@ -31,3 +31,6 @@ local.properties
 .DS_Store
 .idea/
 .vscode/
+
+# Transient pip-audit export (CI)
+backend/requirements-audit.txt
