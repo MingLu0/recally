@@ -17,6 +17,8 @@ An hourly Orca automation dispatches at most one sub-issue per run, gated by `sc
 
 - Blockers live in GitHub's native issue dependencies, never in a label.
 - Readiness is the `ready` label, applied by a human.
+- At-most-one is structural, not prompt-enforced: the precheck prints only the single lowest-numbered unblocked candidate, so a run cannot receive two issues.
+- The dispatched agent self-assigns its issue before doing any work and aborts if the assignment fails, so condition 4 (unassigned) closes the window between dispatch and PR creation.
 - The dispatched agent may **merge its own PR** only when the no-mistakes outcome is `checks-passed`, no gate produced an `ask-user` finding, it never responded `--action skip`, and the issue is a sub-issue. Otherwise the PR stays open with the finding quoted verbatim.
 - Parent step issues are never dispatched and never auto-merged.
 - The automation ships **disabled**.

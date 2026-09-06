@@ -2,11 +2,18 @@ You are running unattended on a schedule. No human is watching. Read this fully 
 
 ## Pick the issue
 
-Run `./scripts/orca-ready-issues.sh` from the repo root. It prints one JSON object
-per dispatchable sub-issue. **Take the lowest `number` only. Ignore the rest** —
-another scheduled run will pick them up.
+Run `./scripts/orca-ready-issues.sh` from the repo root. It prints a single JSON
+object for the lowest-numbered dispatchable sub-issue, or nothing.
 
 If it prints nothing, stop and say so. Do not look for other work.
+
+Then claim the issue before doing anything else:
+
+1. `gh issue edit <n> --add-assignee @me`
+2. Verify it took: `gh issue view <n> --json assignees` must list you. The
+   assignee is the board's signal that work is in flight — it is what makes the
+   next scheduled run skip this issue while you are working on it.
+3. If the assignment failed or did not take, stop. Do not proceed unassigned.
 
 ## Do the work
 

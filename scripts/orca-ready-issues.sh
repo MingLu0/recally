@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-# Print roadmap sub-issues that an agent may start unattended, one JSON object per line.
+# Print the single lowest-numbered roadmap sub-issue an agent may start
+# unattended, as one JSON object on stdout. At most one per run is enforced
+# here, structurally — not left to the prompt.
 #
 # Used as the --precheck for the "Roadmap autostart" Orca automation
-# (docs/workflow.md, "Unattended dispatch"). Exit 0 = at least one issue is
-# ready and the automation runs; exit 1 = nothing to do, the run is skipped.
+# (docs/workflow.md, "Unattended dispatch"). Exit 0 = an issue was printed and
+# the automation runs; exit 1 = nothing to do, the run is skipped.
 #
 # An issue is dispatchable only when ALL of these hold:
 #   1. open, and labelled `ready`     — the human says the spec is settled
@@ -49,19 +51,21 @@ linked_issue_numbers=$(gh pr list --repo "$REPOSITORY" --state open --limit 100 
 
 candidate_numbers=$(printf '%s' "$issues_json" | jq -r --arg claimed "$linked_issue_numbers" '
   ($claimed | split(" ") | map(select(length > 0) | tonumber)) as $claimed_numbers
-  | .data.repository.issues.nodes[]
-  | select([.labels.nodes[].name] | index("ready"))          # 1. human says go
-  | select(.subIssues.totalCount == 0)                       # 3. not a parent
-  | select(.parent != null)                                  # 3. is a sub-issue
-  | select(.assignees.totalCount == 0)                       # 4. nobody owns it
-  | select([.number] | inside($claimed_numbers) | not)       # 5. no open PR
-  | .number
+  | [.data.repository.issues.nodes[]
+    | select([.labels.nodes[].name] | index("ready"))          # 1. human says go
+    | select(.subIssues.totalCount == 0)                       # 3. not a parent
+    | select(.parent != null)                                  # 3. is a sub-issue
+    | select(.assignees.totalCount == 0)                       # 4. nobody owns it
+    | select([.number] | inside($claimed_numbers) | not)       # 5. no open PR
+    | .number]
+  | sort | .[]
 ') || exit 1
 
 [ -n "$candidate_numbers" ] || exit 1
 
 # 2. Blockers need a REST call each, so only the survivors above are checked.
-found_ready_issue=0
+# Lowest number first; a blocked candidate falls through to the next one, and
+# the first unblocked candidate is printed and ends the run.
 while read -r issue_number; do
   [ -n "$issue_number" ] || continue
   open_blocker_count=$(gh api "repos/$REPOSITORY/issues/$issue_number/dependencies/blocked_by" \
@@ -72,7 +76,7 @@ while read -r issue_number; do
     .data.repository.issues.nodes[]
     | select(.number == $n)
     | {number, title, parent: .parent.number}'
-  found_ready_issue=1
+  exit 0
 done <<< "$candidate_numbers"
 
-[ "$found_ready_issue" = "1" ]
+exit 1

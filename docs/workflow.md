@@ -97,8 +97,9 @@ human in the loop. It is **disabled until deliberately turned on** and dispatche
 
 ### What makes an issue dispatchable
 
-`scripts/orca-ready-issues.sh` is the automation's precheck: exit 0 (with the issue on stdout) starts a
-run, anything else skips it. All five conditions must hold.
+`scripts/orca-ready-issues.sh` is the automation's precheck: exit 0 (with the single
+lowest-numbered dispatchable issue on stdout) starts a run, anything else skips it. All five
+conditions must hold.
 
 | # | Condition | Source |
 |---|---|---|
@@ -108,7 +109,10 @@ run, anything else skips it. All five conditions must hold.
 | 4 | unassigned | an assignee means someone owns it |
 | 5 | no open PR already closes it | prevents double dispatch on a retry |
 
-The script fails closed: any error prints nothing and exits 1, so a broken query can never cause a dispatch.
+Condition 4 also covers work in flight: the dispatched agent self-assigns its issue as its first
+act (`scripts/orca-autostart-prompt.md`), so the next hourly tick skips an issue that is being
+worked but has no PR yet. The script fails closed: any error prints nothing and exits 1, so a
+broken query can never cause a dispatch.
 
 ### `ready` vs. a blocker
 
