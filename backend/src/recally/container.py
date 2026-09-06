@@ -11,12 +11,16 @@ Agent resolution joins this container in roadmap step 2, when the registry exist
 from collections.abc import Iterator
 from contextlib import contextmanager
 from functools import lru_cache
+from pathlib import Path
 
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from recally.config import Settings, get_settings
 from recally.db import create_database_engine, create_session_factory
+from recally.ingest import ingest_file
+from recally.ingest.adapters import OReillyCsvAdapter
+from recally.models import IngestRun
 
 
 class Container:
@@ -49,6 +53,18 @@ class Container:
             yield session
         finally:
             session.close()
+
+    def ingest_oreilly_export(self, file: Path) -> IngestRun:
+        """Run the deterministic O'Reilly adapter and dedupe transaction.
+
+        Pipeline processing is added after the agent pipeline exists; keeping this
+        operation at the composition root means the watcher and future upload route
+        will use the same path.
+        """
+        with self.session() as session:
+            run = ingest_file(session, file, OReillyCsvAdapter())
+            session.commit()
+            return run
 
 
 @lru_cache(maxsize=1)
