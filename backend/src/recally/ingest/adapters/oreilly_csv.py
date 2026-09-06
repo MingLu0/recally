@@ -68,6 +68,12 @@ def _require_columns(fieldnames: Sequence[str] | None, file: Path) -> None:
 
 
 def _normalize_row(row: dict[str, str], export_position: int, file: Path) -> NormalizedHighlight:
+    missing = [column for column in REQUIRED_COLUMNS if row.get(column) is None]
+    if missing:
+        raise OReillyCsvError(
+            f"{file.name} row {export_position}: short row, missing {', '.join(missing)}"
+        )
+
     book_url = row["Book URL"].strip()
     isbn = _isbn_from_book_url(book_url)
     if not isbn:

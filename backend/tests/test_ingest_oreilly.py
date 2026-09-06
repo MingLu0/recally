@@ -123,6 +123,19 @@ def test_adapter_rejects_a_file_that_is_not_this_export(tmp_path: Path) -> None:
         OReillyCsvAdapter().parse(not_an_export)
 
 
+def test_adapter_rejects_a_short_row(tmp_path: Path) -> None:
+    """A partially downloaded export yields None cells; that is the same clear error."""
+    short_row = tmp_path / "oreilly-annotations-truncated.csv"
+    short_row.write_text(
+        "Book Title,Chapter Title,Date of Highlight,Book URL,Chapter URL,"
+        "Annotation URL,Highlight,Color,Personal Note\n"
+        "30 Agents Every AI Engineer Must Build,Chapter 9,2026-06-19\n"
+    )
+
+    with pytest.raises(OReillyCsvError, match="short row"):
+        OReillyCsvAdapter().parse(short_row)
+
+
 # --- dedupe -------------------------------------------------------------------------
 
 
