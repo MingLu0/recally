@@ -10,7 +10,7 @@ Done by hand, once.
 - Pin APScheduler 3.x.
 - An LLM provider key in `backend/.env` (LiteLLM variable names, see `config.md`). Needed from step 2.
 - A Firebase project with FCM enabled, its `google-services.json` for the app and a service-account JSON for `FIREBASE_CREDENTIALS_FILE`. Both gitignored. Needed from step 5; can be deferred until then.
-- The two real exports of *30 Agents Every…* (2026-08-25, 326 rows; 2026-09-04, 380 rows) copied from `~/Downloads` into `data/`. They are the source for the fixtures and for every manual gate below.
+- The real export `oreilly-annotations.csv` (695 rows, 324 of them for *30 Agents Every AI Engineer Must Build*) copied from `~/Downloads` into `data/`. It is the source for the fixtures and for every manual gate below. A second export — a re-export of the same book after new highlights are added — is what the add/remove half of the manual gates needs, and does not exist yet.
 
 ### 1. Backend skeleton + ingestion
 - FastAPI app in the `backend/src/recally/` layout from [backend.md](backend.md), `X-API-Key` auth, SQLAlchemy models, Alembic (batch mode), SQLite.
@@ -18,7 +18,7 @@ Done by hand, once.
 - O'Reilly CSV adapter + dedupe + watcher (rename event, debounced).
 - Commit fixtures under `backend/tests/fixtures/`: two trimmed exports of the same book (~15 rows each) that between them cover UUID unchanged / added / removed, and the clipped Chapter 9 row (`efaf55cf-…`, 149 characters, an exact prefix of the fuller `bf9830d8-…`) that hard rule 7 forbids reconstructing. Real exports stay in gitignored `data/`. The Chapter 9 "Stage 1/2/3" heading run this step originally called for is not in the export we have — the only short Chapter 9 rows are `0c2b9d1d-…` and `1a6b6e83-…`, so grouping needs a different example or a further export before the step 2 gate below can use it.
 - **Tests**: pytest ingests fixture A then fixture B and asserts the exact new/removed/updated counts; a third ingest of either adds nothing. A request without `X-API-Key` gets 401.
-- **You verify**: with the server running, copy the 2026-08-25 export into the watched folder, then the 2026-09-04 export, then the 2026-09-04 export again. `GET /ingest/status` after each shows 326 new; then 56 new, 2 removed, 0 updated; then 0 / 0 / 0. `GET /decks` lists one book. A `curl` without the key returns 401.
+- **You verify**: with the server running, copy the export into the watched folder: `GET /ingest/status` shows 695 new, 0 updated, 0 removed. Copy the same file again: 0 / 0 / 0 — that idempotence is what this gate checks. `GET /decks` lists the nine books in the export. A `curl` without the key returns 401. The add/remove/update half of this gate is deferred until a genuine second export exists; the committed fixtures already cover those branches in pytest.
 
 ### 2. Agent pipeline
 - Role protocols + `(role, variant)` registry + `default` implementations for Curator, Writer, Critic (ADR-007, [backend.md](backend.md)); the pipeline resolves agents through the registry only.
