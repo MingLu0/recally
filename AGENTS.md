@@ -8,7 +8,7 @@ Recally turns O'Reilly reading highlights into flashcards. A watched folder pick
 
 ## Current state
 
-**Step 1 in progress.** `backend/` has the tooling baseline (uv, ruff, mypy, pytest, CI) and the SQLAlchemy models plus the initial Alembic migration for every table in `docs/data-model.md`. Still to come in step 1: the FastAPI app and `X-API-Key` auth, and the watcher. The O'Reilly CSV adapter, the annotation-UUID dedupe and the committed fixtures are in. `android/` is still a placeholder README. Build order is in `docs/roadmap.md`. When code lands, update the *Commands* section below.
+**Step 1 in progress.** `backend/` has the tooling baseline (uv, ruff, mypy, pytest, CI), the SQLAlchemy models plus the initial Alembic migration for every table in `docs/data-model.md`, and a debounced watchdog watcher for completed O'Reilly exports. Still to come in step 1: the FastAPI app and `X-API-Key` auth. The O'Reilly CSV adapter, the annotation-UUID dedupe and the committed fixtures are in. `android/` is still a placeholder README. Build order is in `docs/roadmap.md`.
 
 ## Repo layout
 
@@ -105,6 +105,8 @@ uv run ruff check . && uv run ruff format --check .
 uv run mypy src/
 uv run alembic upgrade head
 uv run uvicorn recally.main:app --reload
+# Run the watcher by itself until the FastAPI lifespan owns it.
+uv run python -m recally.ingest.watcher
 
 # android
 cd android && ./gradlew :app:testDebugUnitTest

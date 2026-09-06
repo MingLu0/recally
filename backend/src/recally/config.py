@@ -9,6 +9,7 @@ documented names are a mix of `RECALLY_*` and bare ones (`LLM_MODEL_WRITER`,
 """
 
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -21,6 +22,15 @@ class Settings(BaseSettings):
 
     database_url: str = Field(
         default="sqlite:///data/recally.db", validation_alias="RECALLY_DATABASE_URL"
+    )
+    watch_dir: Path = Field(
+        default_factory=lambda: Path("~/Downloads").expanduser(),
+        validation_alias="RECALLY_WATCH_DIR",
+    )
+    watch_debounce_ms: int = Field(
+        default=2000,
+        gt=0,
+        validation_alias="RECALLY_WATCH_DEBOUNCE_MS",
     )
 
 
