@@ -5,7 +5,7 @@ Base: FastAPI. Auth: `X-API-Key` header (single user, value from `RECALLY_API_KE
 ## Reviews
 
 ### GET /reviews/due
-Cards due now (FSRS), plus today's new-card allotment (capped by `NEW_CARDS_PER_DAY`). Returns the FSRS `learning_steps` in effect so the client can re-queue Again/Hard cards inside the session (see ADR-005).
+Cards due now (FSRS), plus today's new-card allotment (capped by `NEW_CARDS_PER_DAY`). Returns the FSRS `learning_steps` in effect so the client can re-queue Again/Hard cards inside the session (see ADR-005). Cards whose `suspended_until` is in the future are excluded (ADR-008).
 **Response**
 ```json
 {
@@ -60,6 +60,30 @@ Optional edits: `{ "front": "...", "back": "..." }` → status `approved`, `appr
 ### POST /cards/{id}/reject
 `{ "reason": "..." }` → status `rejected`. Reasons feed the Learner.
 
+## Approved-card controls
+
+These act on cards already past the approval gate. They are deterministic, involve no LLM call, and never change `cards.status` — an edited, buried or suspended card is still `approved`. See ADR-008.
+
+### PATCH /cards/{id}
+Fix the wording of an approved card. Body carries any of `front`, `back`, `tags`; omitted fields are left alone.
+```json
+{ "front": "Why evaluate traces rather than individual steps?" }
+```
+FSRS state is **untouched** — stability, difficulty, `due` and `step` all survive, because an edit is a correction to the same retrieval task, not a new card. Sets `edited_at`. `original_front`/`original_back` still hold the Writer's text and are not affected. 409 if the card is not `approved`: edits before approval belong to `POST /cards/{id}/approve`, which is the hard-rule-1 gate.
+**Response**: the updated card.
+
+### POST /cards/{id}/bury
+Hide the card for the rest of the day. Sets `suspended_until` to the next day boundary in `RECALLY_TIMEZONE`, so it clears itself with no action from the user. Use for "not right now" instead of a dishonest rating, which would corrupt `review_logs`.
+**Response**: `{ "suspended_until": "2026-09-07T00:00:00+12:00" }`
+
+### POST /cards/{id}/suspend
+Take the card out of rotation indefinitely. Sets `suspended_until` to a far-future sentinel; only `unsuspend` clears it.
+**Response**: `{ "suspended_until": "9999-12-31T00:00:00Z" }`
+
+### POST /cards/{id}/unsuspend
+Clears `suspended_until` (whether set by bury or suspend). FSRS state is unchanged and nothing is recomputed — the card simply becomes visible to `GET /reviews/due` again, due at whatever date it already held.
+**Response**: `{ "suspended_until": null }`
+
 ## Decks & browsing
 
 ### GET /decks
@@ -69,7 +93,7 @@ Books with card counts and due counts.
 ```
 
 ### GET /decks/{book_id}/cards
-`?chapter=` optional filter. Browse cards per book.
+`?chapter=` optional filter. Browse cards per book. Each card carries `suspended_until` (null when in rotation) so the browse view can show suspended cards and offer unsuspend; unlike `/reviews/due`, this list does not filter them out.
 
 ## Stats
 

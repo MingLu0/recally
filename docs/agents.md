@@ -57,7 +57,8 @@ No LLM. FSRS due computation + daily batch selection (due cards + up to `NEW_CAR
 **Jobs**:
 - Produce a new `writer_guidance` row (versioned, never edited in place) that is injected into the Writer prompt. Cards record the version that generated them, so guidance changes are attributable.
 - Flag leech cards (failed 3+ times): propose rewrite as alternative explanation/analogy, or cross-link to a related highlight from another book. Rewrites go through the normal Writer ⇄ Critic → human approval path as new cards; the leech keeps its FSRS state until the human approves the rewrite, at which point the old card is set to `rejected` with `status_reason="superseded by <id>"`.
-- Human edits at approval time (`cards.original_front/original_back` differ from `front/back`) and rejection reasons are inputs too; they are the most direct quality signal available.
+- Human edits at approval time (`cards.original_front/original_back` differ from `front/back`) and rejection reasons are inputs too; they are the most direct quality signal available. Post-approval edits (`cards.edited_at` set, ADR-008) are a second signal and must be segmented, not pooled: a card hand-fixed weeks later would otherwise credit its lapse rate to the `guidance_version` that wrote the flawed original.
+- Suspended cards (`cards.suspended_until` in the future) are excluded from lapse-rate aggregates. A card taken out of rotation stops generating reviews, so leaving it in would read as improved retention.
 
 Cold start: with one user, a lapse-rate bucket needs on the order of a hundred reviews before it means anything. Stage B is expected to produce its first useful guidance months in, not weeks.
 

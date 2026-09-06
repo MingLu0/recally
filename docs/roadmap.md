@@ -29,15 +29,17 @@ Done by hand, once.
 
 ### 3. FSRS + reviews API + CLI
 - py-fsrs `Scheduler` wrapper, `/reviews/due`, `/reviews/{id}/rate`, `/reviews/rate-batch`, `/cards/{id}/approve|reject`, `/stats`.
-- A minimal `recally` CLI (`pending`, `approve <id>`, `reject <id>`, `due`, `rate <id> <1-4>`) so the checkpoint can run without the app.
-- **Tests**: rating Again puts the card back due within the first learning step with state `learning`. A `rate-batch` with `rated_at` out of order leaves the card in the same state as rating in order. Re-sending the same batch changes nothing.
-- **You verify**: approve a few Chapter 9 cards in the CLI, run `due`, rate one Again, run `due` again after a minute and it is back. Post a two-rating batch with the timestamps reversed and compare `next_due` with the same two ratings posted in order on another card: identical. Post the batch a second time: unchanged.
+- Approved-card controls (ADR-008): `PATCH /cards/{id}`, `/cards/{id}/bury|suspend|unsuspend`, and the `suspended_until` filter on `/reviews/due`.
+- A minimal `recally` CLI (`pending`, `approve <id>`, `reject <id>`, `due`, `rate <id> <1-4>`, `edit <id>`, `bury <id>`, `suspend <id>`, `unsuspend <id>`) so the checkpoint can run without the app.
+- **Tests**: rating Again puts the card back due within the first learning step with state `learning`. A `rate-batch` with `rated_at` out of order leaves the card in the same state as rating in order. Re-sending the same batch changes nothing. `PATCH` on an approved card changes `front` and sets `edited_at` while leaving every `card_state` column identical, and returns 409 on a `pending_review` card. A buried card is absent from `/reviews/due` and present in `/decks/{id}/cards`; unsuspend restores it with the same `due` it had before.
+- **You verify**: approve a few Chapter 9 cards in the CLI, run `due`, rate one Again, run `due` again after a minute and it is back. Post a two-rating batch with the timestamps reversed and compare `next_due` with the same two ratings posted in order on another card: identical. Post the batch a second time: unchanged. Edit an approved card's front, then run `due`: the new text shows and its due date has not moved. Bury a card and confirm `due` no longer lists it; suspend another, find it in `/decks/{id}/cards`, unsuspend it, and confirm it returns.
 
 ### ⚠️ Validation checkpoint
 Use the backend through the CLI for ~14 days. Before starting, write down the numbers that count as "habit sustained" (candidates from the PRD metrics: review days out of 14, approval queue drained within a day of each ingest, share of pending cards approved). Read them off `GET /stats` and `GET /cards/pending` at the end. If the numbers are not met, fix the pipeline before investing in the app.
 
 ### 4. Android MVP
 - Settings (base URL + API key + connection test), Today, Review, Approval Queue screens; Retrofit client; Room cache; LAN cleartext network security config.
+- Card controls in the UI: bury and edit from the review session, edit/suspend/unsuspend from Decks (ADR-008).
 - **Tests**: unit tests for the sync queue (ratings stored with the client `rated_at`, flushed via `rate-batch`, a retried flush sends the same payload) and for same-session re-queueing from `learning_steps_minutes`.
 - **You verify**: enter the Mac's LAN URL and key in Settings; the connection test passes. Put the phone in aeroplane mode, review five cards, reconnect. `review_logs` has five rows with the phone's `device_id` and the offline `rated_at` values, and the app's next due matches `GET /reviews/due`.
 
