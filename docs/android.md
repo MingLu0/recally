@@ -11,6 +11,8 @@ Native Android. Kotlin + Jetpack Compose + Material 3.
 ### 2. Review session
 - Card front → tap to flip → rating buttons: Again / Hard / Good / Easy.
 - Response time captured automatically (tap-to-rate duration) for review_logs.
+- **Bury** (overflow action, available before flipping): drops the card from the rest of today's session via `POST /cards/{id}/bury`. This is the honest alternative to rating a card you don't want to answer — a dishonest rating corrupts `review_logs`, which trains both the FSRS optimizer and the Learner. Requires connectivity; offline, the action is unavailable rather than queued, since the session is over before it would sync.
+- **Edit** (overflow action, after flipping): fix wording in place via `PATCH /cards/{id}`. Scheduling is untouched (ADR-008).
 - **Same-session relearning**: FSRS learning steps are minutes long, so a card rated Again or Hard comes back inside the session. The client re-queues it after the step interval from `learning_steps_minutes` (or at the end of the queue if the session is shorter than the step). The client does not run FSRS; it only decides *when to show the card again in this session*. The server owns the real state (ADR-005).
 - Session summary at end (reviewed count, time, lapses).
 
@@ -19,7 +21,7 @@ Native Android. Kotlin + Jetpack Compose + Material 3.
 - Approve / edit inline / reject (with optional reason).
 
 ### 4. Decks
-- Book list → chapters → cards. Read-only browsing.
+- Book list → chapters → cards. Browsing, plus the per-card controls from ADR-008: edit (`PATCH /cards/{id}`), suspend and unsuspend. Suspended cards are shown here with their state — this screen is the only way back from a suspend, so it cannot filter them out.
 
 ### 5. Stats
 - Streak, retention, forecast chart, lapse rate by card type.

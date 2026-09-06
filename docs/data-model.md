@@ -71,6 +71,8 @@ PK (`unit_id`, `highlight_id`). Gives every card full provenance back to each so
 | status | text | `pending_review` / `needs_human` / `approved` / `rejected` |
 | status_reason | text, nullable | critic critique, human rejection reason, or `superseded by <id>` (feeds the Learner) |
 | approved_at | datetime, nullable | when the human approved; `card_state` is created at the same time |
+| edited_at | datetime, nullable | last post-approval `PATCH` of `front`/`back`/`tags`. FSRS state is untouched by an edit; the timestamp lets the Learner segment hand-fixed cards so they do not flatter the `guidance_version` that wrote the flawed original (ADR-008) |
+| suspended_until | datetime, nullable | NULL = in rotation. Bury sets the next day boundary in `RECALLY_TIMEZONE`; suspend sets a far-future sentinel. `GET /reviews/due` excludes any card whose value is in the future; FSRS state is never recomputed (ADR-008) |
 | generation_rounds | int | Writer⇄Critic rounds used for this card (per card, not per unit) |
 | model | text | generating model (for quality analysis) |
 | guidance_version | int, nullable FK writer_guidance | which Learner guidance was in the Writer prompt |
