@@ -7,6 +7,7 @@ How the project gets built: which tools hold the backlog, run the agents, and ga
 | Role | Choice | Why |
 |---|---|---|
 | Backlog | GitHub Issues + milestones | Repo already lives on GitHub; Orca opens worktrees from issues natively; zero cost |
+| Progress view | GitHub Project board "[Recally Roadmap](https://github.com/users/MingLu0/projects/2)" | One pane across parallel agents; issues stay the source of truth |
 | Agent control plane | [Orca](https://www.onorca.dev/) | Parallel worktrees, diff review with line comments back to the agent, GitHub issue/PR drawer, BYO subscription |
 | Coding agent | Claude Code (any Orca-supported CLI works) | Reads `AGENTS.md` / `CLAUDE.md` |
 | Agent instructions | `AGENTS.md` | Hard rules and conventions; the docs are the spec |
@@ -17,8 +18,9 @@ Not used: Linear (single-user project, paid tier + AI credits for anything beyon
 
 1. Prerequisites from `roadmap.md` step 0: `uv` with Python ≥ 3.10, APScheduler pinned to 3.x. Done by hand, once.
 2. Commit gate fixtures. The step 1 gate needs the 2026-08-25 (326 rows) and 2026-09-04 (380 rows) exports of the same book. `data/` is gitignored, so copies live in `backend/tests/fixtures/`. An agent in a fresh worktree cannot run the gate without them.
-3. Create one GitHub issue per roadmap step (1–6). Body = the step's bullets plus its **Tests** and **You verify** gates verbatim. The issue closes only after *You verify* passes, not on merge. Sub-issues where a step fans out (table below). Milestones: `Backend` (steps 1–3), `App` (steps 4–6).
-4. Orca: add the repo, connect GitHub, setup script `cd backend && uv sync`.
+3. Create one GitHub issue per roadmap step (1–6). Body = the step's bullets plus its **Tests** and **You verify** gates verbatim. The issue closes only after *You verify* passes, not on merge. Sub-issues where a step fans out (table below); a sub-issue carries only a Tests gate. Milestones: `Backend` (steps 1–3), `App` (steps 4–6). Step 0 is a manual checklist issue, assigned to the human, in no milestone.
+4. Project board `Recally Roadmap`: columns Todo / In Progress / In Review / Verifying / Done, and the built-in workflows *item added → Todo*, *PR merged → Verifying*, *item closed → Done*. There is no built-in "PR opened" trigger, so In Review is set by hand or by Orca.
+5. Orca: add the repo, connect GitHub, setup script `cd backend && uv sync`.
 
 ## The per-issue loop
 
@@ -30,13 +32,16 @@ GitHub issue
              TDD against the Tests gate. Run pytest + ruff and paste the output."
   → review the diff in Orca, leave line comments, iterate
   → PR from Orca → merge to main
-  → run the step's You verify gate against the real system → issue closes
+  → sub-issue: closes on merge (its Tests gate is the whole gate)
+  → step issue: board → Verifying; run the You verify gate
+    against the real system → issue closes
 ```
 
 Rules:
 
 - **At most 3 worktrees live at once.** One reviewer's merge bandwidth is the throttle, not agent count.
 - **One gate per PR.** Nothing merges without the gate command and its output in the PR description.
+- **Verifying is not decoration.** A card there means a roadmap step is merged but unproven against the real system — real exports, running server, real provider. Fixtures cannot reach those failures. The column should usually be empty.
 - Branch names follow `AGENTS.md`: `feat/…`, `fix/…`, `docs/…`.
 
 ## Parallelism per step
