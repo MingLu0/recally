@@ -56,9 +56,15 @@ def register_error_handlers(app: FastAPI) -> None:
         assert isinstance(exc, RequestValidationError)
         return problem_response(422, _summarize_validation_errors(exc.errors()))
 
+    async def handle_unexpected_error(_: Request, __: Exception) -> JSONResponse:
+        # A crash inside a route keeps the one body shape too, with a fixed detail:
+        # the exception itself may carry paths or SQL the client must never see.
+        return problem_response(500, "Internal server error.")
+
     app.add_exception_handler(ProblemDetail, handle_problem_detail)
     app.add_exception_handler(StarletteHTTPException, handle_http_exception)
     app.add_exception_handler(RequestValidationError, handle_validation_error)
+    app.add_exception_handler(Exception, handle_unexpected_error)
 
 
 def _summarize_validation_errors(errors: Sequence[Any]) -> str:

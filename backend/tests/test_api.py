@@ -128,6 +128,30 @@ def test_errors_use_problem_json(client: TestClient) -> None:
     assert response.headers["content-type"].startswith("application/problem+json")
 
 
+def test_an_unexpected_error_is_also_problem_json(
+    container: Container, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The one body shape covers a crash inside a route, without leaking the exception."""
+    app = create_app()
+    app.dependency_overrides[container_dependency] = lambda: container
+    monkeypatch.setenv("RECALLY_API_KEY", TEST_API_KEY)
+    get_settings.cache_clear()
+
+    @app.get("/__boom")
+    def boom() -> None:
+        raise RuntimeError("sqlite3.OperationalError: database is locked")
+
+    try:
+        with TestClient(app, raise_server_exceptions=False) as test_client:
+            response = test_client.get("/__boom", headers={"X-API-Key": TEST_API_KEY})
+    finally:
+        get_settings.cache_clear()
+
+    assert response.status_code == 500
+    assert response.json() == {"status": 500, "detail": "Internal server error."}
+    assert response.headers["content-type"].startswith("application/problem+json")
+
+
 def test_ingest_status_reports_the_latest_run(client: TestClient, container: Container) -> None:
     """The endpoint reads the newest `ingest_runs` row, with `rows_unchanged` derived."""
     with container.session() as session:
