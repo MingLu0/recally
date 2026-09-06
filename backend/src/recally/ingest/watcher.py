@@ -94,6 +94,11 @@ class ExportWatcher:
             return
 
         path = destination.resolve()
+        try:
+            path.relative_to(self._watch_dir.resolve())
+        except ValueError:
+            return
+
         with self._lock:
             self._next_token += 1
             token = self._next_token
