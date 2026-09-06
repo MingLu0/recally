@@ -8,7 +8,7 @@ Plain Python modules (no orchestration framework) for v1; see ADR-001. Each "age
 No LLM. Watch folder → adapter → dedupe → `highlights` rows with `processed=false`.
 
 ### 2. Curator Agent — LLM
-**Input**: batch of unprocessed highlights for one chapter, in export order (newest first; within a day, reverse creation order, which approximates reverse reading order).
+**Input**: batch of unprocessed highlights for one chapter, in export order (newest first; within a day, reverse creation order, which approximates reverse reading order). A chapter larger than `CURATOR_MAX_BATCH` highlights is split into consecutive batches in that same order, so a long chapter does not become one long prompt on the cheap tier — the failure mode there is degraded instruction-following, which shows up as silent over-dropping. Grouping cannot span a batch boundary; with the observed case being a run of three adjacent headings, the default leaves ample headroom.
 **Jobs**:
 - **Filter**: drop low-value highlights — bare headings with no sibling context, navigation text, isolated short phrases. Real data (two exports, 380 rows): ~7% of rows are under 40 characters, none are figure/table references. Junk is a small minority, so the Curator should default to `keep`.
 - **Group**: fold sibling highlights that only make sense together into one curated unit. The observed case is a run of headings highlighted in sequence ("Stage 1: Task assignment", "Stage 2: Code synthesis", "Stage 3: Test synthesis") which becomes one structural card. Grouping is semantic, within the same chapter and day; there is no positional key in the export beyond that ordering.

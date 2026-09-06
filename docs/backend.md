@@ -80,6 +80,8 @@ class Writer(Protocol):
 
 All persistence — `curated_units`, card statuses, `processed` flips, orphan cleanup — is the runner's job, exactly as specified in agents.md, "Pipeline runner and handoffs".
 
+Each agent parses and validates the LLM response into its result dataclass before returning, including cross-field checks against the request: the Curator's `highlight_ids` must be a subset of the batch it was given and `decision` must be `keep|drop`; the Critic's `verdict` must be `accept|revise|reject`. A response that fails validation raises at the agent boundary and is handled by the existing failure path ([architecture.md](architecture.md), "Failure handling"). The protocol boundary itself does not cover this — mypy checks that an implementation conforms, not that a model's output does — and a well-formed response with invalid content raises no exception on its own, so without this check it would bypass that path.
+
 Prompts are files under `agents/<role>/prompts/`, loaded from disk, never inline strings (ADR-003). LLM access is the `llm.py` callable injected via the context; agents never import a provider SDK.
 
 ## Swapping an agent

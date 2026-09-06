@@ -24,7 +24,7 @@ Native Android. Kotlin + Jetpack Compose + Material 3.
 - Book list → chapters → cards. Browsing, plus the per-card controls from ADR-008: edit (`PATCH /cards/{id}`), suspend and unsuspend. Suspended cards are shown here with their state — this screen is the only way back from a suspend, so it cannot filter them out.
 
 ### 5. Stats
-- Streak, retention, forecast chart, lapse rate by card type.
+- Streak, retention, forecast chart, lapse rate by card type, lapse rate by Writer guidance version (the roadmap 6b gate; hidden until there is more than one version), curation yield.
 
 ### 6. Settings
 - Backend base URL, API key, connection test. See *Connecting to the backend*.

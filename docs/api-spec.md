@@ -104,9 +104,13 @@ Books with card counts and due counts.
   "reviews_today": 23,
   "retention_30d": 0.87,
   "lapse_rate_by_type": { "qa": 0.11, "cloze": 0.18 },
+  "lapse_rate_by_guidance_version": { "1": 0.19, "2": 0.12 },
+  "curation_yield": 0.83,
   "forecast": [ { "date": "2026-09-05", "due": 14 } ]
 }
 ```
+
+`lapse_rate_by_guidance_version` keys are `cards.guidance_version` as strings (`null` guidance is omitted); it is how the Learner's effect is judged, so it is the one number that has to exist before Stage B writes a v2 (PRD success metrics, roadmap step 6b). `curation_yield` is approved cards ÷ highlights ingested.
 
 ## Ingestion
 
@@ -114,11 +118,12 @@ Books with card counts and due counts.
 Multipart CSV upload (same pipeline as the watcher; enables HF Spaces phase).
 
 ### GET /ingest/status
-Latest `ingest_runs` row.
+Latest `ingest_runs` row. `units_dropped`/`highlights_dropped` are the Curator's filter output: a dropped highlight produces no card, so without them a wrongly-dropped highlight is invisible everywhere (a wrongly-*grouped* one is not — `GET /cards/pending` shows every source highlight of a unit). They are also what makes the PRD's curation-yield metric computable.
 ```json
 {
   "filename": "30-agents-every-oreilly-annotations.csv",
   "rows_seen": 380, "rows_new": 56, "rows_updated": 0, "rows_unchanged": 322, "rows_removed": 2,
+  "units_kept": 49, "units_dropped": 4, "highlights_dropped": 5,
   "cards_generated": 131, "cost_microusd": 184200,
   "started_at": "2026-09-04T09:00:00Z", "finished_at": "2026-09-04T09:06:12Z", "error": null
 }

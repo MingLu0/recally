@@ -177,6 +177,9 @@ One row per call through `llm.py`. Doubles as the trace and the replay corpus: t
 | rows_new | int | |
 | rows_updated | int | same UUID, changed text or note (expected 0) |
 | rows_removed | int | UUIDs present before, absent now |
+| units_kept | int | curated units with `decision=keep` produced during this run |
+| units_dropped | int | curated units with `decision=drop`; the Curator's filter output, otherwise invisible because a dropped unit produces no card |
+| highlights_dropped | int | highlights covered by those dropped units; with `rows_seen` this is the denominator for the PRD's curation-yield metric |
 | cards_generated | int | cards the pipeline produced during this run; may include leftover highlights from an earlier run, since the runner processes all `processed=false` rows |
 | cost_microusd | int | sum of `llm_calls` for this run |
 | started_at / finished_at | datetime | |
