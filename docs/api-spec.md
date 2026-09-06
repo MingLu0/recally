@@ -118,7 +118,7 @@ Books with card counts and due counts.
 Multipart CSV upload (same pipeline as the watcher; enables HF Spaces phase).
 
 ### GET /ingest/status
-Latest `ingest_runs` row. `units_dropped`/`highlights_dropped` are the Curator's filter output: a dropped highlight produces no card, so without them a wrongly-dropped highlight is invisible everywhere (a wrongly-*grouped* one is not — `GET /cards/pending` shows every source highlight of a unit). They are also what makes the PRD's curation-yield metric computable.
+Latest `ingest_runs` row; 404 before the first ingest, so "never ingested" stays distinguishable from "ingested nothing". `units_dropped`/`highlights_dropped` are the Curator's filter output: a dropped highlight produces no card, so without them a wrongly-dropped highlight is invisible everywhere (a wrongly-*grouped* one is not — `GET /cards/pending` shows every source highlight of a unit). They are also what makes the PRD's curation-yield metric computable.
 ```json
 {
   "filename": "30-agents-every-oreilly-annotations.csv",
@@ -128,6 +128,7 @@ Latest `ingest_runs` row. `units_dropped`/`highlights_dropped` are the Curator's
   "started_at": "2026-09-04T09:00:00Z", "finished_at": "2026-09-04T09:06:12Z", "error": null
 }
 ```
+`rows_unchanged` is derived (`rows_seen - rows_new - rows_updated`), not a stored column. `units_kept`, `units_dropped`, `highlights_dropped`, `cards_generated` and `cost_microusd` are the pipeline's, so the first three are absent from the payload until step 2 fills them rather than reported as a misleading zero.
 
 ## Jobs
 

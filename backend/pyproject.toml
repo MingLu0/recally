@@ -24,6 +24,9 @@ dev = [
     "mypy>=1.13",
     "pytest>=8.3",
     "pre-commit>=4",
+    # Starlette's TestClient transport (it deprecates plain httpx in favour of this);
+    # test-only, so declared here rather than pulled in via fastapi's `standard` extra.
+    "httpx2",
 ]
 
 [build-system]

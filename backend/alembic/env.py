@@ -9,14 +9,19 @@ Two things here are load-bearing:
 - The URL comes from `RECALLY_DATABASE_URL` via `recally.config` unless the caller
   supplied one, so `alembic upgrade head` and the app can never disagree about which
   database they are talking to. Tests override it with `sqlalchemy.url`.
+
+The online engine is built by `recally.db` rather than Alembic's `engine_from_config`
+so that migrations and the app share one construction path — in particular the SQLite
+parent-directory creation, without which `alembic upgrade head` on a fresh clone fails
+before it can create the file the default URL points at.
 """
 
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy import engine_from_config, pool
 
 from recally.config import get_settings
+from recally.db import create_database_engine
 from recally.models import Base
 
 config = context.config
@@ -49,11 +54,7 @@ def run_migrations_offline() -> None:
 
 def run_migrations_online() -> None:
     """Run migrations against a live connection."""
-    connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
-        prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
-    )
+    connectable = create_database_engine(config.get_main_option("sqlalchemy.url"))
 
     with connectable.connect() as connection:
         context.configure(

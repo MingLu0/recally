@@ -71,3 +71,23 @@ def test_every_table_carries_user_id() -> None:
         user_id_column = table.columns["user_id"]
         assert not user_id_column.nullable, table_name
         assert user_id_column.server_default is not None, table_name
+
+
+def test_sqlite_parent_directory_is_created(tmp_path: Path) -> None:
+    """A fresh clone has no `data/`, and the default URL points inside it.
+
+    Without this, both `alembic upgrade head` and the first request fail with SQLite's
+    "unable to open database file", which says nothing about the missing folder.
+    """
+    from recally.db import create_database_engine
+
+    nested = tmp_path / "data" / "nested"
+    assert not nested.exists()
+
+    engine = create_database_engine(f"sqlite:///{nested / 'recally.db'}")
+    try:
+        engine.connect().close()
+    finally:
+        engine.dispose()
+
+    assert nested.is_dir()
