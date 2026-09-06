@@ -22,7 +22,7 @@ Native Android. Kotlin + Jetpack Compose + Material 3.
 - Book list → chapters → cards. Read-only browsing.
 
 ### 5. Stats
-- Streak, retention, forecast chart, lapse rate by card type.
+- Streak, retention, forecast chart, lapse rate by card type, lapse rate by Writer guidance version (the roadmap 6b gate; hidden until there is more than one version), curation yield.
 
 ### 6. Settings
 - Backend base URL, API key, connection test. See *Connecting to the backend*.
