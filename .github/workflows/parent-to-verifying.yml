@@ -1,0 +1,132 @@
+# When the last open sub-issue of a roadmap step closes, move that step's
+# parent issue to Verifying on the project board and comment with its
+# "You verify" gate.
+#
+# Why this exists: the board's built-in automations move a card when *its own*
+# issue or PR closes. A parent step issue is closed by neither — it finishes
+# when its children do — so nothing built in can move it. That transition is
+# also the one that matters most: docs/roadmap.md gives every step a You verify
+# gate that fixtures cannot reach, and Verifying is where the step waits for it.
+#
+# Needs a PAT with `project` scope in the PROJECT_TOKEN secret; the default
+# GITHUB_TOKEN cannot write to a user-owned (as opposed to repo-owned) project.
+
+name: Parent step → Verifying
+
+on:
+  issues:
+    types: [closed]
+
+permissions:
+  issues: read
+
+jobs:
+  promote-parent:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Move parent to Verifying when its last sub-issue closes
+        env:
+          GH_TOKEN: ${{ secrets.PROJECT_TOKEN }}
+          CLOSED_ISSUE: ${{ github.event.issue.number }}
+          REPO_OWNER: ${{ github.repository_owner }}
+          REPO_NAME: ${{ github.event.repository.name }}
+          TARGET_STATUS: Verifying
+        run: |
+          set -euo pipefail
+
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "PROJECT_TOKEN is not set; skipping. See this file's header."
+            exit 0
+          fi
+
+          parent_number=$(gh api graphql \
+            -f query='query($owner:String!,$name:String!,$number:Int!){
+              repository(owner:$owner,name:$name){
+                issue(number:$number){ parent { number } }
+              }
+            }' \
+            -F owner="$REPO_OWNER" -F name="$REPO_NAME" -F number="$CLOSED_ISSUE" \
+            --jq '.data.repository.issue.parent.number // empty')
+
+          if [ -z "$parent_number" ]; then
+            echo "#$CLOSED_ISSUE has no parent; nothing to promote."
+            exit 0
+          fi
+
+          # A parent is ready only when every one of its sub-issues is closed.
+          open_siblings=$(gh api graphql \
+            -f query='query($owner:String!,$name:String!,$number:Int!){
+              repository(owner:$owner,name:$name){
+                issue(number:$number){
+                  subIssues(first:50){ nodes { state } }
+                }
+              }
+            }' \
+            -F owner="$REPO_OWNER" -F name="$REPO_NAME" -F number="$parent_number" \
+            --jq '[.data.repository.issue.subIssues.nodes[] | select(.state=="OPEN")] | length')
+
+          if [ "$open_siblings" -ne 0 ]; then
+            echo "Parent #$parent_number still has $open_siblings open sub-issue(s); leaving it where it is."
+            exit 0
+          fi
+
+          # Resolve the parent's card, its project, and the Verifying option id.
+          read -r item_id project_id <<<"$(gh api graphql \
+            -f query='query($owner:String!,$name:String!,$number:Int!){
+              repository(owner:$owner,name:$name){
+                issue(number:$number){
+                  projectItems(first:10){ nodes { id project { id } } }
+                }
+              }
+            }' \
+            -F owner="$REPO_OWNER" -F name="$REPO_NAME" -F number="$parent_number" \
+            --jq '.data.repository.issue.projectItems.nodes[0] | "\(.id) \(.project.id)"')"
+
+          if [ -z "${item_id:-}" ] || [ "$item_id" = "null" ]; then
+            echo "Parent #$parent_number is not on a project board; nothing to move."
+            exit 0
+          fi
+
+          read -r field_id option_id <<<"$(gh api graphql \
+            -f query='query($project:ID!){
+              node(id:$project){
+                ... on ProjectV2 {
+                  field(name:"Status"){
+                    ... on ProjectV2SingleSelectField { id options { id name } }
+                  }
+                }
+              }
+            }' \
+            -F project="$project_id" \
+            | jq -r --arg want "$TARGET_STATUS" \
+              '.data.node.field | "\(.id) \(.options[] | select(.name==$want) | .id)"')"
+
+          if [ -z "${option_id:-}" ] || [ "$option_id" = "null" ]; then
+            echo "No \"$TARGET_STATUS\" option on the board's Status field; leaving the card alone."
+            exit 0
+          fi
+
+          gh api graphql \
+            -f query='mutation($project:ID!,$item:ID!,$field:ID!,$option:String!){
+              updateProjectV2ItemFieldValue(input:{
+                projectId:$project, itemId:$item, fieldId:$field,
+                value:{singleSelectOptionId:$option}
+              }){ projectV2Item { id } }
+            }' \
+            -F project="$project_id" -F item="$item_id" -F field="$field_id" \
+            -F option="$option_id" >/dev/null
+
+          echo "Moved #$parent_number to $TARGET_STATUS."
+
+          # Comment once, so the gate to run is in the issue rather than in a log.
+          already=$(gh issue view "$parent_number" --repo "$REPO_OWNER/$REPO_NAME" \
+            --json comments --jq '[.comments[] | select(.body | startswith("**All sub-issues are closed.**"))] | length')
+
+          if [ "$already" -eq 0 ]; then
+            gh issue comment "$parent_number" --repo "$REPO_OWNER/$REPO_NAME" --body \
+          "**All sub-issues are closed.** Moved to \`Verifying\` on the board.
+
+          This step is not done until its **You verify** gate passes — see the gate in this issue's body. It runs against the real system (real exports, a running server, a real provider), which is exactly what the fixture-based Tests gates cannot reach.
+
+          Close this issue once it passes; the board will move it to Done."
+          fi
