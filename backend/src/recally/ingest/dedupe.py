@@ -58,7 +58,7 @@ def ingest_highlights(
     run = IngestRun(filename=filename, user_id=user_id, started_at=utc_now())
     session.add(run)
 
-    counts = apply_highlights(session, highlights, user_id=user_id)
+    counts = _apply_highlights(session, highlights, user_id=user_id)
 
     run.rows_seen = counts.rows_seen
     run.rows_new = counts.rows_new
@@ -69,7 +69,7 @@ def ingest_highlights(
     return run
 
 
-def apply_highlights(
+def _apply_highlights(
     session: Session,
     highlights: list[NormalizedHighlight],
     *,
