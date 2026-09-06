@@ -2,7 +2,7 @@
 
 ## Build order (v1)
 
-Every step has two gates. **Tests** is the merge requirement: the PR pastes the command and its output. **You verify** is a check a human runs against the real system after merge, and the step is not done until it passes. Where a check reads a table directly, `sqlite3 data/recally.db` is the tool in phase 1; an admin endpoint is added only if that becomes tedious.
+Every step has two gates. **Tests** is the merge requirement: the PR pastes the command and its output. **You verify** is a check a human runs against the real system after merge, and the step is not done until it passes. Where a check reads a table directly, `sqlite3 data/recally.db` is the tool in phase 1; an admin endpoint is added only if that becomes tedious. Separately, every branch clears the no-mistakes pipeline before its PR opens (docs/workflow.md, "The no-mistakes gate"); that is a per-branch check, not a per-step one.
 
 ### 0. Prerequisites
 Done by hand, once.

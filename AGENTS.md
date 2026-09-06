@@ -108,6 +108,10 @@ uv run uvicorn recally.main:app --reload
 
 # android
 cd android && ./gradlew :app:testDebugUnitTest
+
+# pre-PR gate (from the repo root, on a feature branch, work committed)
+no-mistakes axi run --intent "<what the issue asked for + decisions made>"
+no-mistakes axi status
 ```
 
 Backend commands run from `backend/`; policy and config locations are in `docs/backend.md`, "Tooling".
@@ -119,3 +123,4 @@ Backend commands run from `backend/`; policy and config locations are in `docs/b
 - Do exactly what was asked. Do not widen scope to adjacent files or "while we're here" refactors without asking.
 - When a doc and this file disagree, the doc wins. Fix this file.
 - Verify before claiming done: run the tests or command and paste the output. If something was skipped, say so.
+- Validate through `no-mistakes` before opening a PR: commit on a feature branch, then `no-mistakes axi run --intent "<what the issue asked for + the decisions you made>"`. Drive the gates, but **relay every `ask-user` finding to the human verbatim and wait** — those are the ones that touch the hard rules above. Do not pass `--yes` unless asked, and never hand-edit a finding while a run is active. Full workflow in `docs/workflow.md`, "The no-mistakes gate".

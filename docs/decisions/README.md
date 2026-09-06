@@ -12,3 +12,4 @@ One file per cross-cutting or hard-to-reverse decision. Small local decisions ge
 | [006](006-no-formal-evals-in-v1.md) | No formal evals in v1 | accepted | Approval queue is the labelled set; `llm_calls` stores prompts for later replay |
 | [007](007-agent-protocol-registry.md) | Agent protocol + registry | accepted | `Protocol` per role, `(role, variant)` registry, `AGENT_*` env vars; agents hold no DB session |
 | [008](008-post-approval-card-controls.md) | Post-approval card controls | accepted | `PATCH` keeps FSRS state and stamps `edited_at`; suspend and bury share one `suspended_until` column |
+| [009](009-no-mistakes-pre-pr-gate.md) | no-mistakes as the pre-PR gate | accepted | Every branch clears `no-mistakes axi run` before its PR opens; `ask-user` findings escalate to the human |
