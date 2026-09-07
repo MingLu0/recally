@@ -54,6 +54,10 @@ class Settings(BaseSettings):
     # Off only if `llm_calls` bloats (ADR-006); the replay corpus is the default.
     llm_log_payloads: bool = Field(default=True, validation_alias="LLM_LOG_PAYLOADS")
 
+    # Max highlights per Curator call; a longer chapter is split into consecutive
+    # batches and grouping cannot span a batch boundary (docs/agents.md §2).
+    curator_max_batch: int = Field(default=40, gt=0, validation_alias="CURATOR_MAX_BATCH")
+
     # Registered variant per agent role (ADR-007); the registry validates them at
     # startup, so a typo fails the container build rather than the first LLM call.
     agent_curator: str = Field(default="default", validation_alias="AGENT_CURATOR")
