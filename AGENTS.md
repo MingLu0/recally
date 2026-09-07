@@ -112,6 +112,7 @@ uv run python -m recally.ingest.watcher
 cd android && ./gradlew :app:testDebugUnitTest
 
 # pre-PR gate (from the repo root, on a feature branch, work committed)
+# NOT for roadmap step 2 — see ADR-011; there the ticket's own test list is the gate.
 no-mistakes axi run --intent "<what the issue asked for + decisions made>"
 no-mistakes axi status
 ```
@@ -126,4 +127,5 @@ Backend commands run from `backend/`; policy and config locations are in `docs/b
 - When a doc and this file disagree, the doc wins. Fix this file.
 - Verify before claiming done: run the tests or command and paste the output. If something was skipped, say so.
 - Validate through `no-mistakes` before opening a PR: commit on a feature branch, then `no-mistakes axi run --intent "<what the issue asked for + the decisions you made>"`. Drive the gates, but **relay every `ask-user` finding to the human verbatim and wait** — those are the ones that touch the hard rules above. Do not pass `--yes` unless asked, and never hand-edit a finding while a run is active. Full workflow in `docs/workflow.md`, "The no-mistakes gate".
+- **Roadmap step 2 (#28 and its sub-issues) is the exception: do not run `no-mistakes` there** (ADR-011). The ticket's own list of named tests is the whole gate. Write those tests first; for every one asserting a raise, a refusal or a negative, confirm it **fails** before the implementation exists and paste that red output next to the green run. Name in the PR any listed test you did not write, and why — never drop one silently. **Do not auto-merge a step-2 PR**; open it, say it is the acceptance-criteria trial, and stop.
 - **Never start a parent step issue, and never auto-merge one.** Parents carry a `You verify` gate only a human can run. An agent running unattended takes one `ready`, unblocked sub-issue per run and may merge its own PR only when the gate needed no human decision — no `ask-user` finding, no skipped step (`docs/workflow.md`, "Unattended dispatch"; ADR-010).

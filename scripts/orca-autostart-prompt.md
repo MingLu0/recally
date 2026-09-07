@@ -26,8 +26,22 @@ Then claim the issue before doing anything else:
 
 ## Validate
 
-Run the gate with a rich intent — what the issue asked for plus the decisions you
-made. A thin intent makes the review flag deliberate choices as mistakes:
+**If the issue is a step 2 sub-issue (#29-#35), stop and read this instead.** Step 2 runs
+without `no-mistakes` (ADR-011): the ticket's list of named tests is the whole gate.
+
+1. Write each listed test **before** the code it covers.
+2. For every test asserting a raise, a refusal or a negative (`*_raises`, `*_never_*`,
+   `*_no_*`, `*_only_*`), confirm it **fails** first and paste that red output in the PR
+   next to the green run. A negative assertion that has never failed is not evidence.
+3. Run `uv run pytest`, `uv run ruff check . && uv run ruff format --check .` and
+   `uv run mypy src/` from `backend/`, and paste the output.
+4. Name in the PR any listed test you did not write, and why. Never drop one silently.
+5. Open the PR, comment that step 2 is the acceptance-criteria trial, and **stop. Do not
+   merge** — the merge policy below does not apply to step 2, because all of its conditions
+   are `no-mistakes` outcomes.
+
+For every other step, run the gate with a rich intent — what the issue asked for plus the
+decisions you made. A thin intent makes the review flag deliberate choices as mistakes:
 
     no-mistakes axi run --intent "<issue goal + your decisions>"
 
@@ -35,7 +49,8 @@ Drive the gates. **Do not pass `--yes`.**
 
 ## Merge policy — read carefully
 
-Auto-merge is allowed ONLY when every one of these holds:
+Auto-merge is **never** allowed for a step 2 sub-issue (#29-#35). Otherwise it is allowed
+ONLY when every one of these holds:
 
 - the outcome is `checks-passed`, and
 - no gate in the run produced an `ask-user` finding, and
@@ -64,3 +79,5 @@ Then stop. Do not merge, do not force, do not work around it. A human will pick 
 - Never start a second issue in one run.
 - Never touch a parent step issue. Those carry a `You verify` gate that only a
   human can run against the real system.
+- Never merge a step 2 sub-issue (#29-#35), and never run `no-mistakes` on one.
+  Step 2 is the acceptance-criteria trial (ADR-011); the human merges.

@@ -10,7 +10,7 @@ How the project gets built: which tools hold the backlog, run the agents, and ga
 | Progress view | GitHub Project board "[Recally Roadmap](https://github.com/users/MingLu0/projects/2)" | One pane across parallel agents; issues stay the source of truth |
 | Agent control plane | [Orca](https://www.onorca.dev/) | Parallel worktrees, diff review with line comments back to the agent, GitHub issue/PR drawer, BYO subscription |
 | Coding agent | Claude Code (any Orca-supported CLI works) | Reads `AGENTS.md` / `CLAUDE.md` |
-| Pre-push gate | [no-mistakes](https://github.com/kunchenguid/no-mistakes) | Runs review, test, lint, docs, PR and CI as one pipeline; the agent that wrote the code does not get to declare it good |
+| Pre-push gate | [no-mistakes](https://github.com/kunchenguid/no-mistakes) | Runs review, test, lint, docs, PR and CI as one pipeline; the agent that wrote the code does not get to declare it good. **Suspended for roadmap step 2** (ADR-011) |
 | Agent instructions | `AGENTS.md` | Hard rules and conventions; the docs are the spec |
 
 Not used: Linear (single-user project, paid tier + AI credits for anything beyond a board), beads (no Orca integration; would be a second backlog Orca cannot see). Linear Coding Sessions or Orca's SSH/remote mode are optional for unattended backend work only (see "Optional: unattended work").
@@ -36,6 +36,7 @@ GitHub issue
   → commit on the feature branch, then
     `no-mistakes axi run --intent "<the issue's goal, in the issue's words>"`
     → drive each gate; `ask-user` findings come back to Ming
+    → step 2 only: skip this; the ticket's own test list is the gate (ADR-011)
   → outcome `checks-passed` → review and merge the PR to main
   → sub-issue: closes on merge (its Tests gate is the whole gate)
   → step issue: board → Verifying; run the You verify gate
@@ -46,12 +47,19 @@ Rules:
 
 - **At most 3 worktrees live at once.** One reviewer's merge bandwidth is the throttle, not agent count.
 - **One gate per PR.** Nothing merges without the gate command and its output in the PR description.
-- **No branch reaches `main` without `no-mistakes`.** The agent that wrote the code is the worst judge of whether it is right; the pipeline reviews, tests and lints it independently before the PR exists.
+- **No branch reaches `main` without `no-mistakes`** — except roadmap step 2, which runs the trial in ADR-011. The agent that wrote the code is the worst judge of whether it is right; the pipeline reviews, tests and lints it independently before the PR exists. In step 2 that job falls to the ticket's named tests, the pasted red output and the design-invariant suite (#31), and **no step-2 PR is auto-merged**.
 - **`ask-user` findings are Ming's call, never the agent's.** The pipeline marks a finding `ask-user` when it challenges deliberate intent or changes product behaviour — which is exactly where the `AGENTS.md` hard rules live. The agent relays the finding verbatim and waits.
 - **Verifying is not decoration.** A card there means a roadmap step is merged but unproven against the real system — real exports, running server, real provider. Fixtures cannot reach those failures. The column should usually be empty.
 - Branch names follow `AGENTS.md`: `feat/…`, `fix/…`, `docs/…`.
 
 ## The no-mistakes gate
+
+> **Suspended for roadmap step 2** (#28 and its sub-issues), by ADR-011. Step 2 is a scoped trial of whether
+> written acceptance criteria hold quality on their own: each sub-issue lists the test functions that must exist
+> and pass, requires the **red** output of every negative assertion pasted next to the green run, and forbids
+> dropping a listed test silently. #31's design-invariant tests land first and guard every later PR. **No step-2
+> PR is auto-merged** — ADR-010's conditions are all no-mistakes outcomes, so a step-2 PR stays open for Ming.
+> Everything below applies to steps 1 and 3–6 as written; the trial is judged at #28's `You verify` gate.
 
 `roadmap.md` defines two gates per step. no-mistakes adds a third that sits before both:
 
@@ -139,6 +147,11 @@ The dispatched agent runs the no-mistakes gate and may merge its own PR **only**
 
 Anything else leaves the PR open with a comment naming the finding verbatim, for a human. That is the
 expected outcome, not a failure.
+
+**Step 2 never auto-merges.** All four conditions above are no-mistakes outcomes, and step 2 does not run it
+(ADR-011). A dispatched step-2 agent finishes by opening the PR with its green run and its red output, commenting
+that step 2 is the acceptance-criteria trial, and stopping. Ming merges. Restating the conditions in weaker terms
+would let the agent certify its own work, which is the one check the trial still relies on.
 
 Two consequences worth being explicit about:
 
