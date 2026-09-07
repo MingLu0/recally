@@ -16,6 +16,7 @@ for text the export lost (hard rule 7).
 
 import json
 from pathlib import Path
+from string import Template
 from typing import Literal, cast
 
 from recally.agents.base import AgentContext, CardVerdict, CriticRequest, CriticResult
@@ -24,8 +25,6 @@ PROMPT_PATH = Path(__file__).parent / "prompts" / "critic.md"
 TRUNCATION_BEGIN = "[[TRUNCATION_NOTE]]"
 TRUNCATION_END = "[[/TRUNCATION_NOTE]]"
 VALID_VERDICTS = ("accept", "revise", "reject")
-SOURCE_TOKEN = "{{SOURCE_TEXT}}"
-CARDS_TOKEN = "{{CARDS}}"
 
 
 class DefaultCritic:
@@ -55,7 +54,7 @@ def _render_prompt(request: CriticRequest) -> str:
         f"| Rationale: {card.rationale}"
         for number, card in enumerate(request.cards, start=1)
     )
-    return prompt.replace(SOURCE_TOKEN, request.source_text).replace(CARDS_TOKEN, cards_block)
+    return Template(prompt).substitute(source_text=request.source_text, cards=cards_block)
 
 
 def _parse_verdicts(response_text: str, *, expected: int) -> list[CardVerdict]:
