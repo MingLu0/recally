@@ -76,6 +76,12 @@ class IngestRun(UserScopedMixin, Base):
     # Same UUID, changed text or note. Expected to stay 0 in practice.
     rows_updated: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     rows_removed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # The pipeline's counters (step 2). `units_dropped`/`highlights_dropped` are the
+    # Curator's filter output: a dropped highlight produces no card, so without these
+    # a wrongly-dropped highlight is invisible (docs/api-spec.md, GET /ingest/status).
+    units_kept: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    units_dropped: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    highlights_dropped: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     # May include leftover highlights from an earlier run: the runner processes every
     # `processed=false` row, not just the ones this file introduced.
     cards_generated: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

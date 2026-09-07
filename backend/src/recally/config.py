@@ -58,6 +58,13 @@ class Settings(BaseSettings):
     # batches and grouping cannot span a batch boundary (docs/agents.md §2).
     curator_max_batch: int = Field(default=40, gt=0, validation_alias="CURATOR_MAX_BATCH")
 
+    # Writer ⇄ Critic round cap (hard rule 9); do not raise without a doc change.
+    llm_max_rounds: int = Field(default=3, gt=0, validation_alias="LLM_MAX_ROUNDS")
+    # Hard-rule-1 exception: a Critic `accept` on round 1 skips the human queue.
+    auto_approve_round1_accept: bool = Field(
+        default=False, validation_alias="AUTO_APPROVE_ROUND1_ACCEPT"
+    )
+
     # Registered variant per agent role (ADR-007); the registry validates them at
     # startup, so a typo fails the container build rather than the first LLM call.
     agent_curator: str = Field(default="default", validation_alias="AGENT_CURATOR")
