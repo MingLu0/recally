@@ -41,6 +41,19 @@ class Settings(BaseSettings):
         validation_alias="RECALLY_WATCH_DEBOUNCE_MS",
     )
 
+    # Per-role model tiers (docs/config.md): cheap for Curator/Critic, stronger for
+    # Writer/Learner. The registry passes the resolved one to `llm.py` per call.
+    llm_model_curator: str = Field(
+        default="claude-haiku-4-5-20251001", validation_alias="LLM_MODEL_CURATOR"
+    )
+    llm_model_writer: str = Field(default="claude-sonnet-5", validation_alias="LLM_MODEL_WRITER")
+    llm_model_critic: str = Field(
+        default="claude-haiku-4-5-20251001", validation_alias="LLM_MODEL_CRITIC"
+    )
+    llm_model_learner: str = Field(default="claude-sonnet-5", validation_alias="LLM_MODEL_LEARNER")
+    # Off only if `llm_calls` bloats (ADR-006); the replay corpus is the default.
+    llm_log_payloads: bool = Field(default=True, validation_alias="LLM_LOG_PAYLOADS")
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
