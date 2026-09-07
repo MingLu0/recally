@@ -54,6 +54,13 @@ class Settings(BaseSettings):
     # Off only if `llm_calls` bloats (ADR-006); the replay corpus is the default.
     llm_log_payloads: bool = Field(default=True, validation_alias="LLM_LOG_PAYLOADS")
 
+    # Registered variant per agent role (ADR-007); the registry validates them at
+    # startup, so a typo fails the container build rather than the first LLM call.
+    agent_curator: str = Field(default="default", validation_alias="AGENT_CURATOR")
+    agent_writer: str = Field(default="default", validation_alias="AGENT_WRITER")
+    agent_critic: str = Field(default="default", validation_alias="AGENT_CRITIC")
+    agent_learner: str = Field(default="default", validation_alias="AGENT_LEARNER")
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
