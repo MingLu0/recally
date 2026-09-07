@@ -1,6 +1,6 @@
 # ADR-009: no-mistakes as the pre-PR gate
 
-**Status**: accepted
+**Status**: accepted — narrowed by [ADR-011](011-step-2-acceptance-criteria-trial.md), which suspends this gate for roadmap step 2 only
 **Date**: 2026-09-06
 
 ## Context
