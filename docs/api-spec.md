@@ -2,6 +2,16 @@
 
 Base: FastAPI. Auth: `X-API-Key` header (single user, value from `RECALLY_API_KEY`, see [config.md](config.md)). All responses JSON. Phase 1 is plain HTTP on the LAN; TLS arrives with hosting (phase 2).
 
+**List endpoints are unpaginated in v1.** `/reviews/due`, `/cards/pending` and `/decks/{book_id}/cards` return the full set. One user, a few thousand cards, and a client that caches whole lists in Room; pagination would be two designs to keep in sync for no benefit. Revisit if a single response exceeds a few hundred cards.
+
+## Health
+
+### GET /health
+Unauthenticated liveness check: `{ "status": "ok" }`. Does not touch the database.
+
+### GET /health/auth
+Same, but behind the `X-API-Key` dependency. This is what the Android Settings screen's *connection test* calls: 200 means the base URL and the key are both right, 401 means the key is wrong, and a connection error means the server was not reachable at all. Kept separate from `GET /health` so a load balancer probe never needs the key.
+
 ## Reviews
 
 ### GET /reviews/due
@@ -14,30 +24,55 @@ Cards due now (FSRS), plus today's new-card allotment (capped by `NEW_CARDS_PER_
   "learning_steps_minutes": [1, 10],
   "cards": [
     {
-      "id": 101, "type": "qa",
+      "id": 101, "unit_id": 40, "type": "qa",
       "front": "Why evaluate traces rather than individual steps?",
       "back": "An LLM pipeline's behavior only makes sense end-to-end.",
-      "book": "Evals for AI Engineers", "chapter": "3. Error Analysis",
-      "tags": ["evals"], "state": "review"
+      "book_id": 1, "book": "Evals for AI Engineers", "chapter": "3. Error Analysis",
+      "tags": ["evals"],
+      "state": "learning", "step": 0, "due": "2026-09-05T07:55:00Z"
     }
   ]
 }
 ```
+`state` and `step` are the card's server-side FSRS position at fetch time (`step` is null in `review`). The client needs `step`, not just `state`, to re-queue correctly: a card already at step 1 rated Again must wait the step-1 interval, not restart at step 0. `due` is included so a cached queue can be re-sorted offline without a refetch.
+
+`cards` mixes due cards and the new-card allotment, and the client does not need to tell them apart: a never-reviewed card has no `card_state` row yet (it is created at approval), so the server returns it as `state: "learning"`, `step: 0`, `due` set to the fetch time. Every entry therefore carries the same fields and the client needs no special case.
 
 ### POST /reviews/{card_id}/rate
 ```json
-{ "rating": 3, "response_ms": 8200, "rated_at": "2026-09-04T08:12:30Z" }
+{ "rating": 3, "response_ms": 8200, "rated_at": "2026-09-04T08:12:30Z", "device_id": 3 }
 ```
-`rating`: 1=Again, 2=Hard, 3=Good, 4=Easy. `rated_at` is the client timestamp; required so offline ratings replay in order. Runs FSRS update with `review_datetime=rated_at`, writes review_log. If a rating with an earlier `rated_at` arrives after a later one has been applied, the server recomputes the card from its full log. Duplicate (`card_id`, `rated_at`) is a no-op returning the current state.
-**Response**: `{ "next_due": "2026-09-09T08:00:00Z", "state": "review", "step": null }`
+`rating`: 1=Again, 2=Hard, 3=Good, 4=Easy. `rated_at` is the client timestamp; required so offline ratings replay in order. `device_id` is optional (the id returned by `POST /devices`) and lands in `review_logs.device_id`; omit it from the CLI. Runs FSRS update with `review_datetime=rated_at`, writes review_log. If a rating with an earlier `rated_at` arrives after a later one has been applied, the server recomputes the card from its full log. Duplicate (`card_id`, `rated_at`) is a **no-op**: the existing log row is kept untouched and the current state is returned with `200`, so a retried flush is safe and never surfaces as an error on the client.
+**Response**
+```json
+{ "card_id": 101, "rated_at": "2026-09-04T08:12:30Z",
+  "next_due": "2026-09-09T08:00:00Z", "state": "review", "step": null,
+  "lapsed": false, "duplicate": false }
+```
+`lapsed` is true when this rating moved the card out of `review` into `relearning` — the client cannot derive it (a rating of Again on a card already in `learning` is not a lapse), and the session summary counts it. On a replay it is always `false`, because a no-op moved nothing; the client counts lapses only from responses with `duplicate: false`, so a retried flush cannot double-count. `duplicate` is true when the request was a no-op replay; the client dequeues on both values.
 
 ### POST /reviews/rate-batch
-Same body as above as a list; used by the Android sync queue to flush offline ratings in one call. Applied in `rated_at` order per card.
+Used by the Android sync queue to flush offline ratings in one call.
+**Request**: `{ "ratings": [ <same object as above, plus "card_id">, ... ] }`
+Applied in `rated_at` order per card, **each rating independently**. One bad item does not roll back the others: `results` has exactly one entry per request item, in request order, so the client matches results to queued ratings by position.
+**Response**
+```json
+{
+  "results": [
+    { "card_id": 101, "rated_at": "2026-09-04T08:12:30Z", "ok": true,
+      "next_due": "2026-09-09T08:00:00Z", "state": "review", "step": null,
+      "lapsed": false, "duplicate": false },
+    { "card_id": 999, "rated_at": "2026-09-04T08:14:02Z", "ok": false,
+      "status": 404, "detail": "card not found" }
+  ]
+}
+```
+Items are validated individually, not by the request schema, so one malformed item cannot fail the whole body. The call returns `200` whenever the body itself parsed as `{"ratings": [...]}`, even if every item failed; `ok` is the per-item verdict, and a failed item carries the same `status`/`detail` pair as a top-level error. The client retries on `status` 5xx and drops the item on 4xx (unknown card, unparseable rating) rather than retrying it forever — it logs the drop and moves on. A body that does not parse at all is a top-level `422`; the client discards that batch rather than re-flushing it.
 
 ## Approval queue
 
 ### GET /cards/pending
-`?status=pending_review|needs_human&book_id=&chapter=`. Returns a flat list ordered by book, chapter, then `export_position`; the client renders the chapter grouping. Includes critic critique and all source highlights (a grouped unit has several) for context. `truncated` is true if any source highlight is clipped.
+`?status=pending_review|needs_human&book_id=&chapter=`. Returns a flat list ordered by book, chapter, then `export_position`; the client renders the chapter grouping. Includes critic critique and all source highlights (a grouped unit has several) for context. `truncated` is true if any source highlight is clipped. Every card carries `book_id` and `chapter` so the client can build filter chips that round-trip back into the query params; `book` is the display title.
 ```json
 {
   "cards": [
@@ -48,7 +83,7 @@ Same body as above as a list; used by the Android sync queue to flush offline ra
       "status_reason": "Critic: potentially ambiguous term; Writer 3 rounds unresolved.",
       "source_highlights": ["The Gulf of Specification is this gap between our intent and our instructions..."],
       "truncated": false,
-      "book": "Evals for AI Engineers", "chapter": "1. Introduction"
+      "book_id": 1, "book": "Evals for AI Engineers", "chapter": "1. Introduction"
     }
   ]
 }
@@ -139,6 +174,7 @@ Latest `ingest_runs` row; 404 before the first ingest, so "never ingested" stays
 
 ### POST /devices
 `{ "fcm_token": "...", "platform": "android" }` — register for push.
+**Response**: `{ "device_id": 3 }`. Idempotent on `fcm_token` (UNIQUE in `devices`): re-registering the same token returns the same `device_id` rather than creating a row, so the app can call this on every start and on every token refresh. The client stores `device_id` and sends it on ratings so `review_logs.device_id` is populated.
 
 ## Errors
 

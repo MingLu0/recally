@@ -17,7 +17,7 @@ backend/
       deps.py                     # request-scoped dependencies (pull from container)
       auth.py                     # X-API-Key dependency
       routers/                    # one module per api-spec.md section:
-        reviews.py  cards.py  decks.py  stats.py  ingest.py  jobs.py  devices.py
+        health.py  reviews.py  cards.py  decks.py  stats.py  ingest.py  jobs.py  devices.py
     models/                       # SQLAlchemy models (data-model.md)
     schemas/                      # Pydantic request/response models (api-spec.md)
     ingest/
