@@ -130,10 +130,18 @@ class WriterResult:
 
 @dataclass(frozen=True)
 class CriticRequest:
-    """Candidate cards from the Writer plus the source highlight text to check against."""
+    """Candidate cards from the Writer plus the source highlight text to check against.
+
+    `source_truncated` is set by the runner when any source highlight of the unit is
+    flagged `truncated` (the flag lives on `highlights` rows, not on units or cards).
+    A clipped source must be marked as such in the prompt: fidelity is judged against
+    the partial text, and the Critic must not penalise a card for text the export
+    lost nor accept one that invents the missing part (hard rule 7).
+    """
 
     cards: list[CardDraft]
     source_text: str
+    source_truncated: bool = False
 
 
 @dataclass(frozen=True)

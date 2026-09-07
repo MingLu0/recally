@@ -13,6 +13,7 @@ chapter into a run.
 
 from typing import Any
 
+from recally.agents.critic.default import DefaultCritic
 from recally.config import Settings
 
 ROLES = ("curator", "writer", "critic", "learner")
@@ -72,6 +73,11 @@ class AgentRegistry:
 
 
 default_registry = AgentRegistry()
+
+# The built-in variants. Registered as instances (they are stateless) so
+# `container.agent(role)` hands the pipeline a callable that already satisfies the
+# role protocol.
+default_registry.register("critic", DEFAULT_VARIANT, DefaultCritic())
 
 
 def register(role: str, variant: str, implementation: Any) -> None:
