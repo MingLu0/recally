@@ -38,12 +38,14 @@ CARD_ONE = CardDraft(
     front="Why does spaced repetition schedule a review just before forgetting?",
     back="Retrieval at peak effort reconsolidates the memory.",
     rationale="Tests the mechanism, not the definition.",
+    guidance_version=None,
 )
 CARD_TWO = CardDraft(
     type="cloze",
     front="Spaced repetition schedules each review just before the moment of {{c1::forgetting}}.",
     back="",
     rationale="Key term as a single deletion.",
+    guidance_version=None,
 )
 
 
