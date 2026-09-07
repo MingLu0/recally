@@ -82,3 +82,8 @@ def register(role: str, variant: str, implementation: Any) -> None:
 def resolve(role: str, settings: Settings) -> Any:
     """Resolve on the process-wide registry."""
     return default_registry.resolve(role, settings)
+
+
+# Variant modules self-register at import; registry.py is the only place variant
+# modules are imported, so the pipeline never imports an implementation directly.
+from recally.agents.curator import default as _curator_default  # noqa: E402, F401
