@@ -89,7 +89,7 @@ Prompts are files under `agents/<role>/prompts/`, loaded from disk, never inline
 Variants are registered under a `(role, variant)` key in `agents/registry.py`; the active variant per role comes from `AGENT_CURATOR` / `AGENT_WRITER` / `AGENT_CRITIC` / `AGENT_LEARNER` (default `default`, see [config.md](config.md)). To swap the Writer:
 
 1. Add `agents/writer/strict.py` implementing the `Writer` protocol (new prompt file optional).
-2. Register it: `registry.register("writer", "strict", StrictWriter)`.
+2. Register an instance at module import: `registry.register("writer", "strict", StrictWriter())`. Variants are stateless; the registry hands the pipeline the ready-to-call object.
 3. Set `AGENT_WRITER=strict`.
 
 No pipeline change, no config-schema change. Because every `llm_calls` row records `agent` as `role/variant` (e.g. `writer/strict`), the trace says which implementation wrote any card, so variants can be compared on `status`/`original_front` edit rates. Ingestion sources follow the same pattern: a Kindle source is a new file in `ingest/adapters/`, never a branch in the pipeline.

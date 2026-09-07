@@ -23,7 +23,7 @@ No LLM. Watch folder → adapter → dedupe → `highlights` rows with `processe
 **Rules** (enforced via prompt):
 - Minimum information principle: one idea per card.
 - Card must be answerable without the book open.
-- Cloze cards: single deletion only (multi-deletion cards lapse more).
+- Cloze cards: single deletion only (multi-deletion cards lapse more), written as one `{{c1::...}}` marker in the front. The Writer validates the marker count in code; the prompt alone will not hold it.
 - Prefer "why/how" questions over trivia.
 **Feedback loop**: prompt includes Learner-generated guidance from my review history (e.g. "cards asking for definitions lapse 40% — prefer application questions").
 
