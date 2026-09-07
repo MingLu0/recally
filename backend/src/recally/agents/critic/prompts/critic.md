@@ -15,12 +15,12 @@ that invents or guesses at the missing part.
 [[/TRUNCATION_NOTE]]
 
 <source>
-{{SOURCE_TEXT}}
+$source_text
 </source>
 
 ## Candidate cards
 
-{{CARDS}}
+$cards
 
 ## The five checks
 
