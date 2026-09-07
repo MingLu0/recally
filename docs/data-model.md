@@ -157,7 +157,7 @@ One row per call through `llm.py`. Doubles as the trace and the replay corpus: t
 | agent | text | `role/variant`, e.g. `writer/default`; the variant comes from the `AGENT_*` env vars (ADR-007), so the trace names the implementation that made the call |
 | ingest_run_id | FK ingest_runs, nullable | null for Learner calls |
 | unit_id | FK curated_units, nullable | set for Writer and Critic calls; null for Curator (batch) and Learner |
-| card_id | FK cards, nullable | set for Critic calls and for Writer revisions of an existing card |
+| card_id | FK cards, nullable | null during initial generation: the runner writes a `cards` row once, at its terminal verdict, so mid-loop calls have no card to point at. Set for calls that serve an existing card (e.g. Learner-driven leech rewrites, step 6) |
 | round | int, nullable | Writer ⇄ Critic round (1-based); null outside the loop |
 | model | text | |
 | request | json, nullable | messages sent, after prompt rendering; null when `LLM_LOG_PAYLOADS=false` |

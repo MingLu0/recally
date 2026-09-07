@@ -163,7 +163,7 @@ Latest `ingest_runs` row; 404 before the first ingest, so "never ingested" stays
   "started_at": "2026-09-04T09:00:00Z", "finished_at": "2026-09-04T09:06:12Z", "error": null
 }
 ```
-`rows_unchanged` is derived (`rows_seen - rows_new - rows_updated`), not a stored column. `units_kept`, `units_dropped`, `highlights_dropped`, `cards_generated` and `cost_microusd` are the pipeline's, so the first three are absent from the payload until step 2 fills them rather than reported as a misleading zero.
+`rows_unchanged` is derived (`rows_seen - rows_new - rows_updated`), not a stored column. `units_kept`, `units_dropped`, `highlights_dropped`, `cards_generated` and `cost_microusd` are the pipeline's counters, filled by every run since step 2.
 
 ## Jobs
 

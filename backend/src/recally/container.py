@@ -19,6 +19,7 @@ from typing import Any, Literal, overload
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
+from recally import pipeline
 from recally.agents.base import Critic, Curator, Learner, Writer
 from recally.agents.registry import AgentRegistry, default_registry
 from recally.config import Settings, get_settings
@@ -92,16 +93,39 @@ class Container:
             session.close()
 
     def ingest_oreilly_export(self, file: Path) -> IngestRun:
-        """Run the deterministic O'Reilly adapter and dedupe transaction.
+        """Run the deterministic O'Reilly adapter and dedupe, then the pipeline.
 
-        Pipeline processing is added after the agent pipeline exists; keeping this
-        operation at the composition root means the watcher and future upload route
-        will use the same path.
+        This is the watcher's and the upload route's single path (docs/backend.md,
+        "Wiring and entry points"): ingest writes the `highlights` rows and the
+        `ingest_runs` row, then the pipeline (Curator → Writer ⇄ Critic) processes
+        every `processed=false` highlight against that run. A pipeline failure is
+        recorded on the run row, never raised (docs/architecture.md, "Failure
+        handling"), so a bad export cannot kill the watcher.
         """
         with self.session() as session:
             run = ingest_file(session, file, OReillyCsvAdapter())
             session.commit()
-            return run
+            ingest_run_id = run.id
+        self.run_pipeline(ingest_run_id)
+        with self.session() as session:
+            refreshed = session.get(IngestRun, ingest_run_id)
+            if refreshed is None:  # pragma: no cover - the row was committed above
+                raise RuntimeError(f"ingest_runs row {ingest_run_id} vanished")
+            return refreshed
+
+    def run_pipeline(self, ingest_run_id: int) -> None:
+        """Curator → Writer ⇄ Critic over every unprocessed highlight (docs/agents.md).
+
+        Kept at the composition root so the watcher, `POST /ingest`, the CLI and the
+        tests all drive the same runner (docs/backend.md, "Wiring and entry points").
+        """
+        pipeline.run(
+            settings=self.settings,
+            session_factory=self._session_factory,
+            llm_caller=self.llm_caller,
+            ingest_run_id=ingest_run_id,
+            agent_registry=self._agent_registry,
+        )
 
 
 @lru_cache(maxsize=1)
