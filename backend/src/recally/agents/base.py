@@ -90,12 +90,18 @@ class CuratorResult:
 
 @dataclass(frozen=True)
 class CardDraft:
-    """One candidate card. Cloze cards carry a single deletion."""
+    """One candidate card. Cloze cards carry a single deletion.
+
+    `guidance_version` stamps which `writer_guidance` row was in the prompt, so
+    guidance changes are attributable (docs/agents.md §3, hard rule 10); None until
+    the Learner has produced its first guidance row.
+    """
 
     type: Literal["qa", "cloze"]
     front: str
     back: str
     rationale: str
+    guidance_version: int | None
 
 
 @dataclass(frozen=True)

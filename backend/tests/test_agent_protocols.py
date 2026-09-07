@@ -43,7 +43,9 @@ class StubCurator:
 
 class StubWriter:
     def __call__(self, request: WriterRequest, ctx: AgentContext) -> WriterResult:
-        return WriterResult(cards=[CardDraft(type="qa", front="f", back="b", rationale="r")])
+        return WriterResult(
+            cards=[CardDraft(type="qa", front="f", back="b", rationale="r", guidance_version=None)]
+        )
 
 
 class StubCritic:
