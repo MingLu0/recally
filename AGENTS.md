@@ -82,7 +82,7 @@ Structural rules from `docs/backend.md` and ADR-007. Verify these in any backend
 
 ### Android (Kotlin)
 - Jetpack Compose + Material 3, Retrofit + OkHttp, Room, Hilt, FCM. Package root `dev.recally`, structure in `docs/android.md`.
-- Clean architecture with the scaffold pattern (`docs/android.md`, "Architecture"). Screen composables are pure: `UiState` in, callbacks out — no `hiltViewModel()`, no `NavController`, no flow collection inside a screen. ViewModels are instantiated at their `NavHost` route entry, which also owns the navigation decision. One immutable `UiState` per screen. ViewModels talk to repository interfaces, never to a DAO or Retrofit service.
+- Clean architecture with the scaffold pattern (`docs/android.md`, "Architecture"). Screen composables are pure: `UiState` in, callbacks out — no `hiltViewModel()`, no `NavController`, no flow collection inside a screen. ViewModels are instantiated at their `NavHost` route entry, which also owns the navigation decision. One immutable `UiState` per screen. ViewModels talk to repository interfaces, never to a DAO or Retrofit service. Every screen composable and shared component ships a private `@CombinedPreviews` preview function with its `UiState` built inline.
 - Offline-first: Room caches due cards; ratings are queued locally with timestamps and synced later. Approval queue requires connectivity.
 - Capture `response_ms` (flip-to-rate duration) on every rating.
 - Use injected dispatchers, not hard-coded `Dispatchers.IO`. Include exception handlers on coroutines.
