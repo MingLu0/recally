@@ -84,13 +84,34 @@ object Orchestrator:
       if result.exitCode == 0 then Some(result.out.text().trim) else None
     }
 
-  // orca --json responses are wrapped in { ok, result }; unwrap or fail.
+  // A structured orca failure (envelope ok=false, or result.state == "failed").
+  // worker-start failures carry a dispatchId already marked failed, so callers
+  // can hand them to the normal reconcile retry path instead of crashing.
+  case class OrcaException(lastError: String, dispatchId: Option[String], residualTerminals: List[String])
+      extends RuntimeException(lastError)
+
+  // orca --json responses are wrapped in { ok, result }. Exit code is ignored
+  // on purpose: worker-start exits 1 with ok=true + state=failed, and that
+  // payload is data (ADR-014), not a process crash.
   def orca(args: List[String]): IO[ujson.Value] =
-    sh("orca" :: args ::: List("--json")).flatMap { raw =>
-      val envelope = ujson.read(raw)
-      if envelope("ok").bool then IO.pure(envelope("result"))
-      else IO.raiseError(new RuntimeException(s"orca ${args.mkString(" ")} failed: $raw"))
-    }
+    IO.blocking(os.proc("orca" :: args ::: List("--json")).call(cwd = os.pwd, check = false, stderr = os.Pipe))
+      .flatMap { procResult =>
+        val raw = procResult.out.text().trim
+        if raw.isEmpty then IO.raiseError(new RuntimeException(s"orca ${args.mkString(" ")} produced no JSON (exit ${procResult.exitCode})"))
+        else
+          val envelope = ujson.read(raw)
+          val result = envelope.obj.get("result").getOrElse(ujson.Null)
+          val failedState = findKey(result, "state").collect { case ujson.Str(s) => s }.exists(s => s == "failed" || s == "error")
+          if envelope("ok").bool && !failedState then IO.pure(result)
+          else
+            val lastError = findKey(envelope, "lastError").orElse(findKey(envelope, "message"))
+              .collect { case ujson.Str(s) => s }.getOrElse("unknown")
+            val dispatchId = findKey(result, "dispatchId").collect { case ujson.Str(s) => s }
+            val residuals = findKey(result, "residualResources").map(_.arr.toList).getOrElse(Nil)
+              .filter(r => findKey(r, "kind").contains(ujson.Str("terminal")))
+              .flatMap(r => findKey(r, "id").collect { case ujson.Str(s) => s })
+            IO.raiseError(OrcaException(lastError, dispatchId, residuals))
+      }
 
   def gh(args: List[String]): IO[String] = sh("gh" :: args)
 
@@ -194,24 +215,55 @@ object Orchestrator:
   def slugify(title: String): String =
     title.toLowerCase.replaceAll("[^a-z0-9]+", "-").stripPrefix("-").stripSuffix("-").take(40)
 
+  // After a failed worker-start: close any residual agent terminals, and
+  // remove the worktree only when there is no dispatch to retry through (a
+  // present dispatchId means reconcile's Failed branch will retry into it).
+  def cleanupAfterStartFailure(issue: Int, e: OrcaException): IO[Unit] =
+    e.residualTerminals.traverse(t => shOpt(List("orca", "terminal", "close", "--terminal", t, "--json"))).void *>
+      (if e.dispatchId.isEmpty then
+         shOpt(List("orca", "worktree", "rm", "--worktree", s"issue:$issue", "--json")).void
+       else IO.unit)
+
   def dispatchIssue(candidate: ReadyIssue, agent: String, repoId: String, runId: String): IO[TrackedIssue] =
     val assignment = s"\n\n---\nOrchestrator assignment: your issue is #${candidate.number}. " +
       s"Skip the 'Pick the issue' step; claim #${candidate.number} and implement it."
+    val blank = TrackedIssue(candidate.number, candidate.title, "", "", agent,
+      attempts = 1, conflictFixes = 0, conflictDispatchId = None, evidenceNudged = false, Phase.Dispatched)
     for
       _ <- event(s"🌱 #${candidate.number} dispatched → $agent — ${candidate.title}")
       _ <- orca(List("worktree", "create", "--repo", s"id:$repoId",
         "--name", s"issue-${candidate.number}-${slugify(candidate.title)}",
         "--issue", candidate.number.toString, "--base-branch", "main"))
       taskId <- createTask(promptText + assignment, s"Issue #${candidate.number}: ${candidate.title}", runId)
-      dispatchId <- startWorker(taskId, candidate.number, agent, retryOf = None, runId)
-    yield TrackedIssue(candidate.number, candidate.title, taskId, dispatchId, agent,
-      attempts = 1, conflictFixes = 0, conflictDispatchId = None, evidenceNudged = false, Phase.Dispatched)
+      tracked <- startWorker(taskId, candidate.number, agent, retryOf = None, runId)
+        .map(dispatchId => blank.copy(taskId = taskId, dispatchId = dispatchId))
+        .handleErrorWith {
+          case e: OrcaException =>
+            cleanupAfterStartFailure(candidate.number, e) *> (e.dispatchId match
+              case Some(dispatchId) =>
+                // the dispatch exists and is already marked failed; the normal
+                // reconcile Failed branch will retry/failover/escalate it
+                event(s"💥 #${candidate.number} worker-start failed (${e.lastError}) — reconcile will retry")
+                  .as(blank.copy(taskId = taskId, dispatchId = dispatchId))
+              case None =>
+                escalate(blank.copy(taskId = taskId),
+                  s"worker-start failed (${e.lastError}) with no dispatch id to retry through.").map(_.get))
+        }
+    yield tracked
 
+  // A redispatch carries a NEW spec (conflict fix, evidence nudge), so it is a
+  // new task and a fresh dispatch — no --retry-of (Orca rejects retry across
+  // tasks: "cannot retry from Dispatch").
   def redispatch(t: TrackedIssue, agent: String, spec: String, title: String, runId: String): IO[String] =
     for
       taskId <- createTask(spec, title, runId)
-      dispatchId <- startWorker(taskId, t.issue, agent, retryOf = Some(t.dispatchId), runId)
+      dispatchId <- startWorker(taskId, t.issue, agent, retryOf = None, runId)
     yield dispatchId
+
+  // A retry re-runs the SAME task after a worker failure; --retry-of links the
+  // replacement attempt to the failed dispatch.
+  def retryWorker(t: TrackedIssue, agent: String, runId: String): IO[String] =
+    startWorker(t.taskId, t.issue, agent, retryOf = Some(t.dispatchId), runId)
 
   def nextAgent(current: String): Option[String] =
     AgentPool.dropWhile(_ != current).drop(1).headOption
@@ -254,6 +306,17 @@ object Orchestrator:
   def releaseWorker(dispatchId: String): IO[Unit] =
     shOpt(List("orca", "orchestration", "worker-release", "--dispatch", dispatchId, "--json")).void
 
+  // Sleep a completed worktree: close every terminal process it owns and move
+  // it to the completed board column. Not `gradlew --stop` — the Gradle daemon
+  // registry is shared across worktrees, so stopping could kill a sibling's
+  // in-flight build (idle daemons time out on their own). Not `worktree rm` —
+  // the worktree stays for diff browsing; disk reclaim is a manual sweep.
+  def sleepWorktree(issue: Int, dispatchId: String, announce: Boolean): IO[Unit] =
+    releaseWorker(dispatchId) *>
+      shOpt(List("orca", "terminal", "close", "--worktree", s"issue:$issue", "--all", "--json")).void *>
+      shOpt(List("orca", "worktree", "set", "--worktree", s"issue:$issue", "--workspace-status", "completed", "--json")).void *>
+      (if announce then event(s"😴 #$issue worktree asleep") else IO.unit)
+
   def assigneeCount(issue: Int): IO[Int] =
     gh(List("issue", "view", issue.toString, "--repo", GithubRepo, "--json", "assignees",
       "-q", ".assignees | length")).map(_.trim.toInt).handleError(_ => 1) // fail closed: keep reporting
@@ -269,7 +332,7 @@ object Orchestrator:
     issueState(t.issue).flatMap {
       case "CLOSED" =>
         event(green(s"🎉 #${t.issue} merged — closed while marked needs-human, following reality")) *>
-          releaseWorker(t.dispatchId) *> IO.pure(Some(t.copy(phase = Phase.Merged)))
+          sleepWorktree(t.issue, t.dispatchId, announce = true) *> IO.pure(Some(t.copy(phase = Phase.Merged)))
       case _ =>
         assigneeCount(t.issue).flatMap { count =>
           if count == 0 then
@@ -282,14 +345,14 @@ object Orchestrator:
   def reconcileActive(t: TrackedIssue, repoId: String, runId: String): IO[TrackedIssue] =
     issueState(t.issue).flatMap {
       case "CLOSED" =>
-        event(green(s"🎉 #${t.issue} merged — slot freed")) *> releaseWorker(t.dispatchId) *> IO.pure(t.copy(phase = Phase.Merged))
+        event(green(s"🎉 #${t.issue} merged — slot freed")) *> sleepWorktree(t.issue, t.dispatchId, announce = true) *> IO.pure(t.copy(phase = Phase.Merged))
       case _ =>
         for
           merged <- prsForIssue("merged", t.issue)
           open <- prsForIssue("open", t.issue)
           result <-
             if merged.nonEmpty then
-              event(green(s"🎉 #${t.issue} merged — slot freed")) *> releaseWorker(t.dispatchId) *> IO.pure(t.copy(phase = Phase.Merged))
+              event(green(s"🎉 #${t.issue} merged — slot freed")) *> sleepWorktree(t.issue, t.dispatchId, announce = true) *> IO.pure(t.copy(phase = Phase.Merged))
             else open match
               case pr :: _ => reconcileOpenPr(t, pr, repoId, runId)
               case Nil => reconcileNoPr(t, repoId, runId)
@@ -360,7 +423,7 @@ object Orchestrator:
         nextAgent(t.agent) match
           case Some(failover) =>
             event(s"♻️  #${t.issue} ${t.agent} rate-limited → $failover") *>
-              redispatch(t, failover, promptText + assignmentFor(t), s"Issue #${t.issue}: ${t.title}", runId).map { newDispatchId =>
+              retryWorker(t, failover, runId).map { newDispatchId =>
                 t.copy(dispatchId = newDispatchId, agent = failover, attempts = t.attempts + 1)
               }
           case None =>
@@ -368,7 +431,7 @@ object Orchestrator:
       case Failed(_) =>
         if t.attempts < MaxAttempts then
           event(s"🔁 #${t.issue} worker failed — retry ${t.attempts + 1}/$MaxAttempts on ${t.agent}") *>
-            redispatch(t, t.agent, promptText + assignmentFor(t), s"Issue #${t.issue}: ${t.title}", runId).map { newDispatchId =>
+            retryWorker(t, t.agent, runId).map { newDispatchId =>
               t.copy(dispatchId = newDispatchId, attempts = t.attempts + 1)
             }
         else escalate(t, s"worker failed ${t.attempts} times; giving up.").map(_.get)
@@ -428,25 +491,11 @@ object Orchestrator:
     val active = tracked.filter(t => ActivePhases(t.phase))
     s"${active.map(t => s"${t.issue}:${t.phase}:${t.agent}").mkString(",")}|$freeSlots|${actions.mkString(";")}"
 
-  def statusBody(tracked: List[TrackedIssue], freeSlots: Int): String =
-    val active = tracked.filter(t => ActivePhases(t.phase))
-    val parts = active.map(t => s"${phaseGlyph(t.phase)} #${t.issue} ${phaseWord(t.phase)} (${t.agent})")
-    (parts ++ List(s"⚡ $freeSlots free")).mkString(" · ")
-
-  def printChange(tracked: List[TrackedIssue], freeSlots: Int, actions: List[String]): IO[Unit] =
-    event(statusBody(tracked, freeSlots)) >>
-      actions.traverse(a => IO.println(s"$now  ${yellow("⚠️  " + a)}")).void
-
-  def heartbeat(tracked: List[TrackedIssue], actions: List[String]): IO[Unit] =
-    val working = tracked.count(t => ActivePhases(t.phase))
-    val tail = if actions.isEmpty then "nothing needs you" else s"${actions.size} still need${if actions.size == 1 then "s" else ""} you"
-    IO.println(dim(s"· $now alive — $working working, $tail"))
-
-  // The boxed dashboard: shown once at startup, and always for --dry-run.
-  def printPanel(runId: String, stepScope: Option[String], tracked: List[TrackedIssue],
-                 freeSlots: Int, actions: List[String], extra: List[String]): IO[Unit] =
+  // The boxed dashboard: full version at startup and for --dry-run (with the
+  // static meta line), compact version on every state change in loop mode.
+  def panelLines(meta: Option[String], tracked: List[TrackedIssue], freeSlots: Int,
+                 actions: List[String], extra: List[String]): (List[String], List[String]) =
     val header = s"╭─ 🍊 recally orch ─ $now " + "─" * 20
-    val meta = s"│  scope ${stepScope.getOrElse("all")} · cap $WorktreeCap · pool ${AgentPool.mkString("→")} · run $runId"
     val trackedLines = tracked.filter(t => ActivePhases(t.phase)).map(t =>
       s"│  ${phaseGlyph(t.phase)} #${t.issue} ${phaseWord(t.phase)} (${t.agent})")
     val slotsLine = s"│  ⚡ $freeSlots slots free"
@@ -454,8 +503,22 @@ object Orchestrator:
     val footer =
       if actions.isEmpty then "╰─ ✨ nothing needs you"
       else "╰─ ⚠️  needs you:" // actions printed below the box
-    val lines = List(header, meta) ++ trackedLines ++ List(slotsLine) ++ extraLines ++ List(footer)
-    lines.traverse(IO.println) >> actions.traverse(a => IO.println(s"   ${yellow(a)}")).void
+    (List(header) ++ meta.toList.map(m => s"│  $m") ++ trackedLines ++ List(slotsLine) ++ extraLines ++ List(footer), actions)
+
+  def printPanel(runId: String, stepScope: Option[String], tracked: List[TrackedIssue],
+                 freeSlots: Int, actions: List[String], extra: List[String]): IO[Unit] =
+    val meta = s"scope ${stepScope.getOrElse("all")} · cap $WorktreeCap · pool ${AgentPool.mkString("→")} · run $runId"
+    val (lines, actionLines) = panelLines(Some(meta), tracked, freeSlots, actions, extra)
+    lines.traverse(IO.println) >> actionLines.traverse(a => IO.println(s"   ${yellow(a)}")).void
+
+  def printChange(tracked: List[TrackedIssue], freeSlots: Int, actions: List[String]): IO[Unit] =
+    val (lines, actionLines) = panelLines(None, tracked, freeSlots, actions, Nil)
+    lines.traverse(IO.println) >> actionLines.traverse(a => IO.println(s"   ${yellow(a)}")).void
+
+  def heartbeat(tracked: List[TrackedIssue], actions: List[String]): IO[Unit] =
+    val working = tracked.count(t => ActivePhases(t.phase))
+    val tail = if actions.isEmpty then "nothing needs you" else s"${actions.size} still need${if actions.size == 1 then "s" else ""} you"
+    IO.println(dim(s"· $now alive — $working working, $tail"))
 
   def notifyMac(actions: List[String]): IO[Unit] =
     val summary = actions.take(3).mkString("; ").replace("\"", "'")
@@ -473,7 +536,10 @@ object Orchestrator:
       repoId <- resolveRepoId
       reconciled <-
         if dryRun then IO.pure(state.tracked)
-        else state.tracked.traverse(reconcile(_, repoId, runId)).map(_.flatten)
+        else state.tracked.traverse(t =>
+          reconcile(t, repoId, runId).handleErrorWith(e =>
+            event(red(s"💥 #${t.issue} reconcile error: ${e.getMessage.take(120)} — keeping as-is, retry next tick")).as(Some(t)))
+        ).map(_.flatten)
       active = reconciled.filter(t => ActivePhases(t.phase))
       freeSlots = WorktreeCap - active.size
       prs <- openPrs
@@ -482,7 +548,10 @@ object Orchestrator:
       fresh = scoped.filterNot(c => reconciled.exists(_.issue == c.number)).take(freeSlots)
       dispatched <-
         if dryRun then IO.pure(reconciled)
-        else fresh.traverse(c => dispatchIssue(c, AgentPool.head, repoId, runId)).map(reconciled ++ _)
+        else fresh.traverse(c =>
+          dispatchIssue(c, AgentPool.head, repoId, runId).map(Some(_)).handleErrorWith(e =>
+            event(red(s"💥 #${c.number} dispatch error: ${e.getMessage.take(120)} — will retry next tick")).as(None))
+        ).map(newOnes => reconciled ++ newOnes.flatten)
       freeAfter = WorktreeCap - dispatched.count(t => ActivePhases(t.phase))
       actions = buildActions(dispatched, prs)
       signature = statusSignature(dispatched, freeAfter, actions)
@@ -506,6 +575,16 @@ object Orchestrator:
     tick(dryRun = false, stepScope, runId, tickNum, forcePrint = false) >>
       IO.sleep(PollInterval) >> loop(stepScope, runId, tickNum + 1)
 
+  // One-off sweep for worktrees that completed before the sleep lifecycle
+  // existed: terminals closed, board status completed. Idempotent and cheap,
+  // but noisy per issue, so it announces once. Runs on every start; after the
+  // backlog is swept it is a no-op.
+  def sweepCompletedWorktrees(state: State): IO[Unit] =
+    val completed = state.tracked.filter(_.phase == Phase.Merged)
+    completed.traverse(t => sleepWorktree(t.issue, t.dispatchId, announce = false)).void *>
+      (if completed.isEmpty then IO.unit
+       else event(s"😴 swept ${completed.size} completed worktree${if completed.size == 1 then "" else "s"} to sleep"))
+
   def program(args: List[String]): IO[ExitCode] =
     val dryRun = args.contains("--dry-run")
     val once = args.contains("--once")
@@ -522,7 +601,8 @@ object Orchestrator:
            // loop tick prints only on change, which it almost always is after startup)
            loadState.flatMap { state =>
              val active = state.tracked.filter(t => ActivePhases(t.phase))
-             printPanel(runId, stepScope, state.tracked, WorktreeCap - active.size, state.lastActionNeeded, Nil)
+             printPanel(runId, stepScope, state.tracked, WorktreeCap - active.size, state.lastActionNeeded, Nil) >>
+               sweepCompletedWorktrees(state)
            } >> loop(stepScope, runId, tickNum = 1))
       }.as(ExitCode.Success)
 
