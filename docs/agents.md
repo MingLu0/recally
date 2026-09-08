@@ -8,11 +8,11 @@ Plain Python modules (no orchestration framework) for v1; see ADR-001. Each "age
 No LLM. Watch folder → adapter → dedupe → `highlights` rows with `processed=false`.
 
 ### 2. Curator Agent — LLM
-**Input**: batch of unprocessed highlights for one chapter, in export order (newest first; within a day, reverse creation order, which approximates reverse reading order).
+**Input**: batch of unprocessed highlights for one chapter, in export order (newest first; within a day, reverse creation order, which approximates reverse reading order). A chapter larger than `CURATOR_MAX_BATCH` highlights is split into consecutive batches in that same order, so a long chapter does not become one long prompt on the cheap tier — the failure mode there is degraded instruction-following, which shows up as silent over-dropping. Grouping cannot span a batch boundary; with the observed case being a run of three adjacent headings, the default leaves ample headroom.
 **Jobs**:
-- **Filter**: drop low-value highlights — bare headings with no sibling context, navigation text, isolated short phrases. Real data (two exports, 380 rows): ~7% of rows are under 40 characters, none are figure/table references. Junk is a small minority, so the Curator should default to `keep`.
-- **Group**: fold sibling highlights that only make sense together into one curated unit. The observed case is a run of headings highlighted in sequence ("Stage 1: Task assignment", "Stage 2: Code synthesis", "Stage 3: Test synthesis") which becomes one structural card. Grouping is semantic, within the same chapter and day; there is no positional key in the export beyond that ordering.
-- **Flag truncation**: some rows are clipped mid-word at the start or end ("t's also crucial…", "…written to the san"). The missing text does not exist elsewhere in the export, so do not attempt to reconstruct it. Flag the row so the runner sets `truncated=true` on it, the Writer works from the partial text and the Critic checks fidelity against a clipped source.
+- **Filter**: drop low-value highlights — bare headings with no sibling context, navigation text, isolated short phrases. Real data (one export, 695 rows, 324 of them for *30 Agents Every AI Engineer Must Build*): ~4% of rows are under 40 characters, none of them figure/table references. Junk is a small minority, so the Curator should default to `keep`.
+- **Group**: fold sibling highlights that only make sense together into one curated unit. The illustrative case is a run of headings highlighted in sequence ("Stage 1: Task assignment", "Stage 2: Code synthesis", "Stage 3: Test synthesis") becoming one structural card; that run is not in the export we have, so a real grouping example still needs to be identified before the step 2 gate (see [roadmap.md](roadmap.md), step 1). Grouping is semantic, within the same chapter and day; there is no positional key in the export beyond that ordering.
+- **Flag truncation**: some rows are clipped mid-word at the start or end ("t's also crucial…", or the 149-character row `efaf55cf-…` ending "…where it can be executed and tested in isolation.", an exact prefix of the fuller `bf9830d8-…` row). The missing text does not exist elsewhere in the export, so do not attempt to reconstruct it. Flag the row so the runner sets `truncated=true` on it, the Writer works from the partial text and the Critic checks fidelity against a clipped source.
 - **Tag**: topic tags beyond book/chapter (`evals`, `rag`, `agents`) enabling cross-book decks.
 
 **Output**: curated units, each `{highlight_ids: [...], curated_text, tags, truncated_highlight_ids: [...], decision[keep|drop], reason}`. A unit with more than one `highlight_id` is a group. `truncated_highlight_ids` is written back to the `highlights` rows by the runner (agents hold no DB session, ADR-007); the unit itself does not store the flag.
@@ -23,7 +23,7 @@ No LLM. Watch folder → adapter → dedupe → `highlights` rows with `processe
 **Rules** (enforced via prompt):
 - Minimum information principle: one idea per card.
 - Card must be answerable without the book open.
-- Cloze cards: single deletion only (multi-deletion cards lapse more).
+- Cloze cards: single deletion only (multi-deletion cards lapse more), written as one `{{c1::...}}` marker in the front. The Writer validates the marker count in code; the prompt alone will not hold it.
 - Prefer "why/how" questions over trivia.
 **Feedback loop**: prompt includes Learner-generated guidance from my review history (e.g. "cards asking for definitions lapse 40% — prefer application questions").
 
@@ -57,7 +57,8 @@ No LLM. FSRS due computation + daily batch selection (due cards + up to `NEW_CAR
 **Jobs**:
 - Produce a new `writer_guidance` row (versioned, never edited in place) that is injected into the Writer prompt. Cards record the version that generated them, so guidance changes are attributable.
 - Flag leech cards (failed 3+ times): propose rewrite as alternative explanation/analogy, or cross-link to a related highlight from another book. Rewrites go through the normal Writer ⇄ Critic → human approval path as new cards; the leech keeps its FSRS state until the human approves the rewrite, at which point the old card is set to `rejected` with `status_reason="superseded by <id>"`.
-- Human edits at approval time (`cards.original_front/original_back` differ from `front/back`) and rejection reasons are inputs too; they are the most direct quality signal available.
+- Human edits at approval time (`cards.original_front/original_back` differ from `front/back`) and rejection reasons are inputs too; they are the most direct quality signal available. Post-approval edits (`cards.edited_at` set, ADR-008) are a second signal and must be segmented, not pooled: a card hand-fixed weeks later would otherwise credit its lapse rate to the `guidance_version` that wrote the flawed original.
+- Suspended cards (`cards.suspended_until` in the future) are excluded from lapse-rate aggregates. A card taken out of rotation stops generating reviews, so leaving it in would read as improved retention.
 
 Cold start: with one user, a lapse-rate bucket needs on the order of a hundred reviews before it means anything. Stage B is expected to produce its first useful guidance months in, not weeks.
 

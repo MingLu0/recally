@@ -20,5 +20,5 @@ No formal eval suite in v1. Instead:
 
 ## Consequences
 - `llm_calls` gains `unit_id`, `card_id`, `round`, `request`, `response`.
-- Revisit when: switching Writer or Critic model, editing a prompt file after cards have been approved, or the Learner starts producing `writer_guidance`. The first eval is expected to be "replay the Critic over human-labelled cards and measure agreement".
+- Revisit when: switching Writer or Critic model, editing a prompt file after cards have been approved, the Learner starts producing `writer_guidance`, or the phase-2 hosting move ([architecture.md](../architecture.md)), which puts retained prompts and verbatim highlight text on someone else's disk. The first eval is expected to be "replay the Critic over human-labelled cards and measure agreement".
 - Run tracing is covered by `llm_calls`, so it is no longer a reason to adopt an orchestration framework (ADR-001).

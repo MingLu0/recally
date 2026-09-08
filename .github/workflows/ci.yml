@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: backend
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      # Interpreter comes from .python-version at the repo root; uv.lock is
+      # committed, so --frozen installs bit-identical dependencies.
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Ruff lint
+        run: uv run ruff check .
+
+      - name: Ruff format
+        run: uv run ruff format --check .
+
+      - name: Mypy
+        run: uv run mypy src/
+
+      - name: Pytest
+        run: uv run pytest
+
+      # Security scanners are CI-only (docs/backend.md, "Tooling"). Run via
+      # `uvx` so they stay out of the project's locked dependency set.
+      - name: Bandit
+        run: uvx bandit -r src/
+
+      # pip-audit cannot read uv.lock directly, so export it to a fully-resolved
+      # requirements file first. --disable-pip audits that list as-is instead of
+      # re-resolving it in a throwaway venv.
+      - name: pip-audit
+        run: |
+          uv export --frozen --no-dev --no-emit-project -o requirements-audit.txt
+          uvx pip-audit -r requirements-audit.txt --strict --disable-pip

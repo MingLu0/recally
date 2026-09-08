@@ -1,0 +1,11 @@
+# Ruff only, by design: Bandit and pip-audit run in CI, not in the local loop
+# (docs/backend.md, "Tooling").
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.6
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+        files: ^backend/
+      - id: ruff-format
+        files: ^backend/

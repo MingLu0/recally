@@ -22,6 +22,7 @@ Provider credentials use LiteLLM's own variable names (`ANTHROPIC_API_KEY`, `OPE
 | `LLM_MODEL_WRITER` | `claude-sonnet-5` | Writer | Strong tier |
 | `LLM_MODEL_CRITIC` | `claude-haiku-4-5-20251001` | Critic | Cheap tier |
 | `LLM_MODEL_LEARNER` | `claude-sonnet-5` | Learner stage B | |
+| `CURATOR_MAX_BATCH` | `40` | Curator | Max highlights per Curator call; a longer chapter is split into consecutive batches. Grouping cannot span a batch boundary |
 | `LLM_MAX_ROUNDS` | `3` | Writer ⇄ Critic | Hard rule 9; do not raise without a doc change |
 | `AUTO_APPROVE_ROUND1_ACCEPT` | `false` | pipeline | Hard rule 1 exception; skips the queue for round-1 `accept` |
 | `LLM_LOG_PAYLOADS` | `true` | `llm.py` | Store `request`/`response` on `llm_calls`; turn off only if the table bloats (ADR-006) |
@@ -43,6 +44,7 @@ Provider credentials use LiteLLM's own variable names (`ANTHROPIC_API_KEY`, `OPE
 | `FIREBASE_CREDENTIALS_FILE` | *(required for push)* | notifier | Service-account JSON for FCM HTTP v1 |
 | `LEARNER_CRON` | `0 3 * * *` | Learner | Nightly, `RECALLY_TIMEZONE` |
 | `OPTIMIZER_MIN_REVIEWS` | `400` | Learner stage A | Skip the fit below this many `review_logs` |
+| `LEARNER_MIN_REVIEWS` | `100` | Learner stage B | Skip guidance generation below this many `review_logs`. Stage B reads lapse rates per bucket, and a bucket needs on the order of a hundred reviews to mean anything (`agents.md`, "Learner"); without this it would write confident guidance from noise |
 
 ## Android
 

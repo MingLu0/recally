@@ -8,7 +8,7 @@ Recally turns O'Reilly reading highlights into flashcards. A watched folder pick
 
 ## Current state
 
-**Docs only. No code exists yet.** `backend/` and `android/` hold placeholder READMEs. Build order is in `docs/roadmap.md`; step 1 (backend skeleton + ingestion) is next. When code lands, update the *Commands* section below.
+**Step 1 in progress.** `backend/` has the tooling baseline (uv, ruff, mypy, pytest, CI), the SQLAlchemy models plus the initial Alembic migration for every table in `docs/data-model.md`, the FastAPI app (`container.py`, `X-API-Key` auth, problem+json errors, `GET /ingest/status` + `GET /decks`), and a debounced watchdog watcher for completed O'Reilly exports. The O'Reilly CSV adapter, the annotation-UUID dedupe and the committed fixtures are in. `android/` is still a placeholder README. Build order is in `docs/roadmap.md`. When code lands, update the *Commands* section below.
 
 ## Repo layout
 
@@ -55,6 +55,17 @@ These come from the PRD and ADRs. Do not work around them.
 11. **Plain Python, no orchestration framework** (ADR-001). Do not add LangGraph, CrewAI, etc. without a new ADR.
 12. **Watcher acts on `on_moved` (browser rename after download), not `on_created`**, with a short debounce.
 
+## Design invariants
+
+Structural rules from `docs/backend.md` and ADR-007. Verify these in any backend change; violations are bugs, not style.
+
+- Nothing below `api/` imports FastAPI. The pipeline also runs from the watcher, APScheduler, the CLI and `POST /jobs/run`.
+- Agents implement the role protocols in `agents/base.py` and hold **no DB session**; they return typed results. All persistence (statuses, `processed`, `truncated` write-backs, orphan cleanup) is done by `pipeline.py`.
+- `pipeline.py` resolves agents through `agents/registry.py` (`(role, variant)` + `AGENT_*` env vars), never by direct import.
+- `container.py` is the composition root for every entry point; `api/deps.py` only pulls from it.
+- `llm_calls.agent` records `role/variant` — the trace must name the implementation.
+- A new ingestion source is a new file in `ingest/adapters/` plus a documented dedupe-key contract, never a branch in the pipeline.
+
 ## Conventions
 
 ### Backend (Python)
@@ -66,11 +77,12 @@ These come from the PRD and ADRs. Do not work around them.
 - Errors return problem+json: `{ "status": 422, "detail": "..." }`.
 - Costs are stored as `cost_microusd int` (1 USD = 1,000,000) everywhere (`docs/data-model.md`). Do not introduce cents or float dollars.
 - Config comes from env vars, named in `docs/config.md`. Do not invent new names; add them to that doc in the same change.
-- Tooling expected: `ruff` (lint + format), `mypy`, `pytest`. Match whatever `pyproject.toml` defines once it exists.
+- Tooling: `uv` (interpreter pinned by `.python-version`, `uv.lock` committed), `ruff` (lint + format), `mypy` strict on `src/recally/`, `pytest`. Policy in `docs/backend.md`, "Tooling". A pre-commit hook runs ruff only; Bandit and pip-audit run in CI, not locally.
 - Tests never call a real LLM provider. Agents are tested by mocking `llm.py` (or LiteLLM's mock response) with recorded outputs. Ingestion tests run against the committed fixtures in `backend/tests/fixtures/` (see `docs/roadmap.md`, step 1). Every roadmap step has a *Tests* gate (merge requirement, output pasted in the PR) and a *You verify* gate the human runs after merge.
 
 ### Android (Kotlin)
 - Jetpack Compose + Material 3, Retrofit + OkHttp, Room, Hilt, FCM. Package root `dev.recally`, structure in `docs/android.md`.
+- Clean architecture with the scaffold pattern (`docs/android.md`, "Architecture"). Screen composables are pure: `UiState` in, callbacks out — no `hiltViewModel()`, no `NavController`, no flow collection inside a screen. ViewModels are instantiated at their `NavHost` route entry, which also owns the navigation decision. One immutable `UiState` per screen. ViewModels talk to repository interfaces, never to a DAO or Retrofit service.
 - Offline-first: Room caches due cards; ratings are queued locally with timestamps and synced later. Approval queue requires connectivity.
 - Capture `response_ms` (flip-to-rate duration) on every rating.
 - Use injected dispatchers, not hard-coded `Dispatchers.IO`. Include exception handlers on coroutines.
@@ -86,19 +98,27 @@ These come from the PRD and ADRs. Do not work around them.
 
 ## Commands
 
-None yet. Fill in when step 1 lands. Expected shape:
-
 ```
 # backend
-cd backend && uv sync            # or pip install -e .[dev]
+cd backend && uv sync
 uv run pytest
 uv run ruff check . && uv run ruff format --check .
+uv run mypy src/
 uv run alembic upgrade head
 uv run uvicorn recally.main:app --reload
+# Run the watcher by itself until the FastAPI lifespan owns it.
+uv run python -m recally.ingest.watcher
 
 # android
 cd android && ./gradlew :app:testDebugUnitTest
+
+# pre-PR gate (from the repo root, on a feature branch, work committed)
+# NOT for roadmap step 2 — see ADR-011; there the ticket's own test list is the gate.
+no-mistakes axi run --intent "<what the issue asked for + decisions made>"
+no-mistakes axi status
 ```
+
+Backend commands run from `backend/`; policy and config locations are in `docs/backend.md`, "Tooling".
 
 ## Working style for agents
 
@@ -107,3 +127,6 @@ cd android && ./gradlew :app:testDebugUnitTest
 - Do exactly what was asked. Do not widen scope to adjacent files or "while we're here" refactors without asking.
 - When a doc and this file disagree, the doc wins. Fix this file.
 - Verify before claiming done: run the tests or command and paste the output. If something was skipped, say so.
+- Validate through `no-mistakes` before opening a PR: commit on a feature branch, then `no-mistakes axi run --intent "<what the issue asked for + the decisions you made>"`. Drive the gates, but **relay every `ask-user` finding to the human verbatim and wait** — those are the ones that touch the hard rules above. Do not pass `--yes` unless asked, and never hand-edit a finding while a run is active. Full workflow in `docs/workflow.md`, "The no-mistakes gate".
+- **Roadmap step 2 (#28 and its sub-issues) is the exception: do not run `no-mistakes` there** (ADR-011). The ticket's own list of named tests is the whole gate. Write those tests first; for every one asserting a raise, a refusal or a negative, confirm it **fails** before the implementation exists and paste that red output next to the green run. Name in the PR any listed test you did not write, and why — never drop one silently. **Do not auto-merge a step-2 PR**; open it, say it is the acceptance-criteria trial, and stop.
+- **Never start a parent step issue, and never auto-merge one.** Parents carry a `You verify` gate only a human can run. An agent running unattended takes one `ready`, unblocked sub-issue per run and may merge its own PR only when the gate needed no human decision — no `ask-user` finding, no skipped step (`docs/workflow.md`, "Unattended dispatch"; ADR-010).

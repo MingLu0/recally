@@ -17,7 +17,7 @@ backend/
       deps.py                     # request-scoped dependencies (pull from container)
       auth.py                     # X-API-Key dependency
       routers/                    # one module per api-spec.md section:
-        reviews.py  cards.py  decks.py  stats.py  ingest.py  jobs.py  devices.py
+        health.py  reviews.py  cards.py  decks.py  stats.py  ingest.py  jobs.py  devices.py
     models/                       # SQLAlchemy models (data-model.md)
     schemas/                      # Pydantic request/response models (api-spec.md)
     ingest/
@@ -80,6 +80,8 @@ class Writer(Protocol):
 
 All persistence — `curated_units`, card statuses, `processed` flips, orphan cleanup — is the runner's job, exactly as specified in agents.md, "Pipeline runner and handoffs".
 
+Each agent parses and validates the LLM response into its result dataclass before returning, including cross-field checks against the request: the Curator's `highlight_ids` must be a subset of the batch it was given and `decision` must be `keep|drop`; the Critic's `verdict` must be `accept|revise|reject`. A response that fails validation raises at the agent boundary and is handled by the existing failure path ([architecture.md](architecture.md), "Failure handling"). The protocol boundary itself does not cover this — mypy checks that an implementation conforms, not that a model's output does — and a well-formed response with invalid content raises no exception on its own, so without this check it would bypass that path.
+
 Prompts are files under `agents/<role>/prompts/`, loaded from disk, never inline strings (ADR-003). LLM access is the `llm.py` callable injected via the context; agents never import a provider SDK.
 
 ## Swapping an agent
@@ -87,7 +89,7 @@ Prompts are files under `agents/<role>/prompts/`, loaded from disk, never inline
 Variants are registered under a `(role, variant)` key in `agents/registry.py`; the active variant per role comes from `AGENT_CURATOR` / `AGENT_WRITER` / `AGENT_CRITIC` / `AGENT_LEARNER` (default `default`, see [config.md](config.md)). To swap the Writer:
 
 1. Add `agents/writer/strict.py` implementing the `Writer` protocol (new prompt file optional).
-2. Register it: `registry.register("writer", "strict", StrictWriter)`.
+2. Register an instance at module import: `registry.register("writer", "strict", StrictWriter())`. Variants are stateless; the registry hands the pipeline the ready-to-call object.
 3. Set `AGENT_WRITER=strict`.
 
 No pipeline change, no config-schema change. Because every `llm_calls` row records `agent` as `role/variant` (e.g. `writer/strict`), the trace says which implementation wrote any card, so variants can be compared on `status`/`original_front` edit rates. Ingestion sources follow the same pattern: a Kindle source is a new file in `ingest/adapters/`, never a branch in the pipeline.
@@ -113,3 +115,12 @@ Every entry point converges on the same functions:
 - **Pipeline**: runs the `default` variants with a mocked `llm.py` against fixture-ingested highlights; asserts statuses, rounds and `llm_calls` rows (roadmap step 2 gates).
 - **API**: router tests with the container overridden (in-memory DB, stub services); a request without `X-API-Key` returns 401.
 - **Scheduling**: FSRS wrapper tested with explicit `review_datetime` values; notifier tested against the `push_runs` policy.
+
+## Tooling
+
+- **Environment: `uv`.** A `.python-version` file at the repo root pins the interpreter (`3.12` — satisfies `py-fsrs` ≥ 3.10 without bleeding edge) so uv uses it everywhere, including the future Docker image. `uv.lock` is committed (this is an app, not a library) so dev, CI and Docker install bit-identical dependencies; upgrades are deliberate (`uv lock --upgrade`), never accidental.
+- **Dependency names.** `py-fsrs` is the project's name (and its GitHub repo); it publishes to PyPI as `fsrs`, so that is what `pyproject.toml` declares.
+- **Ruff** (lint + format; replaces Flake8/isort/Autoflake/Black): config in `pyproject.toml` under `[tool.ruff]`, rule sets `E, F, I, UP, B`. Run: `uv run ruff check . && uv run ruff format --check .`.
+- **Mypy, strict on `src/recally/`**: config under `[tool.mypy]` in `pyproject.toml`. Strictness is load-bearing, not taste: ADR-007's protocol boundary only protects the pipeline if mypy rejects a variant that doesn't satisfy its role `Protocol`.
+- **pre-commit, ruff only**: `.pre-commit-config.yaml` runs `ruff check --fix` and `ruff format` on commit. Milliseconds fast; catches "forgot to lint" before CI. Nothing else runs in hooks.
+- **Security scanners, CI only**: Bandit (scans our code for hard-coded secrets and insecure patterns) and pip-audit (dependency CVEs; chosen over Safety — maintained, no account needed) run in GitHub Actions on every PR. Kept out of the local loop: Bandit's false positives and scan latency aren't worth it for a single-user LAN app.
