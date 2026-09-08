@@ -17,6 +17,7 @@ Two pages: *Dark* and *Recally — white + teal*. Superseded directions moved to
 | | |
 |---|---|
 | `design-system.md` | The implementable spec. Start here. |
+| `issue-context.md` | A block to paste into Android GitHub issues — points a plan agent at the spec, the right artboards, and the G1–G6 blockers. |
 | `canvas.json` | Artboard positions, pages, and the sticky notes. |
 | `_archive/` | Superseded exploration. **Not the spec** — see its README. |
 
