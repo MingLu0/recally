@@ -5,9 +5,13 @@ import dev.recally.data.local.DueSummaryMetaEntity
 import dev.recally.data.remote.DeckDto
 import dev.recally.data.remote.DueCardDto
 import dev.recally.data.remote.DueCardsResponse
+import dev.recally.data.remote.ForecastDayDto
+import dev.recally.data.remote.StatsResponse
 import dev.recally.domain.model.Card
 import dev.recally.domain.model.Deck
 import dev.recally.domain.model.DueSummary
+import dev.recally.domain.model.ForecastDay
+import dev.recally.domain.model.Stats
 import kotlinx.serialization.json.Json
 import java.time.Instant
 
@@ -47,6 +51,23 @@ fun DeckDto.toDomain(): Deck =
         bookId = bookId,
         title = title,
         total = total,
+        due = due,
+    )
+
+fun StatsResponse.toDomain(): Stats =
+    Stats(
+        streakDays = streakDays,
+        reviewsToday = reviewsToday,
+        retention30d = retention30d,
+        lapseRateByType = lapseRateByType,
+        lapseRateByGuidanceVersion = lapseRateByGuidanceVersion,
+        curationYield = curationYield,
+        forecast = forecast.map { it.toDomain() },
+    )
+
+fun ForecastDayDto.toDomain(): ForecastDay =
+    ForecastDay(
+        date = date,
         due = due,
     )
 

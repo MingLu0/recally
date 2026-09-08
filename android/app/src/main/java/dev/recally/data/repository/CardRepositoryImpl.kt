@@ -36,9 +36,14 @@ class CardRepositoryImpl
                 } else {
                     when (val fresh = fetchAndCache()) {
                         is Result.Success -> fresh
-                        is Result.Unauthorized -> cached?.let { Result.Success(it) } ?: Result.Unauthorized
-                        is Result.HttpError -> cached?.let { Result.Success(it) } ?: fresh
-                        is Result.NetworkError -> cached?.let { Result.Success(it) } ?: fresh
+                        // A 401 is never answered from cache: the server was
+                        // reached and rejected the key, so the UI must show the
+                        // "check settings" banner, not stale data with an
+                        // offline bar (docs/android.md, "Connecting to the
+                        // backend").
+                        is Result.Unauthorized -> Result.Unauthorized
+                        is Result.HttpError -> cached?.let { Result.Success(it, servedFromCache = true) } ?: fresh
+                        is Result.NetworkError -> cached?.let { Result.Success(it, servedFromCache = true) } ?: fresh
                     }
                 }
             }

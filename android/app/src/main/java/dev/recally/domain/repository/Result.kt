@@ -8,8 +8,15 @@ import java.io.IOException
  * it with a "check settings" banner and must never crash on it.
  */
 sealed interface Result<out T> {
+    /**
+     * [servedFromCache] is set only by a repository whose refresh failed and
+     * answered from cache instead (CardRepository) — it is how the UI knows to
+     * show the offline bar (design-system.md, "States"). A plain cache read is
+     * not marked; only a *failed refresh* fallback is.
+     */
     data class Success<T>(
         val data: T,
+        val servedFromCache: Boolean = false,
     ) : Result<T>
 
     /** 401 — the API key is wrong. Distinct from every other failure. */
