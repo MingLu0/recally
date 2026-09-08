@@ -1,6 +1,6 @@
 # ADR-013: Stateful Scala orchestrator for parallel dispatch
 
-**Status**: accepted — amends [ADR-010](010-unattended-dispatch-and-auto-merge.md); builds on the gate defined by [ADR-012](012-drop-the-no-mistakes-gate.md)
+**Status**: accepted, adjusted by [ADR-014](014-auto-ready-on-unblock.md) — the ready-picker is removed (the `ready` label it applied is retired) and needs-human is reconciled rather than terminal — amends [ADR-010](010-unattended-dispatch-and-auto-merge.md); builds on the gate defined by [ADR-012](012-drop-the-no-mistakes-gate.md)
 **Date**: 2026-09-08
 
 ## Context

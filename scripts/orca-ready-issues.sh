@@ -8,12 +8,12 @@
 # (docs/workflow.md, "Unattended dispatch"). Exit 0 = at least one issue was
 # printed and the automation runs; exit 1 = nothing to do, the run is skipped.
 #
-# An issue is dispatchable only when ALL of these hold:
-#   1. open, and labelled `ready`     — the human says the spec is settled
-#   2. no open blocker                — GitHub native issue dependencies
-#   3. it is a sub-issue              — parents carry a You verify gate; see ADR-010
-#   4. unassigned                     — an assignee means someone already has it
-#   5. no open PR already links it    — do not dispatch the same issue twice
+# An issue is dispatchable only when ALL of these hold (ADR-014: unblocked is
+# the trigger; no human label gate since then):
+#   1. no open blocker                — GitHub native issue dependencies
+#   2. it is a sub-issue              — parents carry a You verify gate; see ADR-010
+#   3. unassigned                     — an assignee means someone already has it
+#   4. no open PR already links it    — do not dispatch the same issue twice
 #
 # Fail closed: any error prints nothing and exits 1, so a broken query
 # never causes a dispatch.
@@ -58,11 +58,11 @@ linked_issue_numbers=$(gh pr list --repo "$REPOSITORY" --state open --limit 100 
 candidate_numbers=$(printf '%s' "$issues_json" | jq -r --arg claimed "$linked_issue_numbers" '
   ($claimed | split(" ") | map(select(length > 0) | tonumber)) as $claimed_numbers
   | [.data.repository.issues.nodes[]
-    | select([.labels.nodes[].name] | index("ready"))          # 1. human says go
-    | select(.subIssues.totalCount == 0)                       # 3. not a parent
-    | select(.parent != null)                                  # 3. is a sub-issue
-    | select(.assignees.totalCount == 0)                       # 4. nobody owns it
-    | select([.number] | inside($claimed_numbers) | not)       # 5. no open PR
+    | select(.subIssues.totalCount == 0)                       # 2. not a parent
+    | select(.parent != null)                                  # 2. is a sub-issue
+    | select([.labels.nodes[].name] | index("manual") | not)   # 2. manual tickets are human-only
+    | select(.assignees.totalCount == 0)                       # 3. nobody owns it
+    | select([.number] | inside($claimed_numbers) | not)       # 4. no open PR
     | .number]
   | sort | .[]
 ') || exit 1
