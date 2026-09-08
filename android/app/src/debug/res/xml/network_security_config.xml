@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Debug-only override of the main network security config (same resource
+  name, so the debug build variant replaces it). Phase 1 is plain HTTP to the
+  Mac on the LAN, typed as an IP literal like http://192.168.1.42:8000, which
+  no <domain> entry can match — cleartext has to be allowed for the whole
+  base config here (docs/android.md, "Connecting to the backend"). Release
+  keeps the main config and permits no cleartext; a release build reaches a
+  backend only once phase-2 hosting brings TLS.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

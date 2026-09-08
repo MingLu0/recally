@@ -91,9 +91,11 @@ Items are validated individually, not by the request schema, so one malformed it
 
 ### POST /cards/{id}/approve
 Optional edits: `{ "front": "...", "back": "..." }` → status `approved`, `approved_at` set, `card_state` row created (enters FSRS). Edits overwrite `front`/`back`; `original_front`/`original_back` keep the Writer's text for the Learner.
+**Response**: the updated card (same shape as `PATCH /cards/{id}` below), so the client can update its cache.
 
 ### POST /cards/{id}/reject
 `{ "reason": "..." }` → status `rejected`. Reasons feed the Learner.
+**Response**: the updated card (same shape as `PATCH /cards/{id}` below).
 
 ## Approved-card controls
 
@@ -106,6 +108,17 @@ Fix the wording of an approved card. Body carries any of `front`, `back`, `tags`
 ```
 FSRS state is **untouched** — stability, difficulty, `due` and `step` all survive, because an edit is a correction to the same retrieval task, not a new card. Sets `edited_at`. `original_front`/`original_back` still hold the Writer's text and are not affected. 409 if the card is not `approved`: edits before approval belong to `POST /cards/{id}/approve`, which is the hard-rule-1 gate.
 **Response**: the updated card.
+```json
+{
+  "id": 55, "status": "approved", "type": "cloze",
+  "front": "The {{c1::Gulf of Specification}} is the gap between intent and instructions.",
+  "back": "—",
+  "original_front": "The {{c1::Gulf of Specification}} is the gap between intent and instructions.",
+  "original_back": "—",
+  "status_reason": null,
+  "approved_at": "2026-09-05T19:22:00Z"
+}
+```
 
 ### POST /cards/{id}/bury
 Hide the card for the rest of the day. Sets `suspended_until` to the next day boundary in `RECALLY_TIMEZONE`, so it clears itself with no action from the user. Use for "not right now" instead of a dishonest rating, which would corrupt `review_logs`.
@@ -129,6 +142,19 @@ Books with card counts and due counts.
 
 ### GET /decks/{book_id}/cards
 `?chapter=` optional filter. Browse cards per book. Each card carries `suspended_until` (null when in rotation) so the browse view can show suspended cards and offer unsuspend; unlike `/reviews/due`, this list does not filter them out.
+```json
+{
+  "cards": [
+    {
+      "id": 55, "type": "cloze",
+      "front": "The {{c1::Gulf of Specification}} is the gap between intent and instructions.",
+      "back": "—",
+      "chapter": "1. Introduction", "tags": [],
+      "suspended_until": null
+    }
+  ]
+}
+```
 
 ## Stats
 
