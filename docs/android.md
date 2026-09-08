@@ -31,6 +31,42 @@ MainActivity          theme, nav controller, deep-link intent
 
 A screen composable takes a `UiState` and callbacks. It never calls `hiltViewModel()`, never collects a flow, never touches a `NavController`. That keeps every screen previewable and testable with a hand-built `UiState`, which matters here because the review card, the approval queue and the stats charts each have many states worth seeing in isolation (loading, empty, offline, error, mid-flip).
 
+### Every previewable composable has a preview
+
+A composable that can be previewed must ship a `@Preview` function in the same file, annotated with `@CombinedPreviews`. "Previewable" means it renders from its parameters alone — which, given the rule above, is every screen composable and every shared component in `ui/components/`. A composable that cannot be previewed is a smell: it means state is being reached for rather than passed in.
+
+`@CombinedPreviews` is one custom multipreview annotation defined once in `ui/theme/`, so the set of preview configurations is declared in a single place and every composable picks up a change to it:
+
+```kotlin
+@Preview(name = "light", showBackground = true)
+@Preview(name = "dark", showBackground = true, uiMode = UI_MODE_NIGHT_YES)
+@Preview(name = "font 2x", showBackground = true, fontScale = 2f)
+annotation class CombinedPreviews
+```
+
+Preview functions are private, suffixed `Preview`, and build their `UiState` inline — never from a ViewModel, a repository, or a fake injected through Hilt:
+
+```kotlin
+@CombinedPreviews
+@Composable
+private fun ApproveScreenPreview() {
+    RecallyTheme {
+        ApproveScreen(
+            uiState = ApproveUiState(
+                pendingCards = listOf(sampleCard),
+                isLoading = false,
+            ),
+            onApproveCard = {},
+            onRejectCard = {},
+            onEditCard = { _, _ -> },
+            onRetry = {},
+        )
+    }
+}
+```
+
+Screens with meaningfully different states get one preview function per state — loading, empty, error, offline, and for the review card, mid-flip. Those are the states worth catching in the IDE rather than on a device, and they are exactly what the pure-composable rule above buys.
+
 ### ViewModels are scoped to their route
 
 Each ViewModel is instantiated at its own `NavHost` route entry, not hoisted to `MainActivity`. Recally's screens are independent — the approval queue shares no state with a review session — and the deck browse routes are parameterised (`decks/{bookId}`, optionally filtered by chapter), so route scoping gives those ViewModels their `SavedStateHandle` arguments for free and stops six ViewModels from fetching at app start. State that genuinely spans screens (backend settings, connectivity) is exposed by a repository singleton that each ViewModel injects, not by a hoisted ViewModel.
@@ -90,12 +126,14 @@ ViewModels talk only to repositories — never to a DAO or a Retrofit service di
 - Instantiate a ViewModel at its route entry; pass `uiState` and method references (`viewModel::approveCard`) into the screen.
 - Keep screen composables free of `hiltViewModel()`, `NavController`, and flow collection.
 - Model everything a screen renders as one immutable `UiState`.
+- Ship a private `@CombinedPreviews` preview function beside every screen composable and shared component, with the `UiState` built inline.
 - Inject dispatchers (`@IoDispatcher CoroutineDispatcher`) rather than hard-coding `Dispatchers.IO`, so tests run on a `TestDispatcher`.
 
 **Don't**
 - Call `hiltViewModel()` inside a screen composable — the screen stops being previewable and testable.
 - Navigate from inside a screen composable.
 - Create the same ViewModel at two places in the tree; that is two instances and two copies of the state.
+- Build a preview's state from a ViewModel or a Hilt-injected fake — a preview that needs the graph is not a preview.
 - Let a `data/` type (Room entity, Retrofit DTO) reach a composable — map to a domain model in the repository.
 
 ## Screens
@@ -119,7 +157,7 @@ ViewModels talk only to repositories — never to a DAO or a Retrofit service di
 
 ### 4. Decks
 - Book list → chapters → cards. Browsing, plus the per-card controls from ADR-008: edit (`PATCH /cards/{id}`), suspend and unsuspend. Suspended cards are shown here with their state — this screen is the only way back from a suspend, so it cannot filter them out.
-- A single book can reach ~1000 cards, so the card list pages rather than loading a whole book at once. Chapter is the natural first cut (`?chapter=`); page within it if a chapter is still large.
+- A single book can reach ~1000 cards. `GET /decks/{book_id}/cards` is unpaginated in v1 by decision (`api-spec.md`), so the client fetches the book and filters by chapter (`?chapter=`) to keep the rendered list small; use a lazy list so the row count, not the response size, is what matters.
 
 ### 5. Stats
 - Streak, retention, forecast chart, lapse rate by card type, lapse rate by Writer guidance version (the roadmap 6b gate; hidden until there is more than one version), curation yield.
@@ -138,7 +176,7 @@ Every screen and the endpoints behind it. Kept here so a gap between this doc an
 | Approval queue | `GET /cards/pending`, `POST /cards/{id}/approve`, `POST /cards/{id}/reject` |
 | Decks | `GET /decks`, `GET /decks/{book_id}/cards`, `PATCH /cards/{id}`, `POST /cards/{id}/suspend`, `POST /cards/{id}/unsuspend` |
 | Stats | `GET /stats` |
-| Settings | connection test against any authenticated endpoint; `POST /devices` on token refresh |
+| Settings | `GET /health/auth` (connection test); `POST /devices` on token refresh |
 
 ## Offline-first sync
 
@@ -199,7 +237,7 @@ android/
     │   │   ├── stats/
     │   │   └── settings/
     │   ├── components/          # shared composables (card face, rating bar, empty states)
-    │   └── theme/
+    │   └── theme/               # + CombinedPreviews multipreview annotation
     ├── domain/
     │   ├── model/               # Card, Deck, ReviewRating, DueSummary
     │   └── repository/          # repository interfaces + Result type
