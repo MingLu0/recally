@@ -7,22 +7,6 @@
     {
       "id": "page-dark",
       "name": "Dark"
-    },
-    {
-      "id": "page-0",
-      "name": "Ground comparison"
-    },
-    {
-      "id": "page-2",
-      "name": "Earlier: Headway blue"
-    },
-    {
-      "id": "page-3",
-      "name": "Earlier: Soft / Ink"
-    },
-    {
-      "id": "page-4",
-      "name": "Earlier: first flat takes"
     }
   ],
   "artboards": [
@@ -70,123 +54,6 @@
       "y": 0,
       "w": 560,
       "h": 1040
-    },
-    {
-      "file": "RcToday.dc.html",
-      "title": "1 — Warm cream #FAF7F2",
-      "page": "page-0",
-      "x": 0,
-      "y": 0,
-      "w": 560,
-      "h": 1040
-    },
-    {
-      "file": "RcCool.dc.html",
-      "title": "2 — Cool near-white #FBFBFA",
-      "page": "page-0",
-      "x": 610,
-      "y": 0,
-      "w": 560,
-      "h": 1040
-    },
-    {
-      "file": "HwToday.dc.html",
-      "title": "Today — blue",
-      "page": "page-2",
-      "x": 0,
-      "y": 0,
-      "w": 560,
-      "h": 1040
-    },
-    {
-      "file": "HwReview.dc.html",
-      "title": "Review — blue",
-      "page": "page-2",
-      "x": 610,
-      "y": 0,
-      "w": 560,
-      "h": 1040
-    },
-    {
-      "file": "HwSheet.dc.html",
-      "title": "Sheet — blue",
-      "page": "page-2",
-      "x": 1220,
-      "y": 0,
-      "w": 560,
-      "h": 1040
-    },
-    {
-      "file": "SoftToday.dc.html",
-      "title": "Soft · Today",
-      "page": "page-3",
-      "x": 0,
-      "y": 0,
-      "w": 560,
-      "h": 1040
-    },
-    {
-      "file": "SoftReview.dc.html",
-      "title": "Soft · Review",
-      "page": "page-3",
-      "x": 610,
-      "y": 0,
-      "w": 560,
-      "h": 1040
-    },
-    {
-      "file": "InkToday.dc.html",
-      "title": "Ink · Today",
-      "page": "page-3",
-      "x": 1220,
-      "y": 0,
-      "w": 560,
-      "h": 1040
-    },
-    {
-      "file": "InkReview.dc.html",
-      "title": "Ink · Review",
-      "page": "page-3",
-      "x": 1830,
-      "y": 0,
-      "w": 560,
-      "h": 1040
-    },
-    {
-      "file": "Main.dc.html",
-      "title": "A — Calm Material 3",
-      "page": "page-4",
-      "x": 0,
-      "y": 0,
-      "w": 390,
-      "h": 844
-    },
-    {
-      "file": "Editorial.dc.html",
-      "title": "B — Editorial",
-      "page": "page-4",
-      "x": 470,
-      "y": 0,
-      "w": 390,
-      "h": 844
-    },
-    {
-      "file": "Bold.dc.html",
-      "title": "C — Bold",
-      "page": "page-4",
-      "x": 940,
-      "y": 0,
-      "w": 390,
-      "h": 844
-    },
-    {
-      "file": "Focus.dc.html",
-      "title": "D — Dark focus",
-      "page": "page-4",
-      "x": 1410,
-      "y": 0,
-      "w": 390,
-      "h": 844
     },
     {
       "file": "RcDecks.dc.html",
@@ -380,38 +247,6 @@
       "y": 0,
       "w": 360,
       "text": "AUDITED 2026-09-07 against android.md + api-spec.md\n\nFixed in these artboards:\n• Good/Easy interval hints removed — no endpoint gives a projection before you rate, and computing one client-side breaks hard rule 5. Again/Hard stay: derivable from learning_steps_minutes.\n• Stats strip was '142 reviews / 38 new' under one 'week' heading, mixing three timeframes — and NEW_CARDS_PER_DAY caps new at 10. Now reviews_today and new_count, labelled Today.\n• Progress bar was 12 fixed segments. android.md:14 re-queues Again/Hard cards inside the session, so 12 cards make MORE than 12 presentations. Now 'cards left', never a fixed total.\n• Summary said 'Lapsed'; lapse has a specific FSRS meaning in data-model.md. Now named by the rating.\n• Second approval card had no approve/edit/reject row — android.md:19 requires it on every card.\n\nSTILL BLOCKED on API fields (see design-system.md):\n1. Pending counts — no endpoint returns them; feeds three screens.\n2. Per-book progress % — needs a field AND a definition; undefined today.\n3. 'Next card due in 4h' — forecast is day-granularity.\n4. Bulk approve — no batch endpoint documented."
-    },
-    {
-      "id": "n-ground",
-      "page": "page-0",
-      "x": 0,
-      "y": -190,
-      "w": 620,
-      "text": "The two grounds not chosen — kept for reference.\n\nCream is warmer and separates cards effortlessly; cool near-white splits the difference. You picked pure white, which is on the first page."
-    },
-    {
-      "id": "n-blue",
-      "page": "page-2",
-      "x": 0,
-      "y": -190,
-      "w": 620,
-      "text": "Headway's blue palette on cream — the first pass at this structure, before the teal and white decisions."
-    },
-    {
-      "id": "n-soft",
-      "page": "page-3",
-      "x": 0,
-      "y": -190,
-      "w": 620,
-      "text": "Round two — soft pastel and ink-and-paper, from the pet-app reference."
-    },
-    {
-      "id": "n-first",
-      "page": "page-4",
-      "x": 0,
-      "y": -190,
-      "w": 620,
-      "text": "Round one — flat screens, no device frame. Review card only."
     },
     {
       "id": "n-decks",
