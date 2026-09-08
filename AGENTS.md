@@ -116,6 +116,10 @@ cd android && ./gradlew ktlintCheck
 ./gradlew :app:assembleDebug
 ./gradlew ktlintFormat   # writes fixes; what the pre-commit hook runs
 
+# orchestrator (hand-started parallel dispatcher, ADR-013)
+scala-cli scripts/orchestrate.sc -- --dry-run
+scala-cli scripts/orchestrate.sc -- --step=step-4
+
 ```
 
 Backend commands run from `backend/`; policy and config locations are in `docs/backend.md`, "Tooling".
@@ -127,6 +131,6 @@ Backend commands run from `backend/`; policy and config locations are in `docs/b
 - Do exactly what was asked. Do not widen scope to adjacent files or "while we're here" refactors without asking.
 - When a doc and this file disagree, the doc wins. Fix this file.
 - Verify before claiming done: run the tests or command and paste the output. If something was skipped, say so.
-- **The ticket's list of named tests is the whole gate** (ADR-012). Write those tests first; for every one asserting a raise, a refusal or a negative, confirm it **fails** before the implementation exists and paste that red output next to the green run. Then commit on a feature branch, run the full suite, and paste the output in the PR. Name in the PR any listed test you did not write, and why — never drop one silently. Full workflow in `docs/workflow.md`, "The two gates".
+- **The ticket's list of named tests is the whole gate** (ADR-012). Write those tests first; for every one asserting a raise, a refusal or a negative, confirm it **fails** before the implementation exists and paste that red output under a `## TDD evidence` heading in the PR, next to the green run (ADR-013 — the heading is what makes the evidence mechanically checkable). Then commit on a feature branch, run the full suite, and paste the output in the PR. Name in the PR any listed test you did not write, and why — never drop one silently. Full workflow in `docs/workflow.md`, "The two gates".
 - **A hard rule above is the human's call, never yours.** If a ticket seems to ask you to work around one, stop and ask rather than quietly overruling it.
-- **Never start a parent step issue, and never auto-merge one.** Parents carry a `You verify` gate only a human can run. An agent running unattended takes one `ready`, unblocked sub-issue per run and may merge its own PR only when every test named in the ticket passes with its output pasted and CI is green (`docs/workflow.md`, "Unattended dispatch"; ADR-010, ADR-012).
+- **Never start a parent step issue, and never auto-merge one.** Parents carry a `You verify` gate only a human can run. An agent running unattended may merge its own PR only when all five conditions hold: every named test passes with output pasted, CI green, the `## TDD evidence` section present with red before green, the PR is not docs-only, and the issue is a sub-issue (`docs/workflow.md`, "Unattended dispatch"; ADR-010, ADR-012, ADR-013).

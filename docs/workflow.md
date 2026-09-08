@@ -9,7 +9,8 @@ How the project gets built: which tools hold the backlog, run the agents, and ga
 | Backlog | GitHub Issues + milestones | Repo already lives on GitHub; Orca opens worktrees from issues natively; zero cost |
 | Progress view | GitHub Project board "[Recally Roadmap](https://github.com/users/MingLu0/projects/2)" | One pane across parallel agents; issues stay the source of truth |
 | Agent control plane | [Orca](https://www.onorca.dev/) | Parallel worktrees, diff review with line comments back to the agent, GitHub issue/PR drawer, BYO subscription |
-| Coding agent | Claude Code (any Orca-supported CLI works) | Reads `AGENTS.md` / `CLAUDE.md` |
+| Coding agent | Claude Code (any Orca-supported CLI works; the orchestrator's failover pool is claude → opencode) | Reads `AGENTS.md` / `CLAUDE.md` |
+| Parallel dispatcher | `scripts/orchestrate.sc` (scala-cli, ADR-013) | Hand-started, stateful: dispatches up to 10 `ready` sub-issues, retries on failure, fixes merge conflicts by rebase dispatch |
 | Agent instructions | `AGENTS.md` | Hard rules and conventions; the docs are the spec |
 
 Not used: Linear (single-user project, paid tier + AI credits for anything beyond a board), beads (no Orca integration; would be a second backlog Orca cannot see). Linear Coding Sessions or Orca's SSH/remote mode are optional for unattended backend work only (see "Optional: unattended work").
@@ -21,6 +22,7 @@ Not used: Linear (single-user project, paid tier + AI credits for anything beyon
 3. Create one GitHub issue per roadmap step (1–6). Body = the step's bullets plus its **Tests** and **You verify** gates verbatim. The issue closes only after *You verify* passes, not on merge. Sub-issues where a step fans out (table below); a sub-issue carries only a Tests gate, written as the named test functions that must exist and pass plus a `Done when` checklist (ADR-012). The `roadmap-issues` skill in `.claude/skills/` carries the templates and the wiring commands. Milestones: `Backend` (steps 1–3), `App` (steps 4–6). Step 0 is a manual checklist issue, assigned to the human, in no milestone.
 4. Project board `Recally Roadmap`: columns Todo / In Progress / In Review / Verifying / Done, and the built-in workflows *item added → Todo*, *PR merged → Verifying*, *item closed → Done*. There is no built-in "PR opened" trigger, so In Review is set by hand or by Orca.
 5. Orca: add the repo, connect GitHub, setup script `cd backend && uv sync`.
+6. scala-cli (needed only to run the orchestrator; Java 17+ suffices for it).
 
 ## The per-issue loop
 
@@ -41,7 +43,7 @@ GitHub issue
 
 Rules:
 
-- **At most 3 worktrees live at once.** One reviewer's merge bandwidth is the throttle, not agent count.
+- **At most 10 worktrees live at once** (raised from 3 in ADR-013, when the orchestrator took over parallel dispatch). Reviewer bandwidth is still the throttle; it moved from per-PR review to the parent You verify gates, and `ready`-label discipline is what bounds it now.
 - **One gate per PR.** Nothing merges without the gate command and its output in the PR description.
 - **No branch reaches `main` without its named tests green**, with the output pasted in the PR (ADR-012). The agent that wrote the code is the worst judge of whether it is right, so the gate is evidence rather than self-assessment: a listed test either exists and passes or it does not. The design-invariant suite (#31) runs on every PR.
 - **A hard rule is Ming's call, never the agent's.** An agent that believes an `AGENTS.md` hard rule is wrong — or that its ticket asks it to work around one — stops and asks. It never quietly overrules one.
@@ -113,15 +115,21 @@ an opt-out `needs-spec` label would mean forgetting it lets an agent start on an
 
 ### Auto-merge policy
 
-The dispatched agent may merge its own PR **only** when all three hold (ADR-012):
+The dispatched agent may merge its own PR **only** when all five hold (ADR-012, ADR-013):
 
 - every test named in the ticket exists and passes, with the output pasted in the PR, and
 - CI is green, and
+- the PR carries a `## TDD evidence` section (that exact heading): the red output of every negative
+  assertion, captured before the implementation, followed by the green run, and
+- the PR is not docs-only — `gh pr diff <pr> --name-only` lists at least one file outside `docs/`
+  that is not Markdown — and
 - the issue is a sub-issue.
 
 Anything else leaves the PR open with a comment naming what failed, for a human. That is an
 expected outcome, not a failure. An agent that skipped a listed test, or that hit an `AGENTS.md`
-hard rule it thinks is wrong, stops and says so rather than merging.
+hard rule it thinks is wrong, stops and says so rather than merging. A docs-only sub-issue is still
+dispatchable; its PR simply always waits for a human, because a mechanical gate cannot judge a spec
+change (ADR-013).
 
 Two consequences worth being explicit about:
 
@@ -131,6 +139,26 @@ Two consequences worth being explicit about:
 - **Parent step issues are excluded on purpose.** They carry the `You verify` gate, which only a human can
   run against the real system. Auto-merging one would skip the gate the roadmap says the step is not done
   without (ADR-010).
+
+### Parallel dispatch: the orchestrator
+
+The hourly automation above dispatches one issue per tick and stays the default. For higher throughput,
+`scripts/orchestrate.sc` (scala-cli; ADR-013) is a stateful driver started by hand:
+
+```sh
+scala-cli scripts/orchestrate.sc                        # loop: dispatch, monitor, recover
+scala-cli scripts/orchestrate.sc -- --dry-run           # print the dispatch plan, touch nothing
+scala-cli scripts/orchestrate.sc -- --once              # a single tick
+scala-cli scripts/orchestrate.sc -- --step=step-4       # only issues carrying that label
+```
+
+It reads eligibility from `scripts/orca-ready-issues.sh --all` (the same five conditions — the
+orchestrator never decides dispatchability itself), keeps up to 10 issues in flight, hot-swaps a
+rate-limited agent along the pool `claude → opencode`, and dispatches a rebase into the same worktree
+when a PR goes CONFLICTING (twice, then it leaves the PR for a human with a comment). State lives in
+`.orca/orchestrator-state.json` (gitignored) and is reconciled against GitHub every tick, so restarting
+it never double-dispatches. It never runs `gh pr merge` — merge authority stays with the worktree
+agent under the five conditions above.
 
 ### Turning it on
 
