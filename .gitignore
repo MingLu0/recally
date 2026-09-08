@@ -19,6 +19,7 @@ firebase-*.json
 data/
 *.db
 *.sqlite3
+.orca/
 
 # Android / Gradle
 *.iml
@@ -31,6 +32,10 @@ local.properties
 .DS_Store
 .idea/
 .vscode/
+
+# scala-cli build output
+.scala-build/
+.bsp/
 
 # Transient pip-audit export (CI)
 backend/requirements-audit.txt

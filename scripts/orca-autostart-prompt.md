@@ -32,6 +32,9 @@ The ticket's list of named tests is the whole gate (ADR-012).
 2. For every test asserting a raise, a refusal or a negative (`*_raises`, `*_never_*`,
    `*_no_*`, `*_only_*`), confirm it **fails** first and paste that red output in the PR
    next to the green run. A negative assertion that has never failed is not evidence.
+   Both runs go under a `## TDD evidence` section (that exact heading) in the PR body —
+   red first, green second. The orchestrator checks for the heading; a PR without it is
+   not done and will be sent back.
 3. Run `uv run pytest`, `uv run ruff check . && uv run ruff format --check .` and
    `uv run mypy src/` from `backend/` (or `./gradlew :app:testDebugUnitTest` from
    `android/`), and paste the output.
@@ -44,9 +47,12 @@ Auto-merge is allowed ONLY when every one of these holds:
 
 - every test named in the ticket exists and passes, with its output pasted in the PR, and
 - CI is green, and
+- the PR carries the `## TDD evidence` section with red output preceding green, and
+- the PR is not docs-only — check `gh pr diff <pr> --name-only`: if every changed file is
+  under `docs/` or ends in `.md`, the PR is docs-only and **waits for a human** — and
 - the issue you implemented is a sub-issue (the precheck guarantees this).
 
-If all three hold, nothing needed a human's judgment:
+If all five hold, nothing needed a human's judgment:
 
     gh pr merge <pr> --squash --delete-branch
 
@@ -66,3 +72,5 @@ do not force, do not work around it. A human will pick it up.
 - Never touch a parent step issue. Those carry a `You verify` gate that only a
   human can run against the real system.
 - Never merge with a listed test unwritten, skipped or failing.
+- Never fake the red output. Writing the test after the code and pasting a green run
+  twice is detectable — commit order is in the PR history.
