@@ -16,7 +16,7 @@ google-services.json
 firebase-*.json
 
 # Local data
-data/
+/data/
 *.db
 *.sqlite3
 .orca/
