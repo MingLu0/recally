@@ -4,6 +4,7 @@ import dev.recally.data.remote.RecallyApi
 import dev.recally.data.remote.apiCall
 import dev.recally.di.IoDispatcher
 import dev.recally.domain.model.Deck
+import dev.recally.domain.model.DeckCard
 import dev.recally.domain.repository.DeckRepository
 import dev.recally.domain.repository.Result
 import kotlinx.coroutines.CoroutineDispatcher
@@ -36,6 +37,25 @@ class DeckRepositoryImpl
                     throw cancellation
                 } catch (exception: Exception) {
                     Result.NetworkError(IOException("failed to load decks", exception))
+                }
+            }
+
+        override suspend fun deckCards(
+            bookId: Long,
+            chapter: String?,
+        ): Result<List<DeckCard>> =
+            withContext(ioDispatcher) {
+                try {
+                    when (val result = apiCall { api.deckCards(bookId, chapter) }) {
+                        is Result.Success -> Result.Success(result.data.cards.map { it.toDomain() })
+                        is Result.Unauthorized -> Result.Unauthorized
+                        is Result.HttpError -> result
+                        is Result.NetworkError -> result
+                    }
+                } catch (cancellation: CancellationException) {
+                    throw cancellation
+                } catch (exception: Exception) {
+                    Result.NetworkError(IOException("failed to load cards for book $bookId", exception))
                 }
             }
     }
