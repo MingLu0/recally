@@ -8,19 +8,32 @@ Screen designs for the Android app.
 
 **If you want to see the designs**, open the canvas: <https://claude.ai/code/artifact/25472047-e5cc-473c-8709-81f1ffebf89f>
 
-Page *Dark* and page *Recally — white + teal* are current. The other pages are superseded exploration, kept so a rejected direction is not re-proposed.
+Two pages: *Dark* and *Recally — white + teal*. Superseded directions moved to `_archive/` and are no longer on the canvas.
 
-**If you want to read a screen's markup**, the artboards are plain HTML in this directory. `Rc*.dc.html` are light, `Dk*.dc.html` dark. Each is a 390×844 screen inside a decorative device frame — the frame and the tinted backdrop are presentation only, and the content inside is what Compose implements. No status bar is drawn: the OS renders its own there.
+**If you want to read a screen's markup**, the artboards are plain HTML in this directory — the table below says which file is which screen. Each is a 390×844 screen inside a decorative device frame — the frame and the tinted backdrop are presentation only, and the content inside is what Compose implements. No status bar is drawn: the OS renders its own there.
 
 ## Files
 
 | | |
 |---|---|
 | `design-system.md` | The implementable spec. Start here. |
-| `Rc*.dc.html` | Light-theme artboards — Today, Review front/flipped, Session summary, Approve, Decks, Book, Stats, Settings, States. |
-| `Dk*.dc.html`, `DarkNeutral.dc.html` | The same ten screens, dark. |
 | `canvas.json` | Artboard positions, pages, and the sticky notes. |
-| Everything else | Superseded exploration — earlier style directions and the ground-colour comparison. |
+| `_archive/` | Superseded exploration. **Not the spec** — see its README. |
+
+Every `.dc.html` in this directory (not `_archive/`) is current. Ten screens, light and dark:
+
+| Screen | Light | Dark |
+|---|---|---|
+| Today | `RcWhite.dc.html` | `DarkNeutral.dc.html` |
+| Review — front | `RcFront.dc.html` | `DkFront.dc.html` |
+| Review — flipped | `RcReview.dc.html` | `DkReview.dc.html` |
+| Session summary | `RcSheet.dc.html` | `DkSheet.dc.html` |
+| Approval queue | `RcApprove.dc.html` | `DkApprove.dc.html` |
+| Decks | `RcDecks.dc.html` | `DkDecks.dc.html` |
+| Book detail | `RcBook.dc.html` | `DkBook.dc.html` |
+| Stats | `RcStats.dc.html` | `DkStats.dc.html` |
+| Settings | `RcSettings.dc.html` | `DkSettings.dc.html` |
+| States | `RcStates.dc.html` | `DkStates.dc.html` |
 
 `recally-style-explore.html` is **not committed**. It is the canvas editor payload: the artboards plus ~2 MB of editor code, regenerated on every publish. Git cannot diff it usefully.
 
