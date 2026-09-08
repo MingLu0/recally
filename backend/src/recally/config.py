@@ -9,10 +9,11 @@ documented names are a mix of `RECALLY_*` and bare ones (`LLM_MODEL_WRITER`,
 `AGENT_CRITIC`, `NEW_CARDS_PER_DAY`), so a blanket prefix would rename half of them.
 """
 
+from datetime import timedelta
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -71,6 +72,36 @@ class Settings(BaseSettings):
     agent_writer: str = Field(default="default", validation_alias="AGENT_WRITER")
     agent_critic: str = Field(default="default", validation_alias="AGENT_CRITIC")
     agent_learner: str = Field(default="default", validation_alias="AGENT_LEARNER")
+
+    # FSRS (docs/config.md, "Scheduling and push"). Used until the optimizer writes
+    # an `fsrs_params` row; the latest row then overrides both (docs/data-model.md).
+    fsrs_desired_retention: float = Field(
+        default=0.9, gt=0, lt=1, validation_alias="FSRS_DESIRED_RETENTION"
+    )
+    # Comma-separated minutes, e.g. "1,10". A str field rather than a list because
+    # pydantic-settings parses complex env values as JSON, and the documented value
+    # is not JSON.
+    fsrs_learning_steps_minutes: str = Field(
+        default="1,10", validation_alias="FSRS_LEARNING_STEPS_MINUTES"
+    )
+
+    @field_validator("fsrs_learning_steps_minutes")
+    @classmethod
+    def _learning_steps_are_positive_minutes(cls, value: str) -> str:
+        """Fail startup on a typo rather than the first review with a broken step."""
+        steps = [part.strip() for part in value.split(",") if part.strip()]
+        if not steps or any(float(step) <= 0 for step in steps):
+            raise ValueError("must be comma-separated positive minutes, e.g. '1,10'")
+        return value
+
+    @property
+    def fsrs_learning_steps(self) -> tuple[timedelta, ...]:
+        """The parsed learning steps, e.g. "1,10" -> (1 minute, 10 minutes)."""
+        return tuple(
+            timedelta(minutes=float(part))
+            for part in self.fsrs_learning_steps_minutes.split(",")
+            if part.strip()
+        )
 
 
 @lru_cache(maxsize=1)

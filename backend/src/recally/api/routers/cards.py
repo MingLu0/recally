@@ -5,8 +5,9 @@ does any code assign `cards.status` — the design-invariant tests enforce it
 (test_design_invariants.py, `CARD_STATUS_WRITE_FILES`), which is why the mutations
 live in this module rather than in a service.
 
-`card_state` creation on approve is deliberately absent: it belongs to roadmap
-step 3 (FSRS), per issue #35. This ticket sets `status` and `approved_at` only.
+Approval is also the only entry into FSRS scheduling: it creates the `card_state`
+row (docs/data-model.md). Rejection creates nothing — the rule works in one
+direction only.
 """
 
 from typing import Literal
@@ -19,6 +20,7 @@ from recally.api.deps import SessionDep
 from recally.api.errors import ProblemDetail
 from recally.models import Card
 from recally.models.base import utc_now
+from recally.scheduling.fsrs import new_card_state
 from recally.schemas.cards import (
     ApproveCardRequest,
     CardResponse,
@@ -51,7 +53,8 @@ def approve_card(
     """Human approval, with optional edits (docs/api-spec.md).
 
     Edits overwrite `front`/`back`; `original_front`/`original_back` keep the
-    Writer's text for the Learner. `card_state` (FSRS entry) arrives in step 3.
+    Writer's text for the Learner. Approval enters the card into FSRS: the
+    `card_state` row is created `learning` at step 0, due at the approval time.
     """
     card = _queued_card(session, card_id)
     if body is not None:
@@ -60,7 +63,9 @@ def approve_card(
         if body.back is not None:
             card.back = body.back
     card.status = "approved"
-    card.approved_at = utc_now()
+    approved_at = utc_now()
+    card.approved_at = approved_at
+    session.add(new_card_state(card_id=card.id, due=approved_at, user_id=card.user_id))
     session.commit()
     return CardResponse.from_card(card)
 
