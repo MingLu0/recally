@@ -4,9 +4,11 @@ import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
+import dev.recally.data.repository.ApprovalRepositoryImpl
 import dev.recally.data.repository.CardRepositoryImpl
 import dev.recally.data.repository.DeckRepositoryImpl
 import dev.recally.data.repository.StatsRepositoryImpl
+import dev.recally.domain.repository.ApprovalRepository
 import dev.recally.domain.repository.CardRepository
 import dev.recally.domain.repository.DeckRepository
 import dev.recally.domain.repository.StatsRepository
@@ -31,4 +33,8 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindStatsRepository(impl: StatsRepositoryImpl): StatsRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindApprovalRepository(impl: ApprovalRepositoryImpl): ApprovalRepository
 }

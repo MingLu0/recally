@@ -35,10 +35,14 @@ data class ApproveCardRequest(
     val back: String? = null,
 )
 
-/** `POST /cards/{id}/reject` request — the reason feeds the Learner. */
+/**
+ * `POST /cards/{id}/reject` request — the reason is optional
+ * (docs/android.md, "Screens → 3. Approval queue") and feeds the Learner when
+ * given. Null is dropped from the body (`explicitNulls = false`).
+ */
 @Serializable
 data class RejectCardRequest(
-    val reason: String,
+    val reason: String? = null,
 )
 
 /**

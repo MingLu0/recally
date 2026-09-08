@@ -12,6 +12,8 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
+import dev.recally.ui.screens.approve.ApproveScreen
+import dev.recally.ui.screens.approve.ApproveViewModel
 import dev.recally.ui.screens.decks.BookDetailScreen
 import dev.recally.ui.screens.decks.DecksScreen
 import dev.recally.ui.screens.decks.DecksViewModel
@@ -50,7 +52,24 @@ fun RecallyNavHost(
         }
         composable(Screen.Review.route) { }
         composable(Screen.SessionSummary.route) { }
-        composable(Screen.Approve.route) { }
+        composable(Screen.Approve.route) {
+            val approveViewModel: ApproveViewModel = hiltViewModel()
+            val approveUiState by approveViewModel.uiState.collectAsStateWithLifecycle()
+
+            ApproveScreen(
+                uiState = approveUiState,
+                onFilterChange = approveViewModel::onFilterChange,
+                onToggleHighlights = approveViewModel::onToggleHighlights,
+                onApproveCard = approveViewModel::approveCard,
+                onStartEdit = approveViewModel::onStartEdit,
+                onDismissEdit = approveViewModel::onDismissEdit,
+                onEditCard = approveViewModel::editCard,
+                onRejectCard = approveViewModel::rejectCard,
+                onOpenSettings = { navController.navigate(Screen.Settings.route) },
+                onNavigateBack = { navController.popBackStack() },
+                onRetry = approveViewModel::refresh,
+            )
+        }
         composable(Screen.Decks.route) {
             val decksViewModel: DecksViewModel = hiltViewModel()
             val decksUiState by decksViewModel.uiState.collectAsStateWithLifecycle()
