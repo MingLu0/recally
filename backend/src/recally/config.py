@@ -12,6 +12,7 @@ documented names are a mix of `RECALLY_*` and bare ones (`LLM_MODEL_WRITER`,
 from datetime import timedelta
 from functools import lru_cache
 from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -41,6 +42,9 @@ class Settings(BaseSettings):
         gt=0,
         validation_alias="RECALLY_WATCH_DEBOUNCE_MS",
     )
+    # IANA zone for local day boundaries (docs/config.md): bury's next-midnight,
+    # one-push-per-day, streaks, new-card allotment.
+    recally_timezone: str = Field(default="Pacific/Auckland", validation_alias="RECALLY_TIMEZONE")
 
     # Per-role model tiers (docs/config.md): cheap for Curator/Critic, stronger for
     # Writer/Learner. The registry passes the resolved one to `llm.py` per call.
@@ -84,6 +88,16 @@ class Settings(BaseSettings):
     fsrs_learning_steps_minutes: str = Field(
         default="1,10", validation_alias="FSRS_LEARNING_STEPS_MINUTES"
     )
+
+    @field_validator("recally_timezone")
+    @classmethod
+    def _timezone_must_resolve(cls, value: str) -> str:
+        """Fail startup on a typo rather than computing bury boundaries in the wrong zone."""
+        try:
+            ZoneInfo(value)
+        except ZoneInfoNotFoundError:
+            raise ValueError(f"must be an IANA timezone name, got {value!r}") from None
+        return value
 
     @field_validator("fsrs_learning_steps_minutes")
     @classmethod
