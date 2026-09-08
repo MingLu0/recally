@@ -24,7 +24,10 @@ REF_AGENT_SEAM = "docs/decisions/007-agent-protocol-registry.md; AGENTS.md, 'Des
 REF_LLM = "AGENTS.md, hard rule 3; docs/decisions/003-litellm-provider-agnostic.md"
 REF_STATUS = "AGENTS.md, hard rules 1 and 9; docs/backend.md, 'Module rules' 2"
 
-CARD_STATUS_WRITE_FILES = {"recally.pipeline", "recally.api.routers.cards"}
+# The guarded status writes live in the pipeline (into pending_review/needs_human
+# only) and in services/cards.py — the single approval-gate implementation both
+# human-decision entry points call (`api/routers/cards.py` and `recally/cli.py`).
+CARD_STATUS_WRITE_FILES = {"recally.pipeline", "recally.services.cards"}
 GUARDED_CARD_STATUSES = {"approved", "rejected"}
 PROVIDER_SDKS = ("anthropic", "openai", "google.generativeai", "cohere")
 
@@ -233,10 +236,11 @@ def _card_status_writes(path: Path) -> Iterator[int]:
                     yield node.lineno
 
 
-def test_only_the_pipeline_and_api_assign_card_status() -> None:
+def test_only_the_pipeline_and_approval_gate_assign_card_status() -> None:
     """Nothing schedules a card without human approval: `approved`/`rejected` writes
-    live in `pipeline.py` (into `pending_review`/`needs_human` only) and the review
-    route; agents can never set them."""
+    live in `services/cards.py` (the gate shared by the API route and the CLI —
+    `pipeline.py` writes only `pending_review`/`needs_human`), and agents can never
+    set them."""
     offenders: list[str] = []
     for path in _source_files():
         module = _module_name(path)
@@ -246,9 +250,9 @@ def test_only_the_pipeline_and_api_assign_card_status() -> None:
         if lines:
             offenders.append(f"{module} lines {lines}")
     assert not offenders, (
-        f"cards.status 'approved'/'rejected' may be assigned only in pipeline.py and "
-        f"api/routers/cards.py, never under agents/; found writes in "
-        f"{'; '.join(offenders)} ({REF_STATUS})"
+        f"cards.status 'approved'/'rejected' may be assigned only in services/cards.py "
+        f"(the approval gate both human entry points call), never under agents/; found "
+        f"writes in {'; '.join(offenders)} ({REF_STATUS})"
     )
 
 

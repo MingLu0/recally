@@ -1,9 +1,10 @@
 """The approval queue (docs/api-spec.md, "Approval queue").
 
-This is the hard-rule-1 gate: only here (a human decision) and in `pipeline.py`
-does any code assign `cards.status` — the design-invariant tests enforce it
-(test_design_invariants.py, `CARD_STATUS_WRITE_FILES`), which is why the mutations
-live in this module rather than in a service.
+This is one of the two human-decision entry points of the hard-rule-1 gate (the
+`recally` CLI is the other): only a human decision moves `cards.status` to
+`approved`/`rejected`, and the writes themselves live in `services/cards.py` as
+the single implementation both entry points call — the design-invariant tests
+enforce that restriction (test_design_invariants.py, `CARD_STATUS_WRITE_FILES`).
 
 Approval is also the only entry into FSRS scheduling: it creates the `card_state`
 row (docs/data-model.md). Rejection creates nothing — the rule works in one
@@ -26,7 +27,6 @@ from recally.api.deps import ContainerDep, SessionDep
 from recally.api.errors import ProblemDetail
 from recally.models import Card
 from recally.models.base import utc_now
-from recally.scheduling.fsrs import new_card_state
 from recally.schemas.cards import (
     ApproveCardRequest,
     CardResponse,
@@ -36,7 +36,15 @@ from recally.schemas.cards import (
     RejectCardRequest,
     SuspensionResponse,
 )
-from recally.services.cards import QUEUE_STATUSES, bury, list_pending_cards, suspend, unsuspend
+from recally.services.cards import (
+    QUEUE_STATUSES,
+    bury,
+    list_pending_cards,
+    record_approval,
+    record_rejection,
+    suspend,
+    unsuspend,
+)
 
 router = APIRouter(prefix="/cards", tags=["cards"], dependencies=[ApiKeyGuard])
 
@@ -70,10 +78,7 @@ def approve_card(
             card.front = body.front
         if body.back is not None:
             card.back = body.back
-    card.status = "approved"
-    approved_at = utc_now()
-    card.approved_at = approved_at
-    session.add(new_card_state(card_id=card.id, due=approved_at, user_id=card.user_id))
+    record_approval(session, card)
     session.commit()
     return CardResponse.from_card(card)
 
@@ -82,8 +87,7 @@ def approve_card(
 def reject_card(card_id: int, session: SessionDep, body: RejectCardRequest) -> CardResponse:
     """Human rejection; the reason lands in `status_reason` and feeds the Learner."""
     card = _queued_card(session, card_id)
-    card.status = "rejected"
-    card.status_reason = body.reason
+    record_rejection(session, card, reason=body.reason)
     session.commit()
     return CardResponse.from_card(card)
 

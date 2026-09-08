@@ -18,6 +18,9 @@ dependencies = [
     "watchdog>=6",
 ]
 
+[project.scripts]
+recally = "recally.cli:entrypoint"
+
 [dependency-groups]
 dev = [
     "ruff>=0.8",
