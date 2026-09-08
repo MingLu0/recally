@@ -656,3 +656,23 @@ def test_reviews_endpoints_require_the_api_key(client: TestClient, container: Co
     assert client.get("/reviews/due").status_code == 401
     assert client.post(f"/reviews/{card.id}/rate", json=rating).status_code == 401
     assert client.post("/reviews/rate-batch", json={"ratings": []}).status_code == 401
+
+
+def test_due_timestamps_are_serialised_as_utc_with_a_z_suffix(
+    client: TestClient, container: Container
+) -> None:
+    """Every timestamp in docs/api-spec.md carries a `Z` (e.g.
+    `"2026-09-05T07:55:00Z"`).
+
+    The columns are naive UTC and Pydantic renders a naive datetime with no
+    offset at all, which `java.time.Instant.parse` rejects. The Android client
+    then fails to map the whole due response, falls back to its cache and shows
+    the offline bar against a healthy server.
+    """
+    with container.session() as session:
+        _seed_review_card(session)
+
+    body = client.get("/reviews/due", headers=AUTH).json()
+
+    due = body["cards"][0]["due"]
+    assert due.endswith("Z"), f"expected a Z-suffixed UTC timestamp, got {due!r}"

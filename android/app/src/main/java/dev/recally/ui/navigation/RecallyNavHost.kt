@@ -49,6 +49,7 @@ fun RecallyNavHost(
             TodayScreen(
                 uiState = todayUiState,
                 onStartReview = { navController.navigate(Screen.Review.route) },
+                onOpenApprove = { navController.navigate(Screen.Approve.route) },
                 onOpenSettings = { navController.navigate(Screen.Settings.route) },
                 onRetry = todayViewModel::refresh,
             )

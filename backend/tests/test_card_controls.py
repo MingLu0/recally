@@ -354,7 +354,9 @@ def test_bury_sets_next_day_boundary_in_configured_timezone(
     get_settings.cache_clear()
 
     assert response.status_code == 200
-    assert response.json() == {"suspended_until": "2026-09-09T00:00:00+12:00"}
+    # Same instant as 2026-09-09T00:00:00+12:00, rendered as UTC: every
+    # timestamp in docs/api-spec.md is Z-suffixed (schemas/types.py).
+    assert response.json() == {"suspended_until": "2026-09-08T12:00:00Z"}
     with container.session() as session:
         persisted = session.get(Card, card_id)
         assert persisted is not None

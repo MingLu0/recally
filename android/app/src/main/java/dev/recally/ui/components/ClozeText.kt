@@ -41,7 +41,13 @@ data class ClozeSegment(
     val isAnswer: Boolean,
 )
 
-private val CLOZE_MARKER = Regex("""\{\{c\d+::(.*?)}}""")
+// Both braces are escaped on each side: Android's ICU regex engine rejects a
+// bare closing `}}` that the JVM accepts, and an unescaped pattern throws
+// PatternSyntaxException on device — crashing any session with a cloze card.
+private val CLOZE_MARKER = Regex("""\{\{c\d+::(.*?)\}\}""")
+
+/** The pattern text, so a JVM test can assert the escaping device parsing needs. */
+internal fun clozeMarkerPatternForTest(): String = CLOZE_MARKER.pattern
 
 /** Splits [text] into plain runs and cloze answers; the markers are consumed. */
 fun parseClozeSegments(text: String): List<ClozeSegment> {

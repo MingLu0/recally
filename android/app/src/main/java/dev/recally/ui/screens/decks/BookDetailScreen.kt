@@ -33,6 +33,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.recally.domain.model.DeckCard
+import dev.recally.ui.components.parseClozeSegments
 import dev.recally.ui.theme.CombinedPreviews
 import dev.recally.ui.theme.RecallyRadius
 import dev.recally.ui.theme.RecallySpacing
@@ -263,15 +264,20 @@ private fun BrowseCardRow(
  * Cloze fronts never show raw braces (design-system.md, "Cloze rendering"):
  * `{{c1::answer}}` renders as the answer on `primary-wash`, weight 700,
  * `primary` text. Browse shows the revealed form — there is no flip here.
+ *
+ * Splitting is [parseClozeSegments], shared with the review session: a second
+ * copy of the pattern here previously matched only `c1` and left its closing
+ * braces unescaped, which crashes on Android's stricter ICU regex engine.
  */
 @Composable
 private fun clozeRendered(front: String): AnnotatedString {
     val colors = MaterialTheme.recallyColors
     return buildAnnotatedString {
-        var cursor = 0
-        for (match in CLOZE_MARKER.findAll(front)) {
-            append(front.substring(cursor, match.range.first))
-            val answer = match.groupValues[1]
+        for (segment in parseClozeSegments(front)) {
+            if (!segment.isAnswer) {
+                append(segment.text)
+                continue
+            }
             pushStyle(
                 SpanStyle(
                     color = colors.primary,
@@ -279,15 +285,11 @@ private fun clozeRendered(front: String): AnnotatedString {
                     fontWeight = FontWeight.Bold,
                 ),
             )
-            append(answer)
+            append(segment.text)
             pop()
-            cursor = match.range.last + 1
         }
-        append(front.substring(cursor))
     }
 }
-
-private val CLOZE_MARKER = Regex("\\{\\{c1::(.*?)}}")
 
 @Composable
 private fun EditCardDialog(

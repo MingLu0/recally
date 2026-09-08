@@ -1,10 +1,9 @@
 """`GET /ingest/status` payloads (docs/api-spec.md, "Ingestion")."""
 
-from datetime import datetime
-
 from pydantic import BaseModel
 
 from recally.models import IngestRun
+from recally.schemas.types import UtcDatetime
 
 
 class IngestStatusResponse(BaseModel):
@@ -26,8 +25,8 @@ class IngestStatusResponse(BaseModel):
     highlights_dropped: int
     cards_generated: int
     cost_microusd: int
-    started_at: datetime
-    finished_at: datetime | None
+    started_at: UtcDatetime
+    finished_at: UtcDatetime | None
     error: str | None
 
     @classmethod

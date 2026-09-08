@@ -50,6 +50,28 @@ class BottomNavDestinationTest {
     }
 
     @Test
+    fun test_approve_is_reachable_even_though_it_is_not_a_nav_destination() {
+        // docs/android.md, "Navigation": Review and Approve are entered *from*
+        // Today. Keeping Approve off the bottom bar is correct, but the route
+        // then has no entrance unless Today offers one — it was registered in
+        // the NavHost and navigated to by nothing, so the whole approval queue
+        // was dead code in the shipped app.
+        val todayScreenSource =
+            java.io.File("src/main/java/dev/recally/ui/screens/today/TodayScreen.kt").readText()
+        val navHostSource =
+            java.io.File("src/main/java/dev/recally/ui/navigation/RecallyNavHost.kt").readText()
+
+        assertTrue(
+            "TodayScreen must expose an approval-queue callback",
+            "onOpenApprove" in todayScreenSource,
+        )
+        assertTrue(
+            "the Today route must navigate to Screen.Approve",
+            "Screen.Approve" in navHostSource && "onOpenApprove" in navHostSource,
+        )
+    }
+
+    @Test
     fun test_every_destination_carries_a_label_and_distinct_icons() {
         // The spec draws an active filled-circle glyph and an inactive stroke
         // glyph per item (design-system.md, "Bottom navigation").
