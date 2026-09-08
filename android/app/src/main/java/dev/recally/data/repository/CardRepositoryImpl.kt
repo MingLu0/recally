@@ -3,13 +3,14 @@ package dev.recally.data.repository
 import androidx.room.withTransaction
 import dev.recally.data.local.RecallyDatabase
 import dev.recally.data.remote.RecallyApi
+import dev.recally.data.remote.apiCall
 import dev.recally.di.IoDispatcher
 import dev.recally.domain.model.DueSummary
 import dev.recally.domain.repository.CardRepository
 import dev.recally.domain.repository.Result
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
-import retrofit2.HttpException
+import java.io.IOException
 import javax.inject.Inject
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -17,8 +18,8 @@ import kotlin.coroutines.cancellation.CancellationException
  * Room is the source of truth for due cards (docs/android.md,
  * "Repositories own the data layer"): a successful fetch replaces the cache
  * wholesale, and a failed fetch falls back to it, so a review session works
- * fully offline. All failures surface as [Result.Failure] — nothing throws
- * (cancellation excepted).
+ * fully offline. All failures surface as a [Result] failure case — nothing
+ * throws (cancellation excepted).
  */
 class CardRepositoryImpl
     @Inject
@@ -35,7 +36,9 @@ class CardRepositoryImpl
                 } else {
                     when (val fresh = fetchAndCache()) {
                         is Result.Success -> fresh
-                        is Result.Failure -> cached?.let { Result.Success(it) } ?: fresh
+                        is Result.Unauthorized -> cached?.let { Result.Success(it) } ?: Result.Unauthorized
+                        is Result.HttpError -> cached?.let { Result.Success(it) } ?: fresh
+                        is Result.NetworkError -> cached?.let { Result.Success(it) } ?: fresh
                     }
                 }
             }
@@ -44,21 +47,23 @@ class CardRepositoryImpl
 
         private suspend fun fetchAndCache(): Result<DueSummary> =
             try {
-                val summary = api.getDueCards().toDomain()
-                database.withTransaction {
-                    database.dueCardDao().deleteAll()
-                    database.dueCardDao().upsertAll(summary.cards.map { it.toEntity() })
-                    database.dueSummaryMetaDao().upsert(summary.toMetaEntity())
+                val result = apiCall { api.dueCards().toDomain() }
+                if (result is Result.Success) {
+                    val summary = result.data
+                    database.withTransaction {
+                        database.dueCardDao().deleteAll()
+                        database.dueCardDao().upsertAll(summary.cards.map { it.toEntity() })
+                        database.dueSummaryMetaDao().upsert(summary.toMetaEntity())
+                    }
                 }
-                Result.Success(summary)
+                result
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (exception: Exception) {
-                Result.Failure(
-                    message = exception.message ?: "failed to fetch due cards",
-                    httpStatus = (exception as? HttpException)?.code(),
-                    cause = exception,
-                )
+                // apiCall already maps HTTP and network failures; this catches
+                // anything left (e.g. a malformed body) so the repository still
+                // never throws.
+                Result.NetworkError(IOException("failed to load due cards", exception))
             }
 
         /** Null when nothing has ever been cached. */

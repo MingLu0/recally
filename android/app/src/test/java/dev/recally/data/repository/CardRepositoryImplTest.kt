@@ -3,14 +3,13 @@ package dev.recally.data.repository
 import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
-import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
 import dev.recally.data.local.RecallyDatabase
 import dev.recally.data.remote.RecallyApi
+import dev.recally.data.remote.RecallyApiFactory
 import dev.recally.domain.repository.Result
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
-import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
@@ -25,6 +24,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import retrofit2.Retrofit
+import retrofit2.converter.kotlinx.serialization.asConverterFactory
 
 /**
  * Repository tests run against an in-memory Room database and a MockWebServer
@@ -39,8 +39,6 @@ class CardRepositoryImplTest {
     private lateinit var cardRepository: CardRepositoryImpl
     private lateinit var deckRepository: DeckRepositoryImpl
 
-    private val json = Json { ignoreUnknownKeys = true }
-
     @Before
     fun setUp() {
         server = MockWebServer()
@@ -52,7 +50,7 @@ class CardRepositoryImplTest {
                 .Builder()
                 .baseUrl(server.url("/"))
                 .client(OkHttpClient())
-                .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
+                .addConverterFactory(RecallyApiFactory.json.asConverterFactory("application/json".toMediaType()))
                 .build()
                 .create(RecallyApi::class.java)
         val dispatcher = UnconfinedTestDispatcher()
@@ -72,15 +70,15 @@ class CardRepositoryImplTest {
             server.enqueue(dueSummaryResponse(cardIds = listOf(101, 102)))
             val seeded = cardRepository.dueCards(forceRefresh = true)
             assertTrue("seed fetch should succeed, was $seeded", seeded is Result.Success)
-            assertEquals(listOf(101L, 102L), (seeded as Result.Success).value.cards.map { it.id })
+            assertEquals(listOf(101L, 102L), (seeded as Result.Success).data.cards.map { it.id })
 
             // Network is now dead; the cache must answer instead.
             server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AT_START))
             val offline = cardRepository.dueCards(forceRefresh = true)
             assertTrue("offline read should succeed from Room, was $offline", offline is Result.Success)
-            assertEquals(listOf(101L, 102L), (offline as Result.Success).value.cards.map { it.id })
-            assertEquals(2, offline.value.dueCount)
-            assertEquals(listOf(1, 10), offline.value.learningStepsMinutes)
+            assertEquals(listOf(101L, 102L), (offline as Result.Success).data.cards.map { it.id })
+            assertEquals(2, offline.data.dueCount)
+            assertEquals(listOf(1, 10), offline.data.learningStepsMinutes)
         }
 
     @Test
@@ -92,7 +90,7 @@ class CardRepositoryImplTest {
             server.enqueue(dueSummaryResponse(cardIds = listOf(103)))
             val refreshed = cardRepository.dueCards(forceRefresh = true)
             assertTrue(refreshed is Result.Success)
-            assertEquals(listOf(103L), (refreshed as Result.Success).value.cards.map { it.id })
+            assertEquals(listOf(103L), (refreshed as Result.Success).data.cards.map { it.id })
 
             // The cache itself holds exactly the new set — no appended duplicates.
             assertEquals(listOf(103L), database.dueCardDao().getAll().map { it.id })
@@ -101,21 +99,22 @@ class CardRepositoryImplTest {
     @Test
     fun test_repository_returns_result_and_never_throws() =
         runTest {
-            // Network failure with an empty cache: a Result.Failure, not an exception.
+            // Network failure with an empty cache: a Result failure case, not
+            // an exception. If anything threw, runTest would fail outright.
             server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AT_START))
             val networkFailure = cardRepository.dueCards(forceRefresh = true)
-            assertTrue("expected Result.Failure, was $networkFailure", networkFailure is Result.Failure)
+            assertTrue("expected NetworkError, was $networkFailure", networkFailure is Result.NetworkError)
 
-            // HTTP 500: also a Result.Failure carrying the status, not an exception.
+            // HTTP 500: also a Result failure case carrying the status, not an exception.
             server.enqueue(MockResponse().setResponseCode(500).setBody("""{ "status": 500, "detail": "boom" }"""))
             val serverFailure = cardRepository.dueCards(forceRefresh = true)
-            assertTrue("expected Result.Failure, was $serverFailure", serverFailure is Result.Failure)
-            assertEquals(500, (serverFailure as Result.Failure).httpStatus)
+            assertTrue("expected HttpError, was $serverFailure", serverFailure is Result.HttpError)
+            assertEquals(500, (serverFailure as Result.HttpError).status)
 
             // The same contract holds for the decks repository.
             server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AT_START))
             val decksFailure = deckRepository.decks()
-            assertTrue("expected Result.Failure, was $decksFailure", decksFailure is Result.Failure)
+            assertTrue("expected NetworkError, was $decksFailure", decksFailure is Result.NetworkError)
         }
 
     private fun dueSummaryResponse(cardIds: List<Long>): MockResponse {

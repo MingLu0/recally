@@ -3,9 +3,13 @@ package dev.recally.data.remote
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
-/**
- * Wire shape for GET /decks, matching docs/api-spec.md field for field.
- */
+/** `GET /decks` response (docs/api-spec.md, "Decks & browsing"). */
+@Serializable
+data class DeckListResponse(
+    val decks: List<DeckDto>,
+)
+
+/** One book with its card counts. */
 @Serializable
 data class DeckDto(
     @SerialName("book_id") val bookId: Long,
@@ -14,7 +18,20 @@ data class DeckDto(
     val due: Int,
 )
 
+/** `GET /decks/{book_id}/cards` response. */
 @Serializable
-data class DecksDto(
-    val decks: List<DeckDto>,
+data class DeckCardsResponse(
+    val cards: List<DeckCardDto>,
+)
+
+/** One card in the per-book browse list; `suspendedUntil` is null in rotation. */
+@Serializable
+data class DeckCardDto(
+    val id: Long,
+    val type: String,
+    val front: String,
+    val back: String,
+    val chapter: String?,
+    val tags: List<String>,
+    @SerialName("suspended_until") val suspendedUntil: String?,
 )

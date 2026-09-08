@@ -15,7 +15,8 @@ venv/
 google-services.json
 firebase-*.json
 
-# Local data
+# Local data (repo root only — an unanchored `data/` would also swallow the
+# Android `dev.recally.data` package).
 /data/
 *.db
 *.sqlite3

@@ -167,6 +167,11 @@ unblocked-but-unlabelled issues, needs-human escalations, docs-only PRs parked f
 a macOS notification when that set changes. Silence means the step is done or genuinely waiting on
 workers, never that something is stuck unseen.
 
+When a new unblocked-but-unlabelled issue appears, a native list picker pops: select the ones that
+are ready, click OK, and they are labelled `ready` and dispatched on the next tick. The label stays
+the only dispatch gate; the picker just removes the typing. Dismissed issues are not re-prompted
+unless a new one unblocks.
+
 ### Turning it on
 
 The precheck runs from the repo root of the main checkout, so `scripts/` must be on `main` first.

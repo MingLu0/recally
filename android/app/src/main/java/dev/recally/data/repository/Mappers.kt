@@ -4,7 +4,7 @@ import dev.recally.data.local.DueCardEntity
 import dev.recally.data.local.DueSummaryMetaEntity
 import dev.recally.data.remote.DeckDto
 import dev.recally.data.remote.DueCardDto
-import dev.recally.data.remote.DueSummaryDto
+import dev.recally.data.remote.DueCardsResponse
 import dev.recally.domain.model.Card
 import dev.recally.domain.model.Deck
 import dev.recally.domain.model.DueSummary
@@ -27,14 +27,14 @@ fun DueCardDto.toDomain(): Card =
         back = back,
         bookId = bookId,
         book = book,
-        chapter = chapter,
+        chapter = chapter.orEmpty(),
         tags = tags,
         state = state,
         step = step,
-        due = due?.let(Instant::parse),
+        due = Instant.parse(due),
     )
 
-fun DueSummaryDto.toDomain(): DueSummary =
+fun DueCardsResponse.toDomain(): DueSummary =
     DueSummary(
         dueCount = dueCount,
         newCount = newCount,
