@@ -51,7 +51,11 @@ Dark values are **re-derived, not inverted** — each hue lifted until it carrie
 
 Rating tiles are the one component whose dark values are hand-tuned rather than mapped: their light form is an outlined tile tinted from its own semantic colour, and on dark both the fill and the border needed re-deriving so the outline still carries. See `RatingRow` below.
 
-Book cover colours are **data, not theme** — each book gets a stable colour derived from its `book_id`. Current set: `#24403A` forest, `#4A3D55` plum. Extend as a fixed ordered list; do not generate randomly, or a book's colour changes between installs.
+Book cover colours are **data, not theme** — each book gets a stable colour derived from its `book_id`. Light `#24403A` forest / `#4A3D55` plum; dark `#2F5349` / `#5D4D6B`, lifted so spines stay visible. Extend as a fixed ordered list; do not generate randomly, or a book's colour changes between installs.
+
+### Presentation only — not implemented
+
+The artboards wrap each screen in a device frame on a tinted backdrop so the canvas reads as a product shot. **None of this is app UI.** Frame `#000000`; backdrop `#E8E8E6` light, `#2A2D2B` dark; frame radii 44/56px. An implementer should build only what is inside the frame — and note that no status bar is drawn there, because the OS renders its own.
 
 ### Rules
 
@@ -86,7 +90,7 @@ All ten current artboards conform to this scale — verified 2026-09-07. Anythin
 ## Spacing, radius, elevation
 
 - **Spacing scale**: 4, 8, 12, 14, 16, 20, 22, 26 dp. Screen horizontal padding is **20dp** throughout. Card interior padding is **14dp**, 22dp for the review card.
-- **Radius**: `sm` 5dp (badges, chart bar caps), `md` 12dp (cards, buttons, tiles), `lg` 22dp (bottom sheet top corners), `pill` 999dp (progress bars, filter chips, circular icon backgrounds). Book spines are the one exception: `3px 6px 6px 3px`, asymmetric so the bound edge reads as a spine. All ten artboards conform — verified 2026-09-07.
+- **Radius**: `sm` 5dp (badges, chart bar caps), `md` 12dp (cards, buttons, tiles), `lg` 22dp (bottom sheet top corners), `pill` 999dp (progress bars, filter chips). A circular icon background is half its own size — 17dp on the 34dp nav circle — which is `pill` in effect; either spelling is fine. Book spines are the one exception: `3px 6px 6px 3px`, asymmetric so the bound edge reads as a spine. All ten artboards conform — verified 2026-09-07.
 - **Elevation**: none. No `Modifier.shadow` anywhere in the app. Separation is `line`.
 - **Bottom inset**: 26dp below the nav bar and above sheet bottoms, for the gesture bar.
 
