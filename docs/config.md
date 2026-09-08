@@ -10,7 +10,7 @@ All runtime settings are environment variables, read once at startup. Locally th
 | `RECALLY_DATABASE_URL` | `sqlite:///data/recally.db` | storage | Any SQLAlchemy URL; Postgres in phase 2/3 |
 | `RECALLY_WATCH_DIR` | `~/Downloads` | watcher | Folder scanned for `*oreilly-annotations*.csv` |
 | `RECALLY_WATCH_DEBOUNCE_MS` | `2000` | watcher | Wait after `on_moved` before reading the file |
-| `RECALLY_TIMEZONE` | `Pacific/Auckland` | scheduler, stats | Day boundaries for "one push per day", streaks, new-card allotment |
+| `RECALLY_TIMEZONE` | `Pacific/Auckland` | scheduler, stats, card controls | Day boundaries for "one push per day", streaks, new-card allotment, bury's next-midnight (ADR-008) |
 
 ## LLM (LiteLLM)
 

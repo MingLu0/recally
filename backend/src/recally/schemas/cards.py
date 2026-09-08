@@ -71,8 +71,29 @@ class RejectCardRequest(BaseModel):
         return value
 
 
+class PatchCardRequest(BaseModel):
+    """A post-approval wording fix (ADR-008); omitted fields are left alone."""
+
+    front: str | None = None
+    back: str | None = None
+    tags: list[str] | None = None
+
+    @field_validator("front", "back")
+    @classmethod
+    def not_blank(cls, value: str | None) -> str | None:
+        if value is not None and not value.strip():
+            raise ValueError("must not be blank")
+        return value
+
+
+class SuspensionResponse(BaseModel):
+    """The new `suspended_until` after a bury, suspend or unsuspend (null = in rotation)."""
+
+    suspended_until: datetime | None
+
+
 class CardResponse(BaseModel):
-    """The card after an approve/reject, so the client can update its cache."""
+    """The card after an approve/reject/edit, so the client can update its cache."""
 
     id: int
     status: str
@@ -83,6 +104,8 @@ class CardResponse(BaseModel):
     original_back: str
     status_reason: str | None
     approved_at: datetime | None
+    # Set by a post-approval edit (ADR-008); the Learner segments these cards.
+    edited_at: datetime | None
 
     @classmethod
     def from_card(cls, card: Card) -> "CardResponse":
@@ -96,4 +119,5 @@ class CardResponse(BaseModel):
             original_back=card.original_back,
             status_reason=card.status_reason,
             approved_at=card.approved_at,
+            edited_at=card.edited_at,
         )
