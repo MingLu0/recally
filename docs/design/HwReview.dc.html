@@ -1,0 +1,117 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&display=swap">
+  <style>
+    body { margin: 0; font-family: 'Inter Tight', system-ui, sans-serif; }
+    a { color: #0b63f6; } a:hover { color: #0a4fc4; }
+  </style>
+</helmet>
+
+<div style="width: 560px; height: 1040px; background: #ece7df; display: flex; align-items: center; justify-content: center; box-sizing: border-box; overflow: hidden; position: relative;">
+
+  <div style="position: relative; width: 414px; height: 868px; background: #17181a; border-radius: 56px; padding: 12px; box-sizing: border-box; box-shadow: 0 24px 60px rgba(40,35,28,0.3), 0 4px 14px rgba(40,35,28,0.16);">
+    <div style="width: 390px; height: 844px; background: #fdf8f0; border-radius: 44px; overflow: hidden; position: relative;">
+
+      <!-- SCREEN CONTENT — no status bar drawn -->
+      <div style="width: 390px; height: 844px; display: flex; flex-direction: column; box-sizing: border-box; background: #fdf8f0;">
+
+        <!-- header: close + segmented progress + count -->
+        <div style="padding: 62px 20px 14px 20px; display: flex; flex-direction: column; gap: 13px; border-bottom: 1px solid #e8e1d6;">
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <div style="width: 36px; height: 36px; display: flex; align-items: center; justify-content: flex-start;">
+              <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#17181a" stroke-width="2.4" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </div>
+            <span style="font-size: 15px; font-weight: 700; color: #17181a; letter-spacing: -0.2px;">7 of 12</span>
+            <div style="width: 36px; height: 36px; display: flex; align-items: center; justify-content: flex-end;">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9b948a" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="1.4" fill="#9b948a"></circle><circle cx="12" cy="5" r="1.4" fill="#9b948a"></circle><circle cx="12" cy="19" r="1.4" fill="#9b948a"></circle></svg>
+            </div>
+          </div>
+          <div style="display: flex; gap: 3px;">
+            <div style="flex-grow: 1; height: 5px; border-radius: 3px; background: #16a34a;"></div>
+            <div style="flex-grow: 1; height: 5px; border-radius: 3px; background: #16a34a;"></div>
+            <div style="flex-grow: 1; height: 5px; border-radius: 3px; background: #f97316;"></div>
+            <div style="flex-grow: 1; height: 5px; border-radius: 3px; background: #16a34a;"></div>
+            <div style="flex-grow: 1; height: 5px; border-radius: 3px; background: #16a34a;"></div>
+            <div style="flex-grow: 1; height: 5px; border-radius: 3px; background: #16a34a;"></div>
+            <div style="flex-grow: 1; height: 5px; border-radius: 3px; background: #0b63f6;"></div>
+            <div style="flex-grow: 1; height: 5px; border-radius: 3px; background: #e8e1d6;"></div>
+            <div style="flex-grow: 1; height: 5px; border-radius: 3px; background: #e8e1d6;"></div>
+            <div style="flex-grow: 1; height: 5px; border-radius: 3px; background: #e8e1d6;"></div>
+            <div style="flex-grow: 1; height: 5px; border-radius: 3px; background: #e8e1d6;"></div>
+            <div style="flex-grow: 1; height: 5px; border-radius: 3px; background: #e8e1d6;"></div>
+          </div>
+        </div>
+
+        <!-- card -->
+        <div style="flex-grow: 1; padding: 18px 20px 0 20px; display: flex; flex-direction: column; min-height: 0;">
+          <div style="flex-grow: 1; background: #ffffff; border: 1px solid #e2dbd0; border-radius: 12px; display: flex; flex-direction: column; min-height: 0; overflow: hidden;">
+
+            <!-- book strip -->
+            <div style="padding: 13px 16px; border-bottom: 1px solid #f0ebe2; display: flex; align-items: center; gap: 10px;">
+              <div style="width: 26px; height: 34px; border-radius: 3px; background: #1e3a5f; flex-shrink: 0;"></div>
+              <div style="display: flex; flex-direction: column; gap: 1px; min-width: 0;">
+                <span style="font-size: 13px; font-weight: 700; color: #17181a; letter-spacing: -0.2px;">Evals for AI Engineers</span>
+                <span style="font-size: 12px; font-weight: 400; color: #9b948a;">3. Error Analysis</span>
+              </div>
+            </div>
+
+            <div style="flex-grow: 1; padding: 22px 18px; display: flex; flex-direction: column; gap: 18px; min-height: 0;">
+
+              <div style="font-size: 24px; line-height: 32px; font-weight: 800; color: #17181a; letter-spacing: -0.7px; text-wrap: pretty;">Why evaluate traces rather than individual steps?</div>
+
+              <div style="height: 1px; background: #f0ebe2;"></div>
+
+              <div style="display: flex; flex-direction: column; gap: 9px;">
+                <span style="font-size: 12px; font-weight: 700; color: #16a34a; letter-spacing: 0.8px;">ANSWER</span>
+                <div style="font-size: 17px; line-height: 27px; font-weight: 400; color: #3d3a35; text-wrap: pretty;">An LLM pipeline's behavior only makes sense end-to-end.</div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+        <!-- rating: flat blocks, Headway's colour discipline -->
+        <div style="padding: 16px 20px 26px 20px; display: flex; flex-direction: column; gap: 10px;">
+          <span style="font-size: 13px; font-weight: 500; color: #7d766c; text-align: center;">How well did you know it?</span>
+          <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px;">
+            <div style="height: 66px; border-radius: 10px; background: #ffffff; border: 1.5px solid #f0c4bd; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;">
+              <span style="font-size: 15px; font-weight: 800; color: #dc2626; letter-spacing: -0.3px;">Again</span>
+              <span style="font-size: 11px; font-weight: 500; color: #b39b98;">&lt;1m</span>
+            </div>
+            <div style="height: 66px; border-radius: 10px; background: #ffffff; border: 1.5px solid #f5d5b0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;">
+              <span style="font-size: 15px; font-weight: 800; color: #ea580c; letter-spacing: -0.3px;">Hard</span>
+              <span style="font-size: 11px; font-weight: 500; color: #b8a48f;">10m</span>
+            </div>
+            <div style="height: 66px; border-radius: 10px; background: #16a34a; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;">
+              <span style="font-size: 15px; font-weight: 800; color: #ffffff; letter-spacing: -0.3px;">Good</span>
+              <span style="font-size: 11px; font-weight: 500; color: #a7e6c2;">4d</span>
+            </div>
+            <div style="height: 66px; border-radius: 10px; background: #ffffff; border: 1.5px solid #b8d4f5; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;">
+              <span style="font-size: 15px; font-weight: 800; color: #0b63f6; letter-spacing: -0.3px;">Easy</span>
+              <span style="font-size: 11px; font-weight: 500; color: #9badc4;">9d</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

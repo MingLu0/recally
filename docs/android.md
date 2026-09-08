@@ -2,6 +2,14 @@
 
 Native Android. Kotlin + Jetpack Compose + Material 3.
 
+## Design
+
+Visual spec: [`docs/design/design-system.md`](design/design-system.md) — colour tokens (light and dark), type scale, component specs, and the per-screen states. Screen mockups live on a [design canvas](https://claude.ai/code/artifact/25472047-e5cc-473c-8709-81f1ffebf89f); artboard sources are committed under `docs/design/`.
+
+That document also lists the API fields the design needs but `api-spec.md` does not yet provide — tracked as G1–G6 in [roadmap.md](roadmap.md), *Feature gaps*. Resolve those before building.
+
+Screen composables are pure (see *Architecture* below), so each artboard maps to a `@Preview` with a hand-built `UiState`.
+
 ## Architecture
 
 Clean architecture with the scaffold pattern, carried over from the SummarizeAI app so both projects read the same way. Three layers, dependencies point inward: `ui` → `domain` → `data`. Nothing in `data/` imports Compose; nothing in `ui/` imports Retrofit or Room.

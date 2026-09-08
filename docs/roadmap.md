@@ -40,6 +40,7 @@ Use the backend through the CLI for ~14 days. Before starting, write down the nu
 ### 4. Android MVP
 - Settings (base URL + API key + connection test), Today, Review, Approval Queue screens; Retrofit client; Room cache; LAN cleartext network security config.
 - Card controls in the UI: bury and edit from the review session, edit/suspend/unsuspend from Decks (ADR-008).
+- Build to [design-system.md](design/design-system.md) — colour tokens (light and dark), type scale, component specs and the required states are settled there. Resolve **G1–G6** in *Feature gaps* below first, or drop the elements that depend on them.
 - **Tests**: unit tests for the sync queue (ratings stored with the client `rated_at` and `device_id`, flushed via `rate-batch`, a retried flush sends the same payload, results matched by position, items returning `ok: true` or a 4xx `status` dequeued while 5xx items are kept) and for same-session re-queueing from `learning_steps_minutes` (a card at `step` 1 waits the step-1 interval, not step 0; offline, the local step counter advances without a rate response and stops re-queueing past the last step).
 - **You verify**: enter the Mac's LAN URL and key in Settings; the connection test passes. Put the phone in aeroplane mode, review five cards, reconnect. `review_logs` has five rows with the phone's `device_id` and the offline `rated_at` values, and the app's next due matches `GET /reviews/due`.
 
@@ -57,6 +58,58 @@ Use the backend through the CLI for ~14 days. Before starting, write down the nu
 - Stage B writing versioned `writer_guidance`; leech rewrites; lapse rate by guidance version on the Stats screen. Expected months after 6a, once there is history.
 - **Tests**: below `LEARNER_MIN_REVIEWS` no `writer_guidance` row is written and no LLM call is made; above it, with a mocked `llm.py`, the job writes `writer_guidance` v2 and never edits v1; the next Writer call's `request` contains the v2 text; a leech rewrite approved by the human sets the old card `rejected` with `status_reason="superseded by <id>"`.
 - **You verify**: run `POST /jobs/run {"job":"learner"}`, then ingest a new chapter. `writer_guidance` has a v2 row, new cards in the queue show `guidance_version: 2`, and the Stats screen shows lapse rate split by version.
+
+## Feature gaps — API fields the Android design needs
+
+The Android design ([design-system.md](design/design-system.md)) displays six things no documented endpoint returns. They were found by auditing the mockups against [api-spec.md](api-spec.md) on 2026-09-07 and are **kept in the design deliberately** — the screens are built as intended and these endpoints catch up. Each must be resolved before the step 4 gate passes, either by extending the endpoint or by removing the element.
+
+Ordered by how much depends on it.
+
+### G1. Pending counts
+Today's "8 to approve" / "3 need you" tiles, the Approve header's "8 pending", and the summary sheet's "Review 8 pending cards" all need a count without fetching the list. `GET /cards/pending` returns `cards[]` and no counts; calling `.size` on two full lists is wrong on a home screen that must render before the queue is reachable (`android.md:34`, `android.md:45`).
+
+**Add** `counts: { "pending_review": 5, "needs_human": 3 }` to `GET /cards/pending`, or a separate `GET /cards/pending/count`. One gap, three screens.
+- **Tests**: with 5 `pending_review` and 3 `needs_human` rows, the counts field matches; approving one card decrements the right bucket.
+
+### G2. Per-book progress
+Today's book rail shows a percentage per book (62%, 24%). `GET /decks` returns `{ book_id, title, total, due }` — no progress concept exists anywhere.
+
+This needs a **definition before an endpoint**: `docs/data-model.md` does not say what "62% of a book" means. Candidates: share of cards in FSRS `review` state (rather than `new`/`learning`); share reviewed at least once; mean retrievability. The first is the most defensible and the cheapest to compute.
+
+**Add** the chosen definition to `data-model.md`, then a `progress` field to `GET /decks`.
+- **Tests**: a book with 48 cards, 30 in `review` state, reports the documented figure; a book with no cards reports 0 rather than dividing by zero.
+
+### G3. Next due timestamp
+The session-summary sheet says "Next card due in 4 hours". `POST /reviews/{id}/rate` returns `next_due` for one card, and `stats.forecast` is day-granularity — neither yields an hours-away figure across the collection.
+
+**Add** `next_due_at` (ISO timestamp, nullable when nothing is scheduled) to `GET /stats` or `GET /reviews/due`.
+- **Tests**: with cards due at two future times, the field is the earlier; with none due, it is null and the UI shows its empty state rather than "in 0 hours".
+
+### G4. Bulk approve
+The Approve screen's "Approve 5 ready" acts on several cards at once. `POST /cards/{id}/approve` is single-card; no batch endpoint exists.
+
+Not a hard-rule-1 problem — a human tapping the button is human approval, and it is unrelated to `AUTO_APPROVE_ROUND1_ACCEPT`. But the client should not silently fan out N calls without that being a decision. **Either** add `POST /cards/approve-batch` taking `card_ids`, **or** record in `api-spec.md` that the client fans out and how it handles a partial failure.
+
+**Whichever is chosen, `needs_human` cards must be excluded from any bulk path** and opened individually (hard rule 1).
+- **Tests**: a batch containing a `needs_human` id is rejected or skips that card, and never sets it `approved`. A partially-failing batch leaves no card in an inconsistent state.
+
+### G5. `GET /decks/{book_id}/cards` has no documented response
+[api-spec.md](api-spec.md) names the endpoint and its `?chapter=` filter but never gives a response shape. The book-detail screen needs, per card: `id`, `type`, `front`, `back`, `chapter`, and the FSRS `state` and `due` from `card_state`.
+
+`due` is **servable** — `card_state.due` exists ([data-model.md](data-model.md)) — so showing it does not breach hard rule 5, provided the value comes from the server rather than being computed on the phone. Chapter counts and per-chapter due counts on the book screen are then derivable client-side from a complete list; the Decks list's per-book chapter count (`9 chapters`) still needs a field on `GET /decks`.
+
+**Add** the response shape to `api-spec.md`, plus `chapters` (count) to `GET /decks`.
+- **Tests**: the response includes `state` and `due` for a scheduled card and omits/nulls `due` for one at learning step 0. Chapter grouping in the client reproduces the server's `export_position` order.
+
+### G6. Truncated count per book
+Decks shows "2 TRUNCATED" per book. `truncated` is a `highlights` column and `GET /cards/pending` exposes it only for pending cards — nothing aggregates it across a whole book including approved cards.
+
+**Either** add a `truncated` count to `GET /decks`, **or** drop the badge from the Decks screen. It is informational only; hard rule 7 is not at stake, since nothing in the UI offers to reconstruct the clipped text.
+- **Tests**: a book with two truncated source highlights reports 2, whether or not those cards are approved.
+
+### Also open (design decisions, not API gaps)
+
+Recorded in `design-system.md` under *Open decisions*: dark theme is undesigned and needed before release; and the bottom navigation, the session progress indicator, the separate "needs you" filter, and the summary sheet's three-bucket rating grouping are all additions to `android.md` rather than things it specifies. Each needs that doc updated or the element dropped.
 
 ## Productionization phases
 

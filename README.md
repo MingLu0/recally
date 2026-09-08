@@ -11,6 +11,7 @@ Turn your reading highlights into lasting memory. Recally ingests O'Reilly annot
 - [Data model](docs/data-model.md) — schema & FSRS state
 - [API spec](docs/api-spec.md) — REST endpoints
 - [Android app](docs/android.md) — screens & sync
+- [Design system](docs/design/design-system.md) — colour, type, components & the design canvas
 - [Config](docs/config.md) — env vars & defaults
 - [Roadmap](docs/roadmap.md) — build order & productionization
 - [Workflow](docs/workflow.md) — tooling and the issue → worktree → PR loop

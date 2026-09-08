@@ -1,0 +1,134 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&display=swap">
+  <style>
+    body { margin: 0; font-family: 'Inter Tight', system-ui, sans-serif; }
+    a { color: #4fb894; } a:hover { color: #4fb894; }
+  </style>
+</helmet>
+
+<div style="width: 560px; height: 1040px; background: #2a2d2b; display: flex; align-items: center; justify-content: center; box-sizing: border-box; overflow: hidden; position: relative;">
+
+  <div style="position: relative; width: 414px; height: 868px; background: #000000; border-radius: 56px; padding: 12px; box-sizing: border-box; box-shadow: 0 24px 60px rgba(40,40,38,0.3), 0 4px 14px rgba(40,40,38,0.16);">
+    <div style="width: 390px; height: 844px; background: #121413; border-radius: 44px; overflow: hidden; position: relative;">
+
+      <!-- SCREEN CONTENT — no status bar drawn -->
+      <div style="width: 390px; height: 844px; display: flex; flex-direction: column; box-sizing: border-box; background: #121413;">
+
+        <!-- book header -->
+        <div style="padding: 62px 20px 15px 20px; border-bottom: 1px solid #2c302e; display: flex; flex-direction: column; gap: 14px;">
+          <div style="display: flex; align-items: center; gap: 13px;">
+            <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#ecefed" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+            <span style="font-size: 13px; font-weight: 600; color: #8b928f;">Decks</span>
+          </div>
+          <div style="display: flex; gap: 13px;">
+            <div style="width: 46px; height: 62px; border-radius: 3px 6px 6px 3px; background: #2f5349; flex-shrink: 0; display: flex; align-items: flex-end; padding: 7px 6px; box-sizing: border-box;">
+              <span style="font-size: 14px; font-weight: 800; color: #121413;">E</span>
+            </div>
+            <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px;">
+              <span style="font-size: 19px; font-weight: 800; color: #ecefed; letter-spacing: -0.5px; line-height: 24px;">Evals for AI Engineers</span>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <div style="flex-grow: 1; height: 5px; background: #2c302e; border-radius: 999px; overflow: hidden; display: flex;">
+                  <div style="width: 62%; background: #4fc78f; border-radius: 999px;"></div>
+                </div>
+                <span style="font-size: 12px; font-weight: 700; color: #4fc78f;">62%</span>
+              </div>
+              <span style="font-size: 12px; font-weight: 400; color: #8b928f;">48 cards &middot; 6 due &middot; read-only</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="flex-grow: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column;">
+
+          <!-- expanded chapter -->
+          <div style="padding: 15px 20px 9px 20px; display: flex; align-items: center; gap: 9px;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#adb3b0" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            <span style="font-size: 14px; font-weight: 700; color: #ecefed; letter-spacing: -0.2px;">3. Error Analysis</span>
+            <span style="font-size: 13px; font-weight: 400; color: #8b928f;">7 cards</span>
+            <div style="margin-left: auto; border-radius: 5px; background: #153a30; padding: 2px 7px;">
+              <span style="font-size: 11px; font-weight: 700; color: #4fb894; letter-spacing: 0.3px;">2 DUE</span>
+            </div>
+          </div>
+
+          <div style="padding: 0 20px; display: flex; flex-direction: column; gap: 9px;">
+
+            <div style="background: #232725; border: 1px solid #2c302e; border-radius: 12px; padding: 13px 14px; display: flex; flex-direction: column; gap: 8px;">
+              <div style="display: flex; align-items: center; gap: 7px;">
+                <div style="border-radius: 5px; border: 1px solid #2c302e; padding: 2px 7px;">
+                  <span style="font-size: 11px; font-weight: 600; color: #8f9693; letter-spacing: 0.3px;">Q&amp;A</span>
+                </div>
+                <span style="margin-left: auto; font-size: 12px; font-weight: 500; color: #8b928f;">Due in 4h</span>
+              </div>
+              <span style="font-size: 15px; line-height: 22px; font-weight: 600; color: #ecefed; text-wrap: pretty;">Why evaluate traces rather than individual steps?</span>
+              <span style="font-size: 13px; line-height: 20px; font-weight: 400; color: #8f9693; text-wrap: pretty;">An LLM pipeline's behavior only makes sense end-to-end.</span>
+            </div>
+
+            <div style="background: #232725; border: 1px solid #2c302e; border-radius: 12px; padding: 13px 14px; display: flex; flex-direction: column; gap: 8px;">
+              <div style="display: flex; align-items: center; gap: 7px;">
+                <div style="border-radius: 5px; border: 1px solid #2c302e; padding: 2px 7px;">
+                  <span style="font-size: 11px; font-weight: 600; color: #8f9693; letter-spacing: 0.3px;">CLOZE</span>
+                </div>
+                <div style="border-radius: 5px; background: #3a2a1c; padding: 2px 7px;">
+                  <span style="font-size: 11px; font-weight: 700; color: #e8975f; letter-spacing: 0.3px;">TRUNCATED SOURCE</span>
+                </div>
+                <span style="margin-left: auto; font-size: 12px; font-weight: 500; color: #8b928f;">9 Sep</span>
+              </div>
+              <span style="font-size: 15px; line-height: 23px; font-weight: 600; color: #ecefed; text-wrap: pretty;">Error analysis starts by reading <span style="background: #153a30; border-bottom: 2px solid #4fb894; border-radius: 5px; padding: 1px 6px; font-weight: 700; color: #4fb894;">traces</span>, not metrics.</span>
+            </div>
+
+            <div style="background: #232725; border: 1px solid #2c302e; border-radius: 12px; padding: 13px 14px; display: flex; flex-direction: column; gap: 8px; opacity: 0.62;">
+              <div style="display: flex; align-items: center; gap: 7px;">
+                <div style="border-radius: 5px; border: 1px solid #2c302e; padding: 2px 7px;">
+                  <span style="font-size: 11px; font-weight: 600; color: #8f9693; letter-spacing: 0.3px;">Q&amp;A</span>
+                </div>
+                <div style="border-radius: 5px; background: #232725; padding: 2px 7px;">
+                  <span style="font-size: 11px; font-weight: 700; color: #8f9693; letter-spacing: 0.3px;">LEARNING</span>
+                </div>
+                <span style="margin-left: auto; font-size: 12px; font-weight: 500; color: #8b928f;">Step 1</span>
+              </div>
+              <span style="font-size: 15px; line-height: 22px; font-weight: 600; color: #ecefed; text-wrap: pretty;">What makes an error taxonomy useful rather than merely tidy?</span>
+            </div>
+
+          </div>
+
+          <!-- collapsed chapters -->
+          <div style="padding: 16px 20px 0 20px; display: flex; flex-direction: column;">
+            <div style="border-top: 1px solid #2c302e; padding: 13px 0; display: flex; align-items: center; gap: 9px;">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8b928f" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+              <span style="font-size: 14px; font-weight: 600; color: #c9cecb; letter-spacing: -0.2px;">4. Evaluators</span>
+              <span style="font-size: 13px; font-weight: 400; color: #8b928f;">6 cards</span>
+            </div>
+            <div style="border-top: 1px solid #2c302e; padding: 13px 0; display: flex; align-items: center; gap: 9px;">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8b928f" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+              <span style="font-size: 14px; font-weight: 600; color: #c9cecb; letter-spacing: -0.2px;">5. Datasets</span>
+              <span style="font-size: 13px; font-weight: 400; color: #8b928f;">4 cards</span>
+              <div style="margin-left: auto; border-radius: 5px; background: #153a30; padding: 2px 7px;">
+                <span style="font-size: 11px; font-weight: 700; color: #4fb894; letter-spacing: 0.3px;">4 DUE</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>
