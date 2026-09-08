@@ -258,7 +258,7 @@ class RatingOutboxTest {
         // connectivity (docs/android.md, "Offline-first sync") — the database
         // has exactly one outbox table and it can hold nothing but a rating.
         val tables = mutableListOf<String>()
-        database.query("SELECT name FROM sqlite_master WHERE type = 'table'", null).use { cursor ->
+        rawQuery("SELECT name FROM sqlite_master WHERE type = 'table'").use { cursor ->
             while (cursor.moveToNext()) tables += cursor.getString(0)
         }
         val internalTables = setOf("room_master_table", "android_metadata")
@@ -266,7 +266,7 @@ class RatingOutboxTest {
         assertEquals("ratings are the only queued write", listOf("rating_outbox"), outboxTables)
 
         val columns = mutableListOf<String>()
-        database.query("PRAGMA table_info(rating_outbox)", null).use { cursor ->
+        rawQuery("PRAGMA table_info(rating_outbox)").use { cursor ->
             while (cursor.moveToNext()) columns += cursor.getString(1)
         }
         assertEquals(
@@ -318,6 +318,9 @@ class RatingOutboxTest {
     // ------------------------------------------------------------------
     // Helpers
     // ------------------------------------------------------------------
+
+    /** Schema inspection via the support helper: no main-thread assertion, unlike `RoomDatabase.query`. */
+    private fun rawQuery(sql: String): android.database.Cursor = database.openHelper.readableDatabase.query(sql)
 
     private class FakeFlushScheduler : FlushScheduler {
         var enqueueCalls = 0
