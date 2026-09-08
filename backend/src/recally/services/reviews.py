@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from recally.models import Card, CardState, CuratedUnitHighlight, Highlight, ReviewLog
 from recally.models.base import utc_now
-from recally.scheduling.fsrs import FsrsScheduler, rating_from_int
+from recally.scheduling.fsrs import FsrsScheduler, new_card_state, rating_from_int
 
 VALID_RATINGS = (1, 2, 3, 4)
 
@@ -151,9 +151,14 @@ def rate_card(session: Session, scheduler: FsrsScheduler, command: RatingCommand
     the batch endpoint's "one bad item does not roll back the others" (docs/api-spec.md)
     and the CLI's direct use both follow from that.
 
-    `duplicate` is always False here: the no-op replay of an already-logged
-    `(card_id, rated_at)` and the out-of-order recompute arrive in roadmap step 3c,
-    which extends this path (the UNIQUE constraint already exists on the model).
+    Offline replay (ADR-005, step 3c) shapes two branches before any write:
+
+    - A duplicate `(card_id, rated_at)` is a no-op: the existing log row is kept
+      untouched and the current state returned with `duplicate=True`, so a retried
+      flush is safe and never surfaces the UNIQUE constraint as a 500.
+    - A rating whose `rated_at` predates the card's `last_review` is applied by
+      recomputing the card from its full log (see `_apply_out_of_order`) — applying
+      it on top of the current state would score it against the wrong predecessor.
     """
     card = session.get(Card, command.card_id)
     if card is None:
@@ -174,6 +179,25 @@ def rate_card(session: Session, scheduler: FsrsScheduler, command: RatingCommand
         raise ReviewError(status=409, detail=f"Card {command.card_id} has no scheduling state.")
 
     rated_at = _as_naive_utc(command.rated_at)
+    existing_log = session.scalar(
+        select(ReviewLog).where(ReviewLog.card_id == card.id, ReviewLog.rated_at == rated_at)
+    )
+    if existing_log is not None:
+        # A retried flush: keep the row untouched, return the current state, and
+        # never report a lapse — a no-op moved nothing, and the client counts
+        # lapses only from `duplicate: false` responses (docs/api-spec.md).
+        return RatingResult(
+            card_id=card.id,
+            rated_at=rated_at,
+            next_due=state.due,
+            state=state.state,
+            step=state.step,
+            lapsed=False,
+            duplicate=True,
+        )
+    if state.last_review is not None and rated_at < state.last_review:
+        return _apply_out_of_order(session, scheduler, card, state, command, rated_at)
+
     state_before = state.state
     scheduler.review_card(state, rating_from_int(command.rating), review_datetime=rated_at)
     session.add(
@@ -198,6 +222,83 @@ def rate_card(session: Session, scheduler: FsrsScheduler, command: RatingCommand
         # A lapse is this rating moving the card out of `review` into `relearning`;
         # Again on a card already in `learning` moved nothing (docs/api-spec.md).
         lapsed=state_before == "review" and state.state == "relearning",
+        duplicate=False,
+    )
+
+
+def _apply_out_of_order(
+    session: Session,
+    scheduler: FsrsScheduler,
+    card: Card,
+    state: CardState,
+    command: RatingCommand,
+    rated_at: datetime,
+) -> RatingResult:
+    """Rebuild the card from its full log plus the arriving rating, in `rated_at` order.
+
+    The server-authoritative half of ADR-005: a phone that was offline flushes
+    ratings whose timestamps predate ones already applied, so the card is replayed
+    from scratch — a fresh `card_state` (the same baseline approval creates) run
+    through the wrapper once per log row, each at its own `rated_at`. The recompute
+    rewrites `card_state` only: existing `review_logs` rows are training data for
+    the Learner and the optimizer (docs/data-model.md) and are never touched.
+
+    The arriving rating's own row is written with the `state_before`,
+    `scheduled_days` and `lapsed` it had *in chronological order* — the values the
+    client would have seen had it arrived on time.
+    """
+    logs = list(
+        session.scalars(
+            select(ReviewLog)
+            .where(ReviewLog.card_id == card.id)
+            .order_by(ReviewLog.rated_at, ReviewLog.id)
+        )
+    )
+    # (rated_at, rating, is the arriving command); the arriving timestamp cannot tie
+    # with an existing row — that case is the duplicate no-op handled by the caller.
+    replay_ratings = [(log.rated_at, log.rating, False) for log in logs]
+    replay_ratings.append((rated_at, command.rating, True))
+    replay_ratings.sort(key=lambda entry: entry[0])
+
+    # The same starting point approval used: `learning` at step 0, due at approval.
+    replay = new_card_state(card_id=card.id, due=card.approved_at or rated_at, user_id=card.user_id)
+    arriving_state_before = "learning"
+    arriving_scheduled_days = 0
+    lapsed = False
+    for moment, rating, is_arriving in replay_ratings:
+        state_before = replay.state
+        scheduler.review_card(replay, rating_from_int(rating), review_datetime=moment)
+        if is_arriving:
+            arriving_state_before = state_before
+            arriving_scheduled_days = max(0, (replay.due - moment).days)
+            lapsed = state_before == "review" and replay.state == "relearning"
+
+    state.state = replay.state
+    state.step = replay.step
+    state.stability = replay.stability
+    state.difficulty = replay.difficulty
+    state.due = replay.due
+    state.last_review = replay.last_review
+    session.add(
+        ReviewLog(
+            card_id=card.id,
+            rated_at=rated_at,
+            rating=command.rating,
+            response_ms=command.response_ms,
+            scheduled_days=arriving_scheduled_days,
+            state_before=arriving_state_before,
+            device_id=command.device_id,
+            user_id=card.user_id,
+        )
+    )
+    session.commit()
+    return RatingResult(
+        card_id=card.id,
+        rated_at=rated_at,
+        next_due=state.due,
+        state=state.state,
+        step=state.step,
+        lapsed=lapsed,
         duplicate=False,
     )
 
