@@ -415,6 +415,18 @@ class ReviewViewModelTest {
         override suspend fun dueCards(forceRefresh: Boolean): Result<DueSummary> = Result.Success(summary)
 
         override suspend fun refreshDueCards(): Result<DueSummary> = Result.Success(summary)
+
+        // Card controls from 4j — not exercised by the review session fake.
+        override suspend fun editCard(
+            cardId: Long,
+            front: String?,
+            back: String?,
+            tags: List<String>?,
+        ): Result<Unit> = Result.Success(Unit)
+
+        override suspend fun suspendCard(cardId: Long): Result<Instant?> = Result.Success(null)
+
+        override suspend fun unsuspendCard(cardId: Long): Result<Instant?> = Result.Success(null)
     }
 
     private class FakeReviewRepository : ReviewRepository {
