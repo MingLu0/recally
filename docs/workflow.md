@@ -151,10 +151,11 @@ when a PR goes CONFLICTING (twice, then it leaves the PR for a human with a comm
 it never double-dispatches. It never runs `gh pr merge` — merge authority stays with the worktree
 agent under the five conditions above.
 
-Logging is change-only (ADR-014): the boxed status panel re-renders when the tracked picture
-changes, events (dispatches, merges, conflicts, escalations) print as they happen, and a dim
-heartbeat every ten ticks proves the loop is alive. A panel with the run meta renders at startup
-and for `--dry-run`, which doubles as the "state of the step" command. Needs-human issues are
+Logging is change-only (ADR-014): on a TTY the dashboard runs in the alternate screen, pinned at
+the top with the event log scrolling beneath (flat print-on-change when piped); events (dispatches,
+merges, conflicts, escalations) always print, a dim heartbeat every ten ticks proves the loop is
+alive, and every event is appended to `.orca/orchestrator.log`. A panel with the run meta renders at
+startup and for `--dry-run`, which doubles as the "state of the step" command. Needs-human issues are
 reconciled against reality each tick — a closed issue flips to merged, an unassigned one drops back
 into the dispatchable pool — so stale action-needed lines cannot outlive the situation that caused
 them. A macOS notification (banner + sound) fires when the needs-you set changes.
@@ -162,6 +163,12 @@ them. A macOS notification (banner + sound) fires when the needs-you set changes
 When an issue merges, its worktree sleeps: the worker terminal is released, any remaining terminals
 are closed, and the worktree moves to the completed column in Orca. The worktree itself stays for
 diff browsing; disk cleanup is a manual sweep (`orca worktree rm --worktree issue:<n>`).
+
+The dashboard's two human-gate surfaces: needs-you items are listed in the panel (and notified on
+change), and when every sub-issue of a tracked parent closes, a `🔑 parent #N — ready for You verify`
+row appears with a one-time notification. The Run id is persisted, so worker mailbox messages
+survive restarts and are drained each tick — though workers are instructed never to *ask* there;
+human contact is a GitHub issue comment.
 
 ### Turning it on
 

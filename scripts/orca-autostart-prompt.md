@@ -64,6 +64,9 @@ do not force, do not work around it. A human will pick it up.
 
 ## Never
 
+- Never use `orca orchestration ask` or the mailbox to reach a human — nobody
+  is listening between orchestrator restarts. If you need a human, comment on
+  the issue and stop. (worker_done reports are fine; questions are not.)
 - Never work around an `AGENTS.md` hard rule. Several look like bugs without
   context (rule 7 truncated highlights, rule 12 `on_moved`, integer
   `cost_microusd`). If a ticket seems to ask you to break one, stop and say so

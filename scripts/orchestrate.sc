@@ -21,6 +21,7 @@
 import cats.effect.*
 import cats.syntax.all.*
 import scala.concurrent.duration.*
+import scala.sys.process.*
 
 object Orchestrator:
 
@@ -56,22 +57,27 @@ object Orchestrator:
     conflictDispatchId: Option[String],
     evidenceNudged: Boolean,
     phase: String,
+    parent: Int = 0, // parent step issue; 0 = predates this field
   )
   object TrackedIssue:
     given upickle.default.ReadWriter[TrackedIssue] = upickle.default.macroRW
   // lastActionNeeded is the dedup signature for desktop notifications: a
   // notification fires only when the action-needed set changes.
-  // lastStatus is the dedup signature for the terminal status line: it prints
+  // lastStatus is the dedup signature for the terminal dashboard: it renders
   // only when the tracked picture changes (ADR-014, quiet logs).
+  // runId is the orchestration Run id, persisted so the mailbox survives
+  // restarts. parentNotified dedups the You verify announcement per parent.
   case class State(
     tracked: List[TrackedIssue],
     lastActionNeeded: List[String] = Nil,
     lastStatus: String = "",
+    runId: String = "",
+    parentNotified: List[Int] = Nil,
   )
   object State:
     given upickle.default.ReadWriter[State] = upickle.default.macroRW
 
-  case class ReadyIssue(number: Int, title: String, labels: List[String])
+  case class ReadyIssue(number: Int, title: String, labels: List[String], parent: Int = 0)
 
   // --- shell helpers ---
 
@@ -228,7 +234,8 @@ object Orchestrator:
     val assignment = s"\n\n---\nOrchestrator assignment: your issue is #${candidate.number}. " +
       s"Skip the 'Pick the issue' step; claim #${candidate.number} and implement it."
     val blank = TrackedIssue(candidate.number, candidate.title, "", "", agent,
-      attempts = 1, conflictFixes = 0, conflictDispatchId = None, evidenceNudged = false, Phase.Dispatched)
+      attempts = 1, conflictFixes = 0, conflictDispatchId = None, evidenceNudged = false, Phase.Dispatched,
+      parent = candidate.parent)
     for
       _ <- event(s"🌱 #${candidate.number} dispatched → $agent — ${candidate.title}")
       _ <- orca(List("worktree", "create", "--repo", s"id:$repoId",
@@ -268,7 +275,13 @@ object Orchestrator:
   def nextAgent(current: String): Option[String] =
     AgentPool.dropWhile(_ != current).drop(1).headOption
 
-  // --- logging (events always print; status prints on change only, ADR-014) ---
+  // --- logging (events always print; dashboard renders on change only, ADR-014) ---
+  //
+  // TTY runs enter the alternate screen: the dashboard panel stays pinned at
+  // the top and the event log scrolls beneath it, repainted in place. Piped /
+  // TERM=dumb / --dry-run / --once keep the flat print-on-change behaviour.
+  // Every event line is also appended to .orca/orchestrator.log, so nothing is
+  // lost when the alternate screen restores on exit.
 
   val UseColor: Boolean = sys.env.get("TERM").forall(_ != "dumb")
   def dim(s: String): String = if UseColor then s"\u001b[2m$s\u001b[0m" else s
@@ -278,7 +291,43 @@ object Orchestrator:
 
   def now: String = java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))
 
-  def event(msg: String): IO[Unit] = IO.println(s"$now  $msg")
+  val LogPath = os.pwd / ".orca" / "orchestrator.log"
+
+  object Tui:
+    @volatile var active = false
+    private var logLines = Vector.empty[String]
+    private var panelLines = Vector.empty[String]
+    private val keepLog = 200
+
+    def start(): Unit = if !active then { active = true; print("\u001b[?1049h"); render() }
+    def stop(): Unit = if active then { active = false; print("\u001b[?1049l") }
+
+    def setPanel(lines: Vector[String]): Unit = { panelLines = lines; render() }
+
+    def event(line: String): Unit =
+      logLines = (logLines :+ line).takeRight(keepLog)
+      if active then render() else println(line)
+
+    private def termHeight: Int =
+      try sys.process.Process("tput lines").!!.trim.toInt catch case _ => 40
+
+    private def render(): Unit =
+      if active then
+        val height = termHeight
+        val shown = logLines.takeRight((height - panelLines.size - 2).max(5))
+        val b = new StringBuilder("\u001b[2J\u001b[H")
+        panelLines.foreach(l => b.append(l).append("\u001b[K\n"))
+        b.append(dim("─" * 30)).append("\u001b[K\n")
+        shown.foreach(l => b.append(l).append("\u001b[K\n"))
+        b.append("\u001b[J")
+        print(b.toString); System.out.flush()
+
+  def event(msg: String): IO[Unit] = IO.blocking {
+    val line = s"$now  $msg"
+    if !os.exists(LogPath / os.up) then os.makeDir(LogPath / os.up)
+    os.write.append(LogPath, line + "\n")
+    Tui.event(line)
+  }
 
   def phaseGlyph(phase: String): String = phase match
     case Phase.Dispatched => "🌱"
@@ -451,7 +500,7 @@ object Orchestrator:
           val json = ujson.read(line)
           val parent = findKey(json, "parent").map(_.num.toInt)
           assert(parent.nonEmpty, s"precheck printed a parent issue: $line") // structural guard, ADR-013
-          ReadyIssue(json("number").num.toInt, json("title").str, json("labels").arr.map(_.str).toList)
+          ReadyIssue(json("number").num.toInt, json("title").str, json("labels").arr.map(_.str).toList, parent.get)
         }
     }
 
@@ -487,43 +536,108 @@ object Orchestrator:
     yield s"#$issue PR #${pr.number} is docs-only — waiting for human merge"
     (needsHuman ++ docsOnlyWaiting).sorted
 
-  def statusSignature(tracked: List[TrackedIssue], freeSlots: Int, actions: List[String]): String =
+  def statusSignature(tracked: List[TrackedIssue], freeSlots: Int, actions: List[String], parentRows: List[String]): String =
     val active = tracked.filter(t => ActivePhases(t.phase))
-    s"${active.map(t => s"${t.issue}:${t.phase}:${t.agent}").mkString(",")}|$freeSlots|${actions.mkString(";")}"
+    s"${active.map(t => s"${t.issue}:${t.phase}:${t.agent}").mkString(",")}|$freeSlots|${actions.mkString(";")}|${parentRows.mkString(";")}"
 
-  // The boxed dashboard: full version at startup and for --dry-run (with the
-  // static meta line), compact version on every state change in loop mode.
-  def panelLines(meta: Option[String], tracked: List[TrackedIssue], freeSlots: Int,
-                 actions: List[String], extra: List[String]): (List[String], List[String]) =
+  // One builder for every panel: startup (meta), loop change (no meta),
+  // --dry-run (meta + dispatchable line). In TUI mode the lines go to the
+  // pinned dashboard region; otherwise they print flat.
+  def panelContent(meta: Option[String], tracked: List[TrackedIssue], freeSlots: Int,
+                   actions: List[String], extra: List[String]): Vector[String] =
     val header = s"╭─ 🍊 recally orch ─ $now " + "─" * 20
     val trackedLines = tracked.filter(t => ActivePhases(t.phase)).map(t =>
       s"│  ${phaseGlyph(t.phase)} #${t.issue} ${phaseWord(t.phase)} (${t.agent})")
     val slotsLine = s"│  ⚡ $freeSlots slots free"
-    val extraLines = extra.map(e => s"│  $e")
-    val footer =
-      if actions.isEmpty then "╰─ ✨ nothing needs you"
-      else "╰─ ⚠️  needs you:" // actions printed below the box
-    (List(header) ++ meta.toList.map(m => s"│  $m") ++ trackedLines ++ List(slotsLine) ++ extraLines ++ List(footer), actions)
+    val actionLines = actions.map(a => yellow(s"│  ⚠️  $a"))
+    val footer = if actions.isEmpty then "╰─ ✨ nothing needs you" else "╰─ ⚠️  items above need you"
+    Vector(header) ++ meta.toList.map(m => s"│  $m") ++ trackedLines ++
+      Vector(slotsLine) ++ extra.map(e => s"│  $e") ++ actionLines ++ Vector(footer)
+
+  def showPanel(meta: Option[String], tracked: List[TrackedIssue], freeSlots: Int,
+                actions: List[String], extra: List[String]): IO[Unit] =
+    val lines = panelContent(meta, tracked, freeSlots, actions, extra)
+    if Tui.active then IO.blocking(Tui.setPanel(lines)) else lines.traverse(IO.println).void
 
   def printPanel(runId: String, stepScope: Option[String], tracked: List[TrackedIssue],
                  freeSlots: Int, actions: List[String], extra: List[String]): IO[Unit] =
-    val meta = s"scope ${stepScope.getOrElse("all")} · cap $WorktreeCap · pool ${AgentPool.mkString("→")} · run $runId"
-    val (lines, actionLines) = panelLines(Some(meta), tracked, freeSlots, actions, extra)
-    lines.traverse(IO.println) >> actionLines.traverse(a => IO.println(s"   ${yellow(a)}")).void
+    showPanel(Some(s"scope ${stepScope.getOrElse("all")} · cap $WorktreeCap · pool ${AgentPool.mkString("→")} · run $runId"),
+      tracked, freeSlots, actions, extra)
 
-  def printChange(tracked: List[TrackedIssue], freeSlots: Int, actions: List[String]): IO[Unit] =
-    val (lines, actionLines) = panelLines(None, tracked, freeSlots, actions, Nil)
-    lines.traverse(IO.println) >> actionLines.traverse(a => IO.println(s"   ${yellow(a)}")).void
+  def printChange(tracked: List[TrackedIssue], freeSlots: Int, actions: List[String], extra: List[String]): IO[Unit] =
+    showPanel(None, tracked, freeSlots, actions, extra)
 
   def heartbeat(tracked: List[TrackedIssue], actions: List[String]): IO[Unit] =
     val working = tracked.count(t => ActivePhases(t.phase))
     val tail = if actions.isEmpty then "nothing needs you" else s"${actions.size} still need${if actions.size == 1 then "s" else ""} you"
-    IO.println(dim(s"· $now alive — $working working, $tail"))
+    event(dim(s"· alive — $working working, $tail"))
 
   def notifyMac(actions: List[String]): IO[Unit] =
     val summary = actions.take(3).mkString("; ").replace("\"", "'")
     shOpt(List("osascript", "-e",
       s"""display notification "$summary" with title "Recally orchestrator 🍊" sound name "Glass"""")).void
+
+  // --- parent You verify gate (ADR-014) ---
+
+  // parent is 0 for entries that predate the field; -1 marks "no parent" so we
+  // do not refetch every tick.
+  def fetchParent(issue: Int): IO[Int] =
+    val Array(owner, name) = GithubRepo.split("/")
+    val q = s"""query{repository(owner:"$owner",name:"$name"){issue(number:$issue){parent{number}}}}"""
+    gh(List("api", "graphql", "-f", s"query=$q")).map { raw =>
+      ujson.read(raw)("data")("repository")("issue")("parent") match
+        case ujson.Null => -1
+        case o => o("number").num.toInt
+    }.handleError(_ => 0)
+
+  // (allSubIssuesClosed, parentItselfClosed); fails closed — on error, no row
+  // and no notification.
+  def parentCompletion(parent: Int): IO[(Boolean, Boolean)] =
+    val Array(owner, name) = GithubRepo.split("/")
+    val q = s"""query{repository(owner:"$owner",name:"$name"){issue(number:$parent){state subIssues(first:50){nodes{state}}}}}"""
+    gh(List("api", "graphql", "-f", s"query=$q")).map { raw =>
+      val issue = ujson.read(raw)("data")("repository")("issue")
+      val subs = issue("subIssues")("nodes").arr.toList
+      val allClosed = subs.nonEmpty && subs.forall(_("state").str == "CLOSED")
+      (allClosed, issue("state").str == "CLOSED")
+    }.handleError(_ => (false, true))
+
+  def parentRows(tracked: List[TrackedIssue]): IO[List[(Int, String)]] =
+    tracked.map(_.parent).filter(_ > 0).distinct.traverse { p =>
+      parentCompletion(p).map {
+        case (true, false) => Some(p -> s"🔑 parent #$p — all sub-issues done, ready for You verify (the human gate)")
+        case _ => None
+      }
+    }.map(_.flatten)
+
+  // --- mailbox (ADR-014: workers are told never to ask here; this is the safety net) ---
+
+  def drainMailbox(runId: String, tracked: List[TrackedIssue]): IO[Unit] =
+    def handleMessage(m: ujson.Value): IO[Unit] =
+      val subject = findKey(m, "subject").collect { case ujson.Str(s) => s }.getOrElse("(no subject)")
+      val msgType = findKey(m, "type").collect { case ujson.Str(s) => s }.getOrElse("message")
+      val payloadDispatch = findKey(m, "payload").collect { case ujson.Str(s) => s }
+        .flatMap(p => "ctx_[a-z0-9]+".r.findFirstIn(p))
+      val ref = payloadDispatch.flatMap(d => tracked.find(_.dispatchId == d)).map(t => s"#${t.issue} ").getOrElse("")
+      event(s"📨 $ref[$msgType] $subject") >>
+        (if msgType == "ask" then notifyMac(List(s"worker asks: $subject")) else IO.unit)
+
+    def step(ack: Option[String], depth: Int): IO[Unit] =
+      if depth >= 5 then IO.unit
+      else
+        val cmd = List("orca", "orchestration", "check", "--run", runId) ++
+          ack.toList.flatMap(d => List("--ack", d)) ++ List("--json")
+        shOpt(cmd).flatMap {
+          case None => IO.unit
+          case Some(raw) =>
+            val result = ujson.read(raw).obj.get("result").getOrElse(ujson.Null)
+            val messages = findKey(result, "messages").map(_.arr.toList).getOrElse(Nil)
+            val interesting = messages.filterNot(m => findKey(m, "type").contains(ujson.Str("heartbeat")))
+            interesting.traverse(handleMessage) >>
+              (if messages.isEmpty then IO.unit
+               else step(findKey(result, "deliveryId").collect { case ujson.Str(s) => s }, depth + 1))
+        }
+    if runId.isEmpty then IO.unit else step(None, 0)
 
   // --- main loop ---
 
@@ -540,27 +654,34 @@ object Orchestrator:
           reconcile(t, repoId, runId).handleErrorWith(e =>
             event(red(s"💥 #${t.issue} reconcile error: ${e.getMessage.take(120)} — keeping as-is, retry next tick")).as(Some(t)))
         ).map(_.flatten)
-      active = reconciled.filter(t => ActivePhases(t.phase))
+      backfilled <- reconciled.traverse(t =>
+        if t.parent != 0 || dryRun then IO.pure(t)
+        else fetchParent(t.issue).map(p => t.copy(parent = p)))
+      active = backfilled.filter(t => ActivePhases(t.phase))
+      _ <- if dryRun then IO.unit else drainMailbox(runId, backfilled)
       freeSlots = WorktreeCap - active.size
       prs <- openPrs
       candidates <- if freeSlots > 0 then readyIssues else IO.pure(Nil)
       scoped = candidates.filter(c => stepScope.forall(scope => c.labels.contains(scope)))
-      fresh = scoped.filterNot(c => reconciled.exists(_.issue == c.number)).take(freeSlots)
+      fresh = scoped.filterNot(c => backfilled.exists(_.issue == c.number)).take(freeSlots)
       dispatched <-
-        if dryRun then IO.pure(reconciled)
+        if dryRun then IO.pure(backfilled)
         else fresh.traverse(c =>
           dispatchIssue(c, AgentPool.head, repoId, runId).map(Some(_)).handleErrorWith(e =>
             event(red(s"💥 #${c.number} dispatch error: ${e.getMessage.take(120)} — will retry next tick")).as(None))
-        ).map(newOnes => reconciled ++ newOnes.flatten)
+        ).map(newOnes => backfilled ++ newOnes.flatten)
       freeAfter = WorktreeCap - dispatched.count(t => ActivePhases(t.phase))
       actions = buildActions(dispatched, prs)
-      signature = statusSignature(dispatched, freeAfter, actions)
+      rows <- parentRows(dispatched)
+      rowTexts = rows.map(_._2)
+      newlyComplete = rows.map(_._1).filterNot(state.parentNotified.contains)
+      signature = statusSignature(dispatched, freeAfter, actions, rowTexts)
       changed = signature != state.lastStatus
       _ <-
         if dryRun then
           printPanel("(dry-run)", stepScope, dispatched, freeAfter, actions,
-            List(s"dispatchable now: ${if fresh.isEmpty then "none" else fresh.map(_.number).mkString(", ")}"))
-        else if forcePrint || changed then printChange(dispatched, freeAfter, actions)
+            rowTexts ++ List(s"dispatchable now: ${if fresh.isEmpty then "none" else fresh.map(_.number).mkString(", ")}"))
+        else if forcePrint || changed then printChange(dispatched, freeAfter, actions, rowTexts)
         else if tickNum % HeartbeatEvery == 0 then heartbeat(dispatched, actions)
         else IO.unit
       _ <-
@@ -568,8 +689,11 @@ object Orchestrator:
         else
           val actionsChanged = actions != state.lastActionNeeded
           (if actionsChanged && actions.nonEmpty then notifyMac(actions) else IO.unit) >>
-            saveState(State(dispatched, actions, signature))
-    yield State(dispatched, actions, signature)
+            newlyComplete.traverse(p =>
+              event(s"🔑 parent #$p — all sub-issues done, ready for You verify") >>
+                notifyMac(List(s"parent #$p ready for You verify"))) >>
+            saveState(State(dispatched, actions, signature, runId, state.parentNotified ++ newlyComplete))
+    yield State(dispatched, actions, signature, runId, state.parentNotified ++ newlyComplete)
 
   def loop(stepScope: Option[String], runId: String, tickNum: Int): IO[Unit] =
     tick(dryRun = false, stepScope, runId, tickNum, forcePrint = false) >>
@@ -589,21 +713,25 @@ object Orchestrator:
     val dryRun = args.contains("--dry-run")
     val once = args.contains("--once")
     val stepScope = args.find(_.startsWith("--step=")).map(_.stripPrefix("--step="))
+    val useTui = !dryRun && !once && System.console() != null && UseColor
     if dryRun then tick(dryRun = true, stepScope, runId = "", tickNum = 0, forcePrint = true).void.as(ExitCode.Success)
     else
-      // One Run per process; every orca mutation passes --run explicitly because
-      // each CLI call is a fresh process with no binding.
-      createRun.flatMap { runId =>
-        (if once then tick(dryRun = false, stepScope, runId, tickNum = 1, forcePrint = true).void
-         else
-           // startup panel shows the pre-reconcile picture; the first tick prints
-           // the reconciled one (forcePrint via tickNum 0 always printing? no — first
-           // loop tick prints only on change, which it almost always is after startup)
-           loadState.flatMap { state =>
-             val active = state.tracked.filter(t => ActivePhases(t.phase))
-             printPanel(runId, stepScope, state.tracked, WorktreeCap - active.size, state.lastActionNeeded, Nil) >>
-               sweepCompletedWorktrees(state)
-           } >> loop(stepScope, runId, tickNum = 1))
+      loadState.flatMap { state0 =>
+        // One Run per PROJECT (persisted in state) so the mailbox survives
+        // restarts; every orca mutation passes --run explicitly because each
+        // CLI call is a fresh process with no binding.
+        (if state0.runId.nonEmpty then IO.pure(state0.runId) else createRun).flatMap { runId =>
+          val body =
+            if once then tick(dryRun = false, stepScope, runId, tickNum = 1, forcePrint = true).void
+            else
+              (if useTui then IO.blocking(Tui.start()) else IO.unit) >>
+                loadState.flatMap { state =>
+                  val active = state.tracked.filter(t => ActivePhases(t.phase))
+                  printPanel(runId, stepScope, state.tracked, WorktreeCap - active.size, state.lastActionNeeded, Nil) >>
+                    sweepCompletedWorktrees(state)
+                } >> loop(stepScope, runId, tickNum = 1)
+          body.guarantee(IO.blocking(Tui.stop()))
+        }
       }.as(ExitCode.Success)
 
 // .sc entry point: the script wrapper main runs top-level statements, so the
