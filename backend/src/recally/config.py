@@ -43,8 +43,8 @@ class Settings(BaseSettings):
         validation_alias="RECALLY_WATCH_DEBOUNCE_MS",
     )
     # IANA zone owning every day boundary: streaks, "one push per day", the new-card
-    # allotment (docs/config.md). Validated at startup so a typo fails boot rather
-    # than the first midnight rollover.
+    # allotment, bury's next-midnight (docs/config.md, ADR-008). Validated at startup
+    # so a typo fails boot rather than the first midnight rollover.
     timezone: str = Field(default="Pacific/Auckland", validation_alias="RECALLY_TIMEZONE")
 
     # Per-role model tiers (docs/config.md): cheap for Curator/Critic, stronger for

@@ -20,6 +20,19 @@ class DeckSummary:
     due: int
 
 
+@dataclass(frozen=True)
+class DeckCard:
+    """One approved card in the per-book browse view behind `GET /decks/{id}/cards`."""
+
+    id: int
+    type: str
+    front: str
+    back: str
+    chapter: str | None
+    tags: list[str]
+    suspended_until: datetime | None
+
+
 def list_decks(
     session: Session, *, user_id: int = 1, now: datetime | None = None
 ) -> list[DeckSummary]:
@@ -64,3 +77,45 @@ def list_decks(
         DeckSummary(book_id=book_id, title=title, total=total, due=due)
         for book_id, title, total, due in session.execute(statement).all()
     ]
+
+
+def list_deck_cards(
+    session: Session, book_id: int, *, chapter: str | None = None, user_id: int = 1
+) -> list[DeckCard]:
+    """A book's approved cards for the browse view, suspended ones included.
+
+    Unlike `/reviews/due` this list must not filter suspended cards out — the browse
+    view is where unsuspend is reached (ADR-008) — so each card carries
+    `suspended_until` (null when in rotation). Only `approved` cards are deck
+    members at all (hard rule 1). Grouping is within one chapter (docs/agents.md),
+    so a unit's first source highlight stands in for the card's chapter and order.
+    """
+    statement = (
+        select(Card, Highlight.chapter)
+        .join(CuratedUnit, Card.unit_id == CuratedUnit.id)
+        .join(CuratedUnitHighlight, CuratedUnitHighlight.unit_id == CuratedUnit.id)
+        .join(Highlight, Highlight.id == CuratedUnitHighlight.highlight_id)
+        .where(Card.user_id == user_id, Card.status == "approved", Highlight.book_id == book_id)
+        .order_by(Highlight.chapter, Highlight.export_position, Card.id)
+    )
+    if chapter is not None:
+        statement = statement.where(Highlight.chapter == chapter)
+
+    deck_cards: list[DeckCard] = []
+    seen: set[int] = set()
+    for card, card_chapter in session.execute(statement).all():
+        if card.id in seen:
+            continue  # a grouped unit joins once per source highlight
+        seen.add(card.id)
+        deck_cards.append(
+            DeckCard(
+                id=card.id,
+                type=card.type,
+                front=card.front,
+                back=card.back,
+                chapter=card_chapter,
+                tags=list(card.tags),
+                suspended_until=card.suspended_until,
+            )
+        )
+    return deck_cards
