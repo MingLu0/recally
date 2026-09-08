@@ -1,6 +1,6 @@
 # ADR-009: no-mistakes as the pre-PR gate
 
-**Status**: accepted — narrowed by [ADR-011](011-step-2-acceptance-criteria-trial.md), which suspends this gate for roadmap step 2 only
+**Status**: superseded by [ADR-012](012-drop-the-no-mistakes-gate.md), which drops the gate entirely
 **Date**: 2026-09-06
 
 ## Context

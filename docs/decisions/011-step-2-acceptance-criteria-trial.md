@@ -1,6 +1,6 @@
 # ADR-011: Step 2 runs on written acceptance criteria, without no-mistakes
 
-**Status**: accepted
+**Status**: accepted; trial concluded — its mechanics generalized to every step by [ADR-012](012-drop-the-no-mistakes-gate.md)
 **Date**: 2026-09-07
 
 ## Context
