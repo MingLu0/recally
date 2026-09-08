@@ -1,5 +1,6 @@
-# Ruff only, by design: Bandit and pip-audit run in CI, not in the local loop
-# (docs/backend.md, "Tooling").
+# Formatters only, by design: the slower scanners (Bandit, pip-audit, Android
+# Lint) run in CI, not in the local loop (docs/backend.md and docs/android.md,
+# "Tooling").
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.16.6
@@ -9,3 +10,22 @@ repos:
         files: ^backend/
       - id: ruff-format
         files: ^backend/
+
+  # ktlint runs through the Gradle wrapper rather than a hosted hook: the
+  # ktlint-gradle plugin ships no .pre-commit-hooks.yaml, and going through the
+  # wrapper keeps the local rules identical to the CI job's. The `ktlintFormat`
+  # task writes fixes in place, mirroring ruff's --fix above; CI runs the
+  # read-only `ktlintCheck` instead.
+  #
+  # `pass_filenames: false` because the Gradle task discovers its own sources;
+  # `require_serial: true` because two concurrent Gradle daemons on one project
+  # contend for the same lock.
+  - repo: local
+    hooks:
+      - id: ktlint
+        name: ktlint
+        entry: android/gradlew -p android ktlintFormat
+        language: system
+        files: ^android/.*\.kts?$
+        pass_filenames: false
+        require_serial: true
