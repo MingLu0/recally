@@ -8,7 +8,7 @@ Recally turns O'Reilly reading highlights into flashcards. A watched folder pick
 
 ## Current state
 
-**Step 1 in progress.** `backend/` has the tooling baseline (uv, ruff, mypy, pytest, CI), the SQLAlchemy models plus the initial Alembic migration for every table in `docs/data-model.md`, the FastAPI app (`container.py`, `X-API-Key` auth, problem+json errors, `GET /ingest/status` + `GET /decks`), and a debounced watchdog watcher for completed O'Reilly exports. The O'Reilly CSV adapter, the annotation-UUID dedupe and the committed fixtures are in. `android/` is still a placeholder README. Build order is in `docs/roadmap.md`. When code lands, update the *Commands* section below.
+**Step 1 in progress.** `backend/` has the tooling baseline (uv, ruff, mypy, pytest, CI), the SQLAlchemy models plus the initial Alembic migration for every table in `docs/data-model.md`, the FastAPI app (`container.py`, `X-API-Key` auth, problem+json errors, `GET /ingest/status` + `GET /decks`), and a debounced watchdog watcher for completed O'Reilly exports. The O'Reilly CSV adapter, the annotation-UUID dedupe and the committed fixtures are in. `android/` has the step 4a-0 tooling baseline (Gradle wrapper + Kotlin DSL + version catalog, JDK 17 toolchain, ktlint, Android Lint, CI job) with only a placeholder `MainActivity`; the screens and the real stack land from step 4a onwards. Build order is in `docs/roadmap.md`. When code lands, update the *Commands* section below.
 
 ## Repo layout
 
@@ -110,7 +110,11 @@ uv run uvicorn recally.main:app --reload
 uv run python -m recally.ingest.watcher
 
 # android
-cd android && ./gradlew :app:testDebugUnitTest
+cd android && ./gradlew ktlintCheck
+./gradlew :app:lintDebug
+./gradlew :app:testDebugUnitTest
+./gradlew :app:assembleDebug
+./gradlew ktlintFormat   # writes fixes; what the pre-commit hook runs
 
 ```
 
