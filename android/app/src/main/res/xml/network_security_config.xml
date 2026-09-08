@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Release network policy: no cleartext, anywhere. targetSdk 28+ already denies
+  cleartext by default; this config exists so the policy is an explicit
+  artifact the release audit (NetworkSecurityConfigTest) can check. A
+  <domain> entry cannot scope an exception anyway: domains match hostnames
+  only, and a phase-1 URL typed as an IP literal (http://192.168.1.42:8000)
+  falls through to base-config (docs/android.md, "Connecting to the backend").
+  The debug build overrides this resource — see src/debug/res/xml/.
+-->
+<network-security-config>
+    <base-config />
+</network-security-config>
