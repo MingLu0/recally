@@ -37,6 +37,15 @@ def new_card_state(*, card_id: int, due: datetime, user_id: int = 1) -> CardStat
     return CardState(card_id=card_id, state="learning", step=0, due=due, user_id=user_id)
 
 
+def rating_from_int(value: int) -> Rating:
+    """The wire value (1=Again … 4=Easy, docs/api-spec.md) as the library enum.
+
+    Kept here so callers outside this module never import `fsrs` — this module is
+    the single import site (docs/backend.md, "Package layout").
+    """
+    return Rating(value)
+
+
 def _as_utc_iso(value: datetime) -> str:
     """A stored naive-UTC datetime as the ISO string the library's dict shape holds."""
     if value.tzinfo is None:
@@ -120,6 +129,16 @@ class FsrsScheduler:
     @property
     def parameters(self) -> tuple[float, ...]:
         return tuple(self._scheduler.parameters)
+
+    @property
+    def learning_steps_minutes(self) -> list[int | float]:
+        """The configured learning steps in minutes, as `GET /reviews/due` reports them
+        for same-session re-queueing (ADR-005). Whole minutes come back as ints."""
+        minutes: list[int | float] = []
+        for step in self._scheduler.learning_steps:
+            value = step.total_seconds() / 60
+            minutes.append(int(value) if value == int(value) else value)
+        return minutes
 
     def review_card(
         self, state: CardState, rating: Rating, *, review_datetime: datetime

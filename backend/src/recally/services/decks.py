@@ -3,11 +3,12 @@
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import Select, case, func, or_, select
+from sqlalchemy import Select, case, func, select
 from sqlalchemy.orm import Session
 
 from recally.models import Book, Card, CardState, CuratedUnit, CuratedUnitHighlight, Highlight
 from recally.models.base import utc_now
+from recally.services.reviews import due_cards_predicate
 
 
 @dataclass(frozen=True)
@@ -50,10 +51,9 @@ def list_decks(
     as_of = now or utc_now()
 
     # Due means FSRS says so and the card is neither buried nor suspended (ADR-008) —
-    # the predicate `GET /reviews/due` will share in roadmap step 3.
-    is_due = (CardState.due <= as_of) & or_(
-        Card.suspended_until.is_(None), Card.suspended_until <= as_of
-    )
+    # the one shared definition, owned by `services/reviews.py` so the deck counts and
+    # `GET /reviews/due` cannot drift apart.
+    is_due = due_cards_predicate(as_of)
 
     statement: Select[tuple[int, str, int, int]] = (
         select(

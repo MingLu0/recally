@@ -83,6 +83,8 @@ class Settings(BaseSettings):
     fsrs_desired_retention: float = Field(
         default=0.9, gt=0, lt=1, validation_alias="FSRS_DESIRED_RETENTION"
     )
+    # Cap on never-reviewed cards in a `GET /reviews/due` response.
+    new_cards_per_day: int = Field(default=10, gt=0, validation_alias="NEW_CARDS_PER_DAY")
     # Comma-separated minutes, e.g. "1,10". A str field rather than a list because
     # pydantic-settings parses complex env values as JSON, and the documented value
     # is not JSON.

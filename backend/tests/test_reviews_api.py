@@ -33,20 +33,25 @@ from recally.models import (
     IngestRun,
     ReviewLog,
 )
+from recally.models.base import utc_now
 
 TEST_API_KEY = "test-key-not-a-real-secret"
 AUTH = {"X-API-Key": TEST_API_KEY}
 
-# A fixed reference instant for client timestamps; real "now" only shows up in
-# `received_at`, which is exactly the distinction test_rate_writes_review_log reads.
-NOW = datetime(2026, 9, 8, 12, 0, 0)
+# The reference instant for client timestamps, captured once per test session so
+# every relative offset stays on the intended side of the server's real clock
+# (`due=NOW` must be due *now*; `suspended_until=NOW + 6h` must still be future).
+# Real "now" only shows up in `received_at`, which is exactly the distinction
+# test_rate_writes_review_log reads.
+NOW = utc_now()
 
 _PROVENANCE_COUNTER = itertools.count(1)
 
 
 def _iso(moment: datetime) -> str:
-    """A client timestamp in the wire shape the app sends (`...Z`)."""
-    return moment.strftime("%Y-%m-%dT%H:%M:%SZ")
+    """A client timestamp in the wire shape the app sends (`...Z`), microseconds kept
+    so the assertion can compare against the exact instant."""
+    return moment.isoformat() + "Z"
 
 
 def _parse(wire: str) -> datetime:
