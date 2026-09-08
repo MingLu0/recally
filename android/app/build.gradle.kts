@@ -22,6 +22,8 @@ android {
 
     buildFeatures {
         compose = true
+        // BuildConfig.VERSION_NAME backs the Settings About row.
+        buildConfig = true
     }
 }
 
@@ -57,6 +59,11 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.android)
+
+    // Base URL + API key, Keystore-encrypted (docs/android.md, "Connecting to
+    // the backend"). DataStore, never the deprecated SharedPreferences
+    // encryption wrapper — the doc carries the why.
+    implementation(libs.datastore.preferences)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

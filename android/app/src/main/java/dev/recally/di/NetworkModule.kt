@@ -13,20 +13,12 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
     /**
-     * Placeholder until step 4e binds the Keystore-encrypted DataStore
-     * implementation (docs/android.md, "Connecting to the backend"). Both
-     * values unset: every request goes to [RecallyApiFactory.PLACEHOLDER_BASE_URL]
-     * and fails as a network error — nothing usable is baked into the build.
+     * The client is built once against the unroutable
+     * [RecallyApiFactory.PLACEHOLDER_BASE_URL]; the interceptors rewrite every
+     * request from the runtime settings bound in SettingsModule (the
+     * Keystore-encrypted DataStore, step 4e). Nothing usable is baked into
+     * the build.
      */
-    @Provides
-    @Singleton
-    fun provideConnectionSettingsProvider(): ConnectionSettingsProvider =
-        object : ConnectionSettingsProvider {
-            override fun apiKey(): String? = null
-
-            override fun baseUrl(): String? = null
-        }
-
     @Provides
     @Singleton
     fun provideRecallyApi(settings: ConnectionSettingsProvider): RecallyApi = RecallyApiFactory.create(settings)
