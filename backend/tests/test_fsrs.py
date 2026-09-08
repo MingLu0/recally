@@ -14,23 +14,32 @@ from pathlib import Path
 
 import pytest
 from fsrs import Rating, Scheduler, State
-from recally.scheduling.fsrs import (
-    FsrsScheduler,
-    apply_library_card,
-    card_to_library,
-    new_card_state,
-)
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from recally.config import Settings
 from recally.models import Base, CardState, FsrsParams
+from recally.scheduling.fsrs import (
+    FsrsScheduler,
+    apply_library_card,
+    card_to_library,
+    new_card_state,
+)
 
 NOW = datetime(2026, 9, 8, 12, 0, 0)
-# The 21 library default weights, perturbed, stand in for an optimizer fit.
-FITTED_OLD = [0.5 + index / 100 for index in range(21)]
-FITTED_NEW = [0.9 + index / 100 for index in range(21)]
+
+
+def _fitted_weights(first_weight: float) -> list[float]:
+    """A plausible optimizer fit: the library defaults with w[0] perturbed, so the
+    weights stay inside the bounds the library validates."""
+    weights = list(Scheduler().parameters)
+    weights[0] = first_weight
+    return weights
+
+
+FITTED_OLD = _fitted_weights(0.3)
+FITTED_NEW = _fitted_weights(0.4)
 
 
 @pytest.fixture

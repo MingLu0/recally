@@ -28,6 +28,7 @@ from recally.ingest import ingest_file
 from recally.ingest.adapters import OReillyCsvAdapter
 from recally.llm import LlmCaller
 from recally.models import IngestRun
+from recally.scheduling.fsrs import FsrsScheduler
 
 
 class Container:
@@ -82,6 +83,15 @@ class Container:
     @property
     def session_factory(self) -> sessionmaker[Session]:
         return self._session_factory
+
+    def fsrs_scheduler(self, session: Session) -> FsrsScheduler:
+        """The py-fsrs wrapper for one unit of work.
+
+        Built per unit of work rather than once: the latest `fsrs_params` row is
+        active (docs/data-model.md), and a fit written by the nightly Learner must
+        take effect without a restart.
+        """
+        return FsrsScheduler.build(self.settings, session)
 
     @contextmanager
     def session(self) -> Iterator[Session]:
