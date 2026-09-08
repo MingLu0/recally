@@ -90,13 +90,8 @@ jobs:
         if: steps.gradle_project.outputs.present == 'true'
         uses: gradle/actions/setup-gradle@v4
 
-      # continue-on-error for the first Android PR only: a fresh ktlint run over
-      # a new module reports a backlog that would block the commit that creates
-      # it. Drop this line once android/ is formatted (docs/android.md,
-      # "Tooling").
       - name: ktlint
         if: steps.gradle_project.outputs.present == 'true'
-        continue-on-error: true
         run: ./gradlew ktlintCheck
 
       # Android Lint is the Android-specific correctness gate (permissions,
@@ -104,7 +99,6 @@ jobs:
       # already covers what mypy does for the backend.
       - name: Android Lint
         if: steps.gradle_project.outputs.present == 'true'
-        continue-on-error: true
         run: ./gradlew :app:lintDebug
 
       - name: Unit tests
