@@ -53,7 +53,9 @@ object Orchestrator:
   )
   object TrackedIssue:
     given upickle.default.ReadWriter[TrackedIssue] = upickle.default.macroRW
-  case class State(tracked: List[TrackedIssue])
+  // lastActionNeeded is the dedup signature for desktop notifications: a
+  // notification fires only when the action-needed set changes.
+  case class State(tracked: List[TrackedIssue], lastActionNeeded: List[String] = Nil)
   object State:
     given upickle.default.ReadWriter[State] = upickle.default.macroRW
 
@@ -336,6 +338,71 @@ object Orchestrator:
         case None => IO.raiseError(new RuntimeException(s"No Orca repo registered at ${os.pwd}; run `orca repo add` first."))
     }
 
+  // --- progress reporting (read-only; never a dispatch input) ---
+
+  case class OpenPr(number: Int, docsOnly: Boolean, closes: Set[Int])
+
+  def openPrs: IO[List[OpenPr]] =
+    ghJson(List("pr", "list", "--repo", GithubRepo, "--state", "open", "--limit", "100",
+      "--json", "number,files,closingIssuesReferences")).map { arr =>
+      arr.arr.toList.map { pr =>
+        val files = findKey(pr, "files").map(_.arr.toList.map(_("path").str)).getOrElse(Nil)
+        val closes = findKey(pr, "closingIssuesReferences")
+          .map(_.arr.toList.map(_("number").num.toInt).toSet).getOrElse(Set.empty)
+        OpenPr(pr("number").num.toInt,
+          files.nonEmpty && files.forall(p => p.startsWith("docs/") || p.endsWith(".md")), closes)
+      }
+    }
+
+  // Open sub-issues in the step scope that are unblocked, unassigned and
+  // unclaimed by a PR but not labelled 'ready' — the only thing standing
+  // between them and dispatch is the human's label.
+  def awaitingReady(stepLabel: String, claimed: Set[Int]): IO[List[Int]] =
+    val Array(owner, name) = GithubRepo.split("/")
+    val query = """query($owner:String!,$name:String!){repository(owner:$owner,name:$name){issues(first:100,states:OPEN){nodes{number labels(first:20){nodes{name}} assignees(first:5){totalCount} parent{number} subIssues(first:1){totalCount}}}}}"""
+    gh(List("api", "graphql", "-f", s"owner=$owner", "-f", s"name=$name", "-f", s"query=$query"))
+      .map(ujson.read(_))
+      .flatMap { json =>
+        val nodes = json("data")("repository")("issues")("nodes").arr.toList
+        val candidates = nodes.filter { i =>
+          val labels = i("labels")("nodes").arr.map(_("name").str).toList
+          labels.contains(stepLabel) && !labels.contains("ready") &&
+            i("parent") != ujson.Null && i("subIssues")("totalCount").num.toInt == 0 &&
+            i("assignees")("totalCount").num.toInt == 0 &&
+            !claimed(i("number").num.toInt)
+        }
+        candidates.traverse { i =>
+          val n = i("number").num.toInt
+          gh(List("api", s"repos/$GithubRepo/issues/$n/dependencies/blocked_by",
+              "-q", """[.[] | select(.state == "open")] | length"""))
+            .map(count => if count.trim == "0" then Some(n) else None)
+            .handleError(_ => None) // report fails closed too: error means not listed
+        }.map(_.flatten.sorted)
+      }
+
+  def buildActions(tracked: List[TrackedIssue], prs: List[OpenPr], awaiting: List[Int]): List[String] =
+    val needsHuman = tracked.filter(_.phase == Phase.NeedsHuman).map(t => s"#${t.issue} needs-human (see issue comment)")
+    val docsOnlyWaiting = for
+      pr <- prs if pr.docsOnly
+      issue <- pr.closes if tracked.exists(t => t.issue == issue && ActivePhases(t.phase))
+    yield s"#$issue PR #${pr.number} is docs-only — waiting for human merge"
+    val awaitingLine = if awaiting.isEmpty then Nil
+      else List(s"${awaiting.map(n => s"#$n").mkString(" ")} unblocked but not labelled 'ready' — label to dispatch")
+    (needsHuman ++ docsOnlyWaiting ++ awaitingLine).sorted
+
+  def printStatus(tracked: List[TrackedIssue], freeSlots: Int, actions: List[String]): IO[Unit] =
+    val time = java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))
+    val active = tracked.filter(t => ActivePhases(t.phase))
+    val activeDesc = if active.isEmpty then "none"
+      else active.map(t => s"#${t.issue} ${t.phase} (${t.agent})").mkString(", ")
+    IO.println(s"[tick $time] active: $activeDesc | free: $freeSlots") >>
+      actions.traverse(a => IO.println(s"[action-needed] $a")).void
+
+  def notifyMac(actions: List[String]): IO[Unit] =
+    val summary = actions.take(3).mkString("; ").replace("\"", "'")
+    shOpt(List("osascript", "-e",
+      s"""display notification "$summary" with title "Recally orchestrator" sound name "Glass"""")).void
+
   // --- main loop ---
 
   def tick(dryRun: Boolean, stepScope: Option[String], runId: String): IO[State] =
@@ -347,16 +414,26 @@ object Orchestrator:
         else state.tracked.traverse(reconcile(_, repoId, runId))
       active = tracked.filter(t => ActivePhases(t.phase))
       freeSlots = WorktreeCap - active.size
+      prs <- openPrs
+      claimed = prs.flatMap(_.closes).toSet
       candidates <- if freeSlots > 0 then readyIssues else IO.pure(Nil)
       scoped = candidates.filter(c => stepScope.forall(scope => c.labels.contains(scope)))
       fresh = scoped.filterNot(c => tracked.exists(_.issue == c.number)).take(freeSlots)
-      _ <-
+      dispatched <-
         if dryRun then
           IO.println(s"[dry-run] scope=${stepScope.getOrElse("all")} active=${active.size} free=$freeSlots dispatchable=${fresh.map(_.number).mkString(", ")}")
-        else fresh.traverse(c => dispatchIssue(c, AgentPool.head, repoId, runId)).flatMap { newOnes =>
-          saveState(State(tracked ++ newOnes))
-        }
-    yield State(tracked)
+            .as(tracked)
+        else fresh.traverse(c => dispatchIssue(c, AgentPool.head, repoId, runId)).map(tracked ++ _)
+      awaiting <- stepScope.fold(IO.pure(List.empty[Int]))(awaitingReady(_, claimed))
+      actions = buildActions(dispatched, prs, awaiting)
+      _ <- printStatus(dispatched, freeSlots, actions)
+      _ <-
+        if dryRun then IO.unit
+        else
+          val changed = actions != state.lastActionNeeded
+          (if changed && actions.nonEmpty then notifyMac(actions) else IO.unit) >>
+            saveState(State(dispatched, actions))
+    yield State(dispatched, actions)
 
   def loop(stepScope: Option[String], runId: String): IO[Unit] =
     tick(dryRun = false, stepScope, runId) >> IO.sleep(PollInterval) >> loop(stepScope, runId)

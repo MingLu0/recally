@@ -162,6 +162,11 @@ when a PR goes CONFLICTING (twice, then it leaves the PR for a human with a comm
 it never double-dispatches. It never runs `gh pr merge` — merge authority stays with the worktree
 agent under the five conditions above.
 
+Every tick prints a one-line status plus `[action-needed]` lines for what only you can unblock —
+unblocked-but-unlabelled issues, needs-human escalations, docs-only PRs parked for merge — and fires
+a macOS notification when that set changes. Silence means the step is done or genuinely waiting on
+workers, never that something is stuck unseen.
+
 ### Turning it on
 
 The precheck runs from the repo root of the main checkout, so `scripts/` must be on `main` first.
