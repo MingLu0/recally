@@ -1,8 +1,14 @@
-"""The approval-queue read behind `GET /cards/pending` (docs/api-spec.md).
+"""The approval queue and the human-decision gate behind `/cards/*` and the CLI.
 
-Deterministic, no LLM (hard rule 2). Only reads live here: the status writes of the
-approval gate stay in `api/routers/cards.py`, one of the two modules the
-design-invariant tests allow to assign `cards.status` (test_design_invariants.py).
+Deterministic, no LLM (hard rule 2). The `cards.status` writes of the approval
+gate (`record_approval` / `record_rejection`) live here as the single implementation both
+human-decision entry points call — `POST /cards/{id}/approve|reject` and the
+`recally approve|reject` CLI commands (docs/backend.md, "Wiring and entry
+points"). Two copies of the transition that enters a card into FSRS are exactly
+the drift hard rule 1 cannot afford; the design-invariant tests still restrict
+guarded status writes to this module and `pipeline.py` (test_design_invariants.py).
+Each entry point keeps its own lookup/validation (problem+json for HTTP, exit
+codes for the CLI) and commits.
 
 The ADR-008 suspension helpers (`bury`, `suspend`, `unsuspend`) live here too: they
 move `cards.suspended_until` and nothing else — never `cards.status`, never a
@@ -18,6 +24,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from recally.models import Card, CuratedUnitHighlight, Highlight
+from recally.models.base import utc_now
+from recally.scheduling.fsrs import new_card_state
 
 QUEUE_STATUSES = ("pending_review", "needs_human")
 
@@ -102,6 +110,31 @@ def list_pending_cards(
 
     pending.sort(key=lambda card: (card.book, card.chapter or "", card.first_export_position))
     return pending
+
+
+def record_approval(session: Session, card: Card) -> datetime:
+    """Human approval: enter the card into FSRS by creating its `card_state` row.
+
+    Approval is the only entry into scheduling (hard rule 1; docs/data-model.md,
+    `card_state`): the row is created `learning` at step 0, due at the approval
+    time. The caller validates that the card is awaiting a decision (404/409 at
+    its own layer) and commits.
+    """
+    card.status = "approved"
+    approved_at = utc_now()
+    card.approved_at = approved_at
+    session.add(new_card_state(card_id=card.id, due=approved_at, user_id=card.user_id))
+    return approved_at
+
+
+def record_rejection(session: Session, card: Card, *, reason: str) -> None:
+    """Human rejection; the reason lands in `status_reason` and feeds the Learner.
+
+    Creates nothing: hard rule 1 works in one direction, so a rejected card never
+    gets a `card_state` row. The caller validates and commits.
+    """
+    card.status = "rejected"
+    card.status_reason = reason
 
 
 def next_day_boundary(now: datetime, timezone_name: str) -> datetime:

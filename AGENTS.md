@@ -108,6 +108,8 @@ uv run alembic upgrade head
 uv run uvicorn recally.main:app --reload
 # Run the watcher by itself until the FastAPI lifespan owns it.
 uv run python -m recally.ingest.watcher
+# The validation-checkpoint client (step 3f): talks to the container directly, no server.
+uv run recally --help
 
 # android
 cd android && ./gradlew ktlintCheck
