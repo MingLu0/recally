@@ -9,13 +9,12 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-defaults:
-  run:
-    working-directory: backend
-
 jobs:
   backend:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
     steps:
       - uses: actions/checkout@v7
 
@@ -53,3 +52,67 @@ jobs:
         run: |
           uv export --frozen --no-dev --no-emit-project -o requirements-audit.txt
           uvx pip-audit -r requirements-audit.txt --strict --disable-pip
+
+  # Skipped entirely until android/ is a real Gradle project — the module is a
+  # placeholder README until roadmap step 4a, and a job that cannot find a
+  # wrapper would fail every backend-only PR.
+  android:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check for a Gradle project
+        id: gradle_project
+        working-directory: .
+        run: |
+          if [ -f android/gradlew ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "android/ has no Gradle wrapper yet; skipping."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # AGP 8.x needs JDK 17+. Keep this in step with the Gradle toolchain
+      # declared in android/app/build.gradle.kts — a mismatch fails obscurely.
+      - name: Set up JDK
+        if: steps.gradle_project.outputs.present == 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # Supersedes the deprecated gradle/gradle-build-action. Caching is
+      # load-bearing: an uncached Compose build is slow enough to hurt.
+      - name: Set up Gradle
+        if: steps.gradle_project.outputs.present == 'true'
+        uses: gradle/actions/setup-gradle@v4
+
+      # continue-on-error for the first Android PR only: a fresh ktlint run over
+      # a new module reports a backlog that would block the commit that creates
+      # it. Drop this line once android/ is formatted (docs/android.md,
+      # "Tooling").
+      - name: ktlint
+        if: steps.gradle_project.outputs.present == 'true'
+        continue-on-error: true
+        run: ./gradlew ktlintCheck
+
+      # Android Lint is the Android-specific correctness gate (permissions,
+      # resources, API level vs min SDK 26), not a type gate — Kotlin's compiler
+      # already covers what mypy does for the backend.
+      - name: Android Lint
+        if: steps.gradle_project.outputs.present == 'true'
+        continue-on-error: true
+        run: ./gradlew :app:lintDebug
+
+      - name: Unit tests
+        if: steps.gradle_project.outputs.present == 'true'
+        run: ./gradlew :app:testDebugUnitTest
+
+      # Separate from the tests on purpose: Hilt's graph is validated by KSP at
+      # compile time, so a test-only run can pass while the app does not build.
+      - name: Assemble debug
+        if: steps.gradle_project.outputs.present == 'true'
+        run: ./gradlew :app:assembleDebug

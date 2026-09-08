@@ -216,6 +216,23 @@ Every screen and the endpoints behind it. Kept here so a gap between this doc an
 | Push | Firebase Cloud Messaging |
 | Min SDK | 26 |
 
+## Tooling
+
+The backend's policy is in [backend.md](backend.md), *Tooling*; this is its Android counterpart, and the split is the same one — a fast formatter in the local loop, the slow checks in CI only.
+
+- **Build: Gradle with the Kotlin DSL** (`.gradle.kts`), dependencies declared in a **version catalog** (`gradle/libs.versions.toml`) rather than scattered through module files, so a version is stated once. The wrapper is committed, which is what pins Gradle itself.
+- **JDK 17** (Temurin). AGP 8.x requires 17+; the CI job and the Gradle toolchain must name the same version or the build fails in a way that does not point at the mismatch.
+- **ktlint** via the [`ktlint-gradle`](https://github.com/JLLeitschuh/ktlint-gradle) plugin — format and lint in one tool, the rough equivalent of Ruff on the backend. Chosen over Spotless because it needs no configuration to be useful, and over detekt because detekt is a deeper static-analysis tool whose value grows with a codebase that does not exist yet. Adding detekt later is a smaller decision than removing it. Run: `./gradlew ktlintCheck` (read-only) or `./gradlew ktlintFormat` (writes fixes).
+- **Android Lint**, `./gradlew :app:lintDebug`. This is the Android-specific correctness gate — missing permissions, resource problems, API-level misuse against min SDK 26. It is not a type gate: Kotlin's compiler already covers what mypy does for Python.
+- **pre-commit, ktlint only**: the repo-root `.pre-commit-config.yaml` runs `ktlintFormat` on Kotlin files under `android/`, scoped the way the ruff hooks are scoped to `backend/`. It goes through the Gradle wrapper because `ktlint-gradle` publishes no pre-commit hook, and because the wrapper is what keeps local rules identical to CI's. Note the honest cost: this hook starts a Gradle daemon, so it is slower than the millisecond ruff hooks — the reason nothing else is in it.
+- **CI**: the `android` job in `.github/workflows/ci.yml` runs ktlint, Android Lint, `:app:testDebugUnitTest` and `:app:assembleDebug` on every PR. `assembleDebug` is a separate step from the tests on purpose — Hilt's graph is validated by KSP at compile time, so a test-only run can pass while the app does not build.
+- **On the first Android PR only**, the ktlint and Android Lint steps carry `continue-on-error: true`: a fresh run of either over a new module reports a backlog that would block the very commit that creates the module. Both lines come out once `android/` is clean, and that removal is part of step 4a's definition of done.
+
+### Not in CI
+
+- **Instrumented tests (`androidTest/`)** need an emulator, which is minutes of boot time and the main source of flake in Android CI. They are run locally for now. This is a real gap, not a free win: the Compose UI tests described under *Tests* have no automation behind them until an emulator job exists.
+- **Dependency CVE scanning**, the analogue of the backend's pip-audit. Deferred rather than rejected — worth revisiting when the app leaves the LAN.
+
 ## Project structure
 
 Package root `dev.recally`. One package per screen under `ui/screens/`, holding the screen composable, its `UiState`, and its ViewModel together — the three change as a unit.
