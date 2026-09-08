@@ -1,6 +1,7 @@
 package dev.recally.data.repository
 
 import dev.recally.data.local.DueCardEntity
+import dev.recally.domain.repository.ApprovalRepository
 import dev.recally.domain.repository.CardRepository
 import dev.recally.domain.repository.DeckRepository
 import org.junit.Assert.assertEquals
@@ -22,6 +23,7 @@ class RepositoryDomainBoundaryTest {
                 CardRepository::class.java,
                 DeckRepository::class.java,
                 dev.recally.domain.repository.StatsRepository::class.java,
+                ApprovalRepository::class.java,
             )
         repositories.forEach { repositoryInterface ->
             assertEquals(

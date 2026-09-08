@@ -181,7 +181,7 @@ class ApproveViewModelTest {
         assertTrue(
             "ApproveUiState must not carry callbacks",
             ApproveUiState::class.java.declaredFields.none {
-                kotlin.jvm.functions.Function::class.java.isAssignableFrom(it.type)
+                !it.isSynthetic && !it.name.startsWith("$") && Function::class.java.isAssignableFrom(it.type)
             },
         )
     }
@@ -189,16 +189,17 @@ class ApproveViewModelTest {
     @Test
     fun test_ui_state_has_no_pending_count() {
         // G1 is scoped out: GET /cards/pending returns no counts, so the
-        // header count is not built and the UiState carries no Int count field.
+        // header count is not built and the UiState carries no Int count
+        // field. (Synthetic fields — e.g. the Compose compiler's `$stable` —
+        // are excluded.)
+        val fields = ApproveUiState::class.java.declaredFields.filter { !it.isSynthetic && !it.name.startsWith("$") }
         assertTrue(
-            "ApproveUiState must have no Int field",
-            ApproveUiState::class.java.declaredFields.none { it.type == Int::class.javaPrimitiveType },
+            "ApproveUiState must have no Int field: $fields",
+            fields.none { it.type == Int::class.javaPrimitiveType },
         )
         assertTrue(
-            "ApproveUiState must have no count/pending-named field",
-            ApproveUiState::class.java.declaredFields.none {
-                Regex("count|pending", RegexOption.IGNORE_CASE).containsMatchIn(it.name)
-            },
+            "ApproveUiState must have no count/pending-named field: $fields",
+            fields.none { Regex("count|pending", RegexOption.IGNORE_CASE).containsMatchIn(it.name) },
         )
     }
 
@@ -221,7 +222,10 @@ class ApproveViewModelTest {
                 ApproveViewModel::class.java.declaredMethods
                     .filter { !it.isSynthetic }
                     .map { it.name }
-            val stateFields = ApproveUiState::class.java.declaredFields.map { it.name }
+            val stateFields =
+                ApproveUiState::class.java.declaredFields
+                    .filter { !it.isSynthetic && !it.name.startsWith("$") }
+                    .map { it.name }
             assertTrue("ViewModel offers no repair action: $viewModelMethods", viewModelMethods.none(repairRegex::containsMatchIn))
             assertTrue("UiState carries no repair affordance: $stateFields", stateFields.none(repairRegex::containsMatchIn))
         }

@@ -7,12 +7,14 @@ import dev.recally.data.remote.DeckDto
 import dev.recally.data.remote.DueCardDto
 import dev.recally.data.remote.DueCardsResponse
 import dev.recally.data.remote.ForecastDayDto
+import dev.recally.data.remote.PendingCardDto
 import dev.recally.data.remote.StatsResponse
 import dev.recally.domain.model.Card
 import dev.recally.domain.model.Deck
 import dev.recally.domain.model.DeckCard
 import dev.recally.domain.model.DueSummary
 import dev.recally.domain.model.ForecastDay
+import dev.recally.domain.model.PendingCard
 import dev.recally.domain.model.Stats
 import kotlinx.serialization.json.Json
 import java.time.Instant
@@ -46,6 +48,21 @@ fun DueCardsResponse.toDomain(): DueSummary =
         newCount = newCount,
         learningStepsMinutes = learningStepsMinutes,
         cards = cards.map { it.toDomain() },
+    )
+
+fun PendingCardDto.toDomain(): PendingCard =
+    PendingCard(
+        id = id,
+        status = status,
+        type = type,
+        front = front,
+        back = back,
+        statusReason = statusReason,
+        sourceHighlights = sourceHighlights,
+        truncated = truncated,
+        bookId = bookId,
+        book = book,
+        chapter = chapter.orEmpty(),
     )
 
 fun DeckDto.toDomain(): Deck =
