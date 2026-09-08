@@ -65,6 +65,10 @@ dependencies {
     // encryption wrapper — the doc carries the why.
     implementation(libs.datastore.preferences)
 
+    implementation(libs.work.runtime.ktx)
+    implementation(libs.androidx.hilt.work)
+    ksp(libs.androidx.hilt.compiler)
+
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.mockwebserver)

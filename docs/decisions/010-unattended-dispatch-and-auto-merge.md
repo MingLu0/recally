@@ -1,6 +1,6 @@
 # ADR-010: Unattended dispatch and auto-merge for sub-issues
 
-**Status**: accepted, amended by [ADR-012](012-drop-the-no-mistakes-gate.md) — the auto-merge conditions were re-based on the Tests gate when no-mistakes was dropped — and by [ADR-013](013-scala-orchestrator.md), which raised the worktree cap to 10 under the orchestrator and added the `## TDD evidence` and docs-only conditions
+**Status**: accepted, amended by [ADR-012](012-drop-the-no-mistakes-gate.md) — the auto-merge conditions were re-based on the Tests gate when no-mistakes was dropped — by [ADR-013](013-scala-orchestrator.md), which raised the worktree cap to 10 under the orchestrator and added the `## TDD evidence` and docs-only conditions — and by [ADR-014](014-auto-ready-on-unblock.md), which retired the opt-in `ready` label (unblocked is the trigger) and excluded `manual`-labelled tickets
 **Date**: 2026-09-06
 
 ## Context

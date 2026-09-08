@@ -80,20 +80,20 @@ or unimplementable, say so and propose the replacement.
 
 ## Unattended dispatch
 
-An hourly Orca automation ("Roadmap autostart") starts agents on sub-issues that are ready, with no
+An hourly Orca automation ("Roadmap autostart") starts agents on unblocked sub-issues, with no
 human in the loop. It is **disabled until deliberately turned on** and dispatches at most one issue per run.
 
 ### What makes an issue dispatchable
 
 `scripts/orca-ready-issues.sh` is the automation's precheck: exit 0 (with the single
-lowest-numbered dispatchable issue on stdout) starts a run, anything else skips it. All five
-conditions must hold.
+lowest-numbered dispatchable issue on stdout) starts a run, anything else skips it. All
+conditions must hold (ADR-014: unblocked is the trigger; there is no human label gate).
 
 | # | Condition | Source |
 |---|---|---|
-| 1 | labelled `ready` | a human — the only judgment in the list |
-| 2 | no open blocker | GitHub native issue dependencies |
-| 3 | is a sub-issue, not a parent | GraphQL `parent` / `subIssues` |
+| 1 | no open blocker | GitHub native issue dependencies |
+| 2 | is a sub-issue, not a parent | GraphQL `parent` / `subIssues` |
+| 3 | not labelled `manual` | human-only tickets (e.g. Firebase setup) never dispatch |
 | 4 | unassigned | an assignee means someone owns it |
 | 5 | no open PR already closes it | prevents double dispatch on a retry |
 
@@ -101,19 +101,6 @@ Condition 4 also covers work in flight: the dispatched agent self-assigns its is
 act (`scripts/orca-autostart-prompt.md`), so the next hourly tick skips an issue that is being
 worked but has no PR yet. The script fails closed: any error prints nothing and exits 1, so a
 broken query can never cause a dispatch.
-
-### `ready` vs. a blocker
-
-These are different states and live in different places:
-
-- **Blocked** — waiting on another issue. Recorded in GitHub's native issue dependencies
-  (`gh api repos/{owner}/{repo}/issues/{n}/dependencies/blocked_by`) and *derived*: it resolves itself when
-  the blocker closes. Never a label; a label would go stale.
-- **Not ready** — nothing blocks it, but the spec is not settled. Only a human knows this, so it is the
-  `ready` label.
-
-The label is deliberately **opt-in**. Forgetting to add it means nothing happens (visible on the board);
-an opt-out `needs-spec` label would mean forgetting it lets an agent start on an unsettled spec unattended.
 
 ### Auto-merge policy
 
@@ -135,12 +122,14 @@ change (ADR-013).
 
 Two consequences worth being explicit about:
 
-- **`ready` is now the approval, not a scheduling hint.** Once an issue carries it, work can reach `main`
-  without a human seeing the diff — on the strength of the ticket's own test list. Apply it accordingly:
-  a thin list is a real coverage gap (ADR-012).
-- **Parent step issues are excluded on purpose.** They carry the `You verify` gate, which only a human can
-  run against the real system. Auto-merging one would skip the gate the roadmap says the step is not done
-  without (ADR-010).
+- **Unblocked is the trigger; the parent's You verify is the approval** (ADR-014). Work can reach
+  `main` without a human seeing the diff — on the strength of the ticket's own test list. A thin
+  list is a real coverage gap (ADR-012), and a bad pattern can land across a whole wave before a
+  human sees one; that risk is accepted deliberately and bounded by the parent gate.
+- **Parent step issues and `manual` tickets are excluded on purpose.** Parents carry the `You verify`
+  gate, which only a human can run against the real system; `manual` tickets are human work by
+  definition. Auto-merging or auto-dispatching either would skip the gates the roadmap says the step
+  is not done without (ADR-010, ADR-014).
 
 ### Parallel dispatch: the orchestrator
 
@@ -154,7 +143,7 @@ scala-cli scripts/orchestrate.sc -- --once              # a single tick
 scala-cli scripts/orchestrate.sc -- --step=step-4       # only issues carrying that label
 ```
 
-It reads eligibility from `scripts/orca-ready-issues.sh --all` (the same five conditions — the
+It reads eligibility from `scripts/orca-ready-issues.sh --all` (the same conditions — the
 orchestrator never decides dispatchability itself), keeps up to 10 issues in flight, hot-swaps a
 rate-limited agent along the pool `opencode → claude`, and dispatches a rebase into the same worktree
 when a PR goes CONFLICTING (twice, then it leaves the PR for a human with a comment). State lives in
@@ -162,15 +151,13 @@ when a PR goes CONFLICTING (twice, then it leaves the PR for a human with a comm
 it never double-dispatches. It never runs `gh pr merge` — merge authority stays with the worktree
 agent under the five conditions above.
 
-Every tick prints a one-line status plus `[action-needed]` lines for what only you can unblock —
-unblocked-but-unlabelled issues, needs-human escalations, docs-only PRs parked for merge — and fires
-a macOS notification when that set changes. Silence means the step is done or genuinely waiting on
-workers, never that something is stuck unseen.
-
-When a new unblocked-but-unlabelled issue appears, a native list picker pops: select the ones that
-are ready, click OK, and they are labelled `ready` and dispatched on the next tick. The label stays
-the only dispatch gate; the picker just removes the typing. Dismissed issues are not re-prompted
-unless a new one unblocks.
+Logging is change-only (ADR-014): a status line prints when the tracked picture changes, events
+(dispatches, merges, conflicts, escalations) print as they happen, and a dim heartbeat every ten
+ticks proves the loop is alive. A boxed state panel renders at startup and for `--dry-run`, which
+doubles as the "state of the step" command. Needs-human issues are reconciled against reality each
+tick — a closed issue flips to merged, an unassigned one drops back into the dispatchable pool — so
+stale `[action-needed]` lines cannot outlive the situation that caused them. A macOS notification
+(banner + sound) fires when the needs-you set changes.
 
 ### Turning it on
 

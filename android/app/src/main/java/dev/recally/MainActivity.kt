@@ -6,6 +6,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.navigation.compose.rememberNavController
 import dagger.hilt.android.AndroidEntryPoint
+import dev.recally.data.sync.RatingOutboxWork
 import dev.recally.ui.AppScaffold
 import dev.recally.ui.navigation.RecallyNavHost
 import dev.recally.ui.theme.RecallyTheme
@@ -20,6 +21,9 @@ import dev.recally.ui.theme.RecallyTheme
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // The outbox flush is expedited on app start and enqueued after each
+        // rating (docs/android.md, "Offline-first sync").
+        RatingOutboxWork.enqueue(this, expedited = true)
         enableEdgeToEdge()
         setContent {
             RecallyTheme {

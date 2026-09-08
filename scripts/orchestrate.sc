@@ -3,12 +3,17 @@
 //> using dep com.lihaoyi::upickle::3.1.3
 //> using dep com.lihaoyi::os-lib::0.9.1
 
-// Stateful parallel dispatcher for roadmap sub-issues (ADR-013).
+// Stateful parallel dispatcher for roadmap sub-issues (ADR-013, ADR-014).
 //
 // Dispatch eligibility is never decided here: scripts/orca-ready-issues.sh --all
-// is the only source (ready label, no open blocker, sub-issue, unassigned, no
-// open PR). Gate and merge policy live in scripts/orca-autostart-prompt.md and
-// are executed by the worktree agent. This script never runs `gh pr merge`.
+// is the only source (open, sub-issue, no open blocker, unassigned, no open PR
+// — no human label since ADR-014). Gate and merge policy live in
+// scripts/orca-autostart-prompt.md and are executed by the worktree agent.
+// This script never runs `gh pr merge`.
+//
+// Logging is change-only: a status line prints when the tracked picture
+// changes, events print as they happen, and a dim heartbeat every 10 ticks
+// proves the loop is alive. --dry-run always prints the full state panel.
 //
 // Usage: scala-cli scripts/orchestrate.sc -- [--dry-run] [--once] [--step=<label>]
 //   --step=step-4 scopes dispatch to issues carrying that label (ADR-013).
@@ -33,10 +38,11 @@ object Orchestrator:
   val RateLimitSignatures = List("rate limit", "429", "usage limit", "quota", "limit reached")
 
   object Phase:
-    val Dispatched = "dispatched" // worker running, no PR yet
-    val PrOpen = "pr_open"        // PR exists, not merged
-    val Merged = "merged"         // terminal
-    val NeedsHuman = "needs_human" // terminal until a human resets it
+    val Dispatched = "dispatched"  // worker running, no PR yet
+    val PrOpen = "pr_open"         // PR exists, not merged
+    val Merged = "merged"          // terminal
+    val NeedsHuman = "needs_human" // reconciled every tick (ADR-014): closed →
+    // merged, open + unassigned → dropped (redispatchable), open + assigned → kept
   val ActivePhases = Set(Phase.Dispatched, Phase.PrOpen)
 
   case class TrackedIssue(
@@ -55,12 +61,12 @@ object Orchestrator:
     given upickle.default.ReadWriter[TrackedIssue] = upickle.default.macroRW
   // lastActionNeeded is the dedup signature for desktop notifications: a
   // notification fires only when the action-needed set changes.
-  // readyPrompted records which issues the ready-picker dialog has already
-  // shown (picked or dismissed), so it re-pops only for newly unblocked ones.
+  // lastStatus is the dedup signature for the terminal status line: it prints
+  // only when the tracked picture changes (ADR-014, quiet logs).
   case class State(
     tracked: List[TrackedIssue],
     lastActionNeeded: List[String] = Nil,
-    readyPrompted: List[Int] = Nil,
+    lastStatus: String = "",
   )
   object State:
     given upickle.default.ReadWriter[State] = upickle.default.macroRW
@@ -192,7 +198,7 @@ object Orchestrator:
     val assignment = s"\n\n---\nOrchestrator assignment: your issue is #${candidate.number}. " +
       s"Skip the 'Pick the issue' step; claim #${candidate.number} and implement it."
     for
-      _ <- IO.println(s"[dispatch] #${candidate.number} (${candidate.title}) on $agent")
+      _ <- event(s"🌱 #${candidate.number} dispatched → $agent — ${candidate.title}")
       _ <- orca(List("worktree", "create", "--repo", s"id:$repoId",
         "--name", s"issue-${candidate.number}-${slugify(candidate.title)}",
         "--issue", candidate.number.toString, "--base-branch", "main"))
@@ -210,30 +216,80 @@ object Orchestrator:
   def nextAgent(current: String): Option[String] =
     AgentPool.dropWhile(_ != current).drop(1).headOption
 
-  // --- reconcile one tracked issue ---
+  // --- logging (events always print; status prints on change only, ADR-014) ---
 
-  def escalate(t: TrackedIssue, why: String): IO[TrackedIssue] =
+  val UseColor: Boolean = sys.env.get("TERM").forall(_ != "dumb")
+  def dim(s: String): String = if UseColor then s"\u001b[2m$s\u001b[0m" else s
+  def yellow(s: String): String = if UseColor then s"\u001b[33m$s\u001b[0m" else s
+  def green(s: String): String = if UseColor then s"\u001b[32m$s\u001b[0m" else s
+  def red(s: String): String = if UseColor then s"\u001b[31m$s\u001b[0m" else s
+
+  def now: String = java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))
+
+  def event(msg: String): IO[Unit] = IO.println(s"$now  $msg")
+
+  def phaseGlyph(phase: String): String = phase match
+    case Phase.Dispatched => "🌱"
+    case Phase.PrOpen => "👀"
+    case Phase.Merged => "🎉"
+    case _ => "🆘"
+
+  def phaseWord(phase: String): String = phase match
+    case Phase.Dispatched => "dispatched"
+    case Phase.PrOpen => "PR open"
+    case Phase.Merged => "merged"
+    case _ => "needs you"
+
+  // --- reconcile one tracked issue ---
+  // Returns None when the issue should be dropped from tracking (a needs-human
+  // issue the human reset by unassigning — it is redispatchable via the precheck).
+
+  def escalate(t: TrackedIssue, why: String): IO[Option[TrackedIssue]] =
     for
-      _ <- IO.println(s"[needs-human] #${t.issue}: $why")
+      _ <- event(red(s"🆘 #${t.issue} needs you — $why"))
       _ <- gh(List("issue", "comment", t.issue.toString, "--repo", GithubRepo, "--body",
         s"Orchestrator: $why Leaving this for a human.")).attempt
-    yield t.copy(phase = Phase.NeedsHuman)
+    yield Some(t.copy(phase = Phase.NeedsHuman))
 
   def releaseWorker(dispatchId: String): IO[Unit] =
     shOpt(List("orca", "orchestration", "worker-release", "--dispatch", dispatchId, "--json")).void
 
-  def reconcile(t: TrackedIssue, repoId: String, runId: String): IO[TrackedIssue] =
-    if !ActivePhases(t.phase) then IO.pure(t)
-    else issueState(t.issue).flatMap {
+  def assigneeCount(issue: Int): IO[Int] =
+    gh(List("issue", "view", issue.toString, "--repo", GithubRepo, "--json", "assignees",
+      "-q", ".assignees | length")).map(_.trim.toInt).handleError(_ => 1) // fail closed: keep reporting
+
+  def reconcile(t: TrackedIssue, repoId: String, runId: String): IO[Option[TrackedIssue]] =
+    t.phase match
+      case Phase.Merged => IO.pure(Some(t))
+      case Phase.NeedsHuman => reconcileNeedsHuman(t)
+      case _ => reconcileActive(t, repoId, runId).map(Some(_))
+
+  // needs-human is not terminal (ADR-014): the state file follows reality.
+  def reconcileNeedsHuman(t: TrackedIssue): IO[Option[TrackedIssue]] =
+    issueState(t.issue).flatMap {
       case "CLOSED" =>
-        releaseWorker(t.dispatchId) *> IO.pure(t.copy(phase = Phase.Merged))
+        event(green(s"🎉 #${t.issue} merged — closed while marked needs-human, following reality")) *>
+          releaseWorker(t.dispatchId) *> IO.pure(Some(t.copy(phase = Phase.Merged)))
+      case _ =>
+        assigneeCount(t.issue).flatMap { count =>
+          if count == 0 then
+            event(s"🧹 #${t.issue} reset (unassigned) — dropped from tracking, redispatchable") *>
+              IO.pure(None)
+          else IO.pure(Some(t))
+        }
+    }
+
+  def reconcileActive(t: TrackedIssue, repoId: String, runId: String): IO[TrackedIssue] =
+    issueState(t.issue).flatMap {
+      case "CLOSED" =>
+        event(green(s"🎉 #${t.issue} merged — slot freed")) *> releaseWorker(t.dispatchId) *> IO.pure(t.copy(phase = Phase.Merged))
       case _ =>
         for
           merged <- prsForIssue("merged", t.issue)
           open <- prsForIssue("open", t.issue)
           result <-
             if merged.nonEmpty then
-              IO.println(s"[merged] #${t.issue}") *> releaseWorker(t.dispatchId) *> IO.pure(t.copy(phase = Phase.Merged))
+              event(green(s"🎉 #${t.issue} merged — slot freed")) *> releaseWorker(t.dispatchId) *> IO.pure(t.copy(phase = Phase.Merged))
             else open match
               case pr :: _ => reconcileOpenPr(t, pr, repoId, runId)
               case Nil => reconcileNoPr(t, repoId, runId)
@@ -252,7 +308,7 @@ object Orchestrator:
       case Some(id) =>
         workerStatus(id).flatMap {
           case Running | Unknown => IO.pure(t) // fix in flight, or unverifiable — never double-dispatch
-          case WaitingOnHuman => escalate(t, "conflict-fix worker is parked on a question only a human can answer.")
+          case WaitingOnHuman => escalate(t, "conflict-fix worker is parked on a question only a human can answer.").map(_.get)
           case Failed(_) | Settled => dispatchConflictFix(t, prNumber, repoId, runId) // done but still conflicting
         }
       case None => dispatchConflictFix(t, prNumber, repoId, runId)
@@ -267,7 +323,7 @@ object Orchestrator:
         "Rebase your branch onto origin/main, resolve the conflicts (docs are the spec; when your " +
         "code and a doc disagree, the doc wins), re-run `uv run pytest`, `uv run ruff check .` and " +
         "`uv run mypy src/` from backend/, force-push, and then follow the merge policy again."
-      IO.println(s"[conflict] #${t.issue} PR #$prNumber conflicting; dispatching rebase (attempt ${t.conflictFixes + 1})") *>
+      event(s"🔀 #${t.issue} PR #$prNumber conflicting → rebase dispatched (${t.conflictFixes + 1}/$MaxConflictFixes)") *>
         redispatch(t, t.agent, spec, s"Rebase issue #${t.issue} onto main", runId).map { newDispatchId =>
           t.copy(conflictFixes = t.conflictFixes + 1, conflictDispatchId = Some(newDispatchId))
         }
@@ -286,36 +342,36 @@ object Orchestrator:
               "Add it with the red run of every negative assertion captured before the implementation " +
               "existed, next to the green run, then follow the merge policy again. If the red run never " +
               "happened, say so in the PR and stop."
-            IO.println(s"[evidence] #${t.issue} PR #$prNumber missing TDD evidence; nudging") *>
+            event(s"📝 #${t.issue} PR #$prNumber missing $TddEvidenceMarker — nudging") *>
               redispatch(t, t.agent, spec, s"TDD evidence for issue #${t.issue}", runId)
                 .map(newDispatchId => t.copy(dispatchId = newDispatchId, evidenceNudged = true))
           case _ =>
-            escalate(t, s"PR #$prNumber still lacks the `$TddEvidenceMarker` section after a nudge.")
+            escalate(t, s"PR #$prNumber still lacks the `$TddEvidenceMarker` section after a nudge.").map(_.get)
         }
 
   def reconcileNoPr(t: TrackedIssue, repoId: String, runId: String): IO[TrackedIssue] =
     workerStatus(t.dispatchId).flatMap {
       case Running | Unknown => IO.pure(t)
       case Settled =>
-        escalate(t, "worker settled without opening a PR; check its output in Orca.")
+        escalate(t, "worker settled without opening a PR; check its output in Orca.").map(_.get)
       case WaitingOnHuman =>
-        escalate(t, "worker is parked on a question only a human can answer (agentWait).")
+        escalate(t, "worker is parked on a question only a human can answer (agentWait).").map(_.get)
       case Failed(rateLimited) if rateLimited =>
         nextAgent(t.agent) match
           case Some(failover) =>
-            IO.println(s"[failover] #${t.issue}: ${t.agent} rate-limited; hot-swapping to $failover") *>
+            event(s"♻️  #${t.issue} ${t.agent} rate-limited → $failover") *>
               redispatch(t, failover, promptText + assignmentFor(t), s"Issue #${t.issue}: ${t.title}", runId).map { newDispatchId =>
                 t.copy(dispatchId = newDispatchId, agent = failover, attempts = t.attempts + 1)
               }
           case None =>
-            escalate(t, s"agent pool exhausted (${AgentPool.mkString(" -> ")}); all rate-limited.")
+            escalate(t, s"agent pool exhausted (${AgentPool.mkString(" -> ")}); all rate-limited.").map(_.get)
       case Failed(_) =>
         if t.attempts < MaxAttempts then
-          IO.println(s"[retry] #${t.issue}: worker failed; retry ${t.attempts + 1} on ${t.agent}") *>
+          event(s"🔁 #${t.issue} worker failed — retry ${t.attempts + 1}/$MaxAttempts on ${t.agent}") *>
             redispatch(t, t.agent, promptText + assignmentFor(t), s"Issue #${t.issue}: ${t.title}", runId).map { newDispatchId =>
               t.copy(dispatchId = newDispatchId, attempts = t.attempts + 1)
             }
-        else escalate(t, s"worker failed ${t.attempts} times; giving up.")
+        else escalate(t, s"worker failed ${t.attempts} times; giving up.").map(_.get)
     }
 
   def assignmentFor(t: TrackedIssue): String =
@@ -360,143 +416,114 @@ object Orchestrator:
       }
     }
 
-  // Open sub-issues in the step scope that are unblocked, unassigned and
-  // unclaimed by a PR but not labelled 'ready' — the only thing standing
-  // between them and dispatch is the human's label.
-  def awaitingReady(stepLabel: String, claimed: Set[Int]): IO[List[ReadyIssue]] =
-    val Array(owner, name) = GithubRepo.split("/")
-    val query = """query($owner:String!,$name:String!){repository(owner:$owner,name:$name){issues(first:100,states:OPEN){nodes{number title labels(first:20){nodes{name}} assignees(first:5){totalCount} parent{number} subIssues(first:1){totalCount}}}}}"""
-    gh(List("api", "graphql", "-f", s"owner=$owner", "-f", s"name=$name", "-f", s"query=$query"))
-      .map(ujson.read(_))
-      .flatMap { json =>
-        val nodes = json("data")("repository")("issues")("nodes").arr.toList
-        val candidates = nodes.filter { i =>
-          val labels = i("labels")("nodes").arr.map(_("name").str).toList
-          labels.contains(stepLabel) && !labels.contains("ready") &&
-            i("parent") != ujson.Null && i("subIssues")("totalCount").num.toInt == 0 &&
-            i("assignees")("totalCount").num.toInt == 0 &&
-            !claimed(i("number").num.toInt)
-        }
-        candidates.traverse { i =>
-          val n = i("number").num.toInt
-          gh(List("api", s"repos/$GithubRepo/issues/$n/dependencies/blocked_by",
-              "-q", """[.[] | select(.state == "open")] | length"""))
-            .map(count => if count.trim == "0" then Some(ReadyIssue(n, i("title").str, Nil)) else None)
-            .handleError(_ => None) // report fails closed too: error means not listed
-        }.map(_.flatten.sortBy(_.number))
-      }
-
-  def buildActions(tracked: List[TrackedIssue], prs: List[OpenPr], awaiting: List[Int]): List[String] =
-    val needsHuman = tracked.filter(_.phase == Phase.NeedsHuman).map(t => s"#${t.issue} needs-human (see issue comment)")
+  def buildActions(tracked: List[TrackedIssue], prs: List[OpenPr]): List[String] =
+    val needsHuman = tracked.filter(_.phase == Phase.NeedsHuman).map(t => s"#${t.issue} needs you (see issue comment)")
     val docsOnlyWaiting = for
       pr <- prs if pr.docsOnly
       issue <- pr.closes if tracked.exists(t => t.issue == issue && ActivePhases(t.phase))
     yield s"#$issue PR #${pr.number} is docs-only — waiting for human merge"
-    val awaitingLine = if awaiting.isEmpty then Nil
-      else List(s"${awaiting.map(n => s"#$n").mkString(" ")} unblocked but not labelled 'ready' — label to dispatch")
-    (needsHuman ++ docsOnlyWaiting ++ awaitingLine).sorted
+    (needsHuman ++ docsOnlyWaiting).sorted
 
-  def printStatus(tracked: List[TrackedIssue], freeSlots: Int, actions: List[String]): IO[Unit] =
-    val time = java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))
+  def statusSignature(tracked: List[TrackedIssue], freeSlots: Int, actions: List[String]): String =
     val active = tracked.filter(t => ActivePhases(t.phase))
-    val activeDesc = if active.isEmpty then "none"
-      else active.map(t => s"#${t.issue} ${t.phase} (${t.agent})").mkString(", ")
-    IO.println(s"[tick $time] active: $activeDesc | free: $freeSlots") >>
-      actions.traverse(a => IO.println(s"[action-needed] $a")).void
+    s"${active.map(t => s"${t.issue}:${t.phase}:${t.agent}").mkString(",")}|$freeSlots|${actions.mkString(";")}"
+
+  def statusBody(tracked: List[TrackedIssue], freeSlots: Int): String =
+    val active = tracked.filter(t => ActivePhases(t.phase))
+    val parts = active.map(t => s"${phaseGlyph(t.phase)} #${t.issue} ${phaseWord(t.phase)} (${t.agent})")
+    (parts ++ List(s"⚡ $freeSlots free")).mkString(" · ")
+
+  def printChange(tracked: List[TrackedIssue], freeSlots: Int, actions: List[String]): IO[Unit] =
+    event(statusBody(tracked, freeSlots)) >>
+      actions.traverse(a => IO.println(s"$now  ${yellow("⚠️  " + a)}")).void
+
+  def heartbeat(tracked: List[TrackedIssue], actions: List[String]): IO[Unit] =
+    val working = tracked.count(t => ActivePhases(t.phase))
+    val tail = if actions.isEmpty then "nothing needs you" else s"${actions.size} still need${if actions.size == 1 then "s" else ""} you"
+    IO.println(dim(s"· $now alive — $working working, $tail"))
+
+  // The boxed dashboard: shown once at startup, and always for --dry-run.
+  def printPanel(runId: String, stepScope: Option[String], tracked: List[TrackedIssue],
+                 freeSlots: Int, actions: List[String], extra: List[String]): IO[Unit] =
+    val header = s"╭─ 🍊 recally orch ─ $now " + "─" * 20
+    val meta = s"│  scope ${stepScope.getOrElse("all")} · cap $WorktreeCap · pool ${AgentPool.mkString("→")} · run $runId"
+    val trackedLines = tracked.filter(t => ActivePhases(t.phase)).map(t =>
+      s"│  ${phaseGlyph(t.phase)} #${t.issue} ${phaseWord(t.phase)} (${t.agent})")
+    val slotsLine = s"│  ⚡ $freeSlots slots free"
+    val extraLines = extra.map(e => s"│  $e")
+    val footer =
+      if actions.isEmpty then "╰─ ✨ nothing needs you"
+      else "╰─ ⚠️  needs you:" // actions printed below the box
+    val lines = List(header, meta) ++ trackedLines ++ List(slotsLine) ++ extraLines ++ List(footer)
+    lines.traverse(IO.println) >> actions.traverse(a => IO.println(s"   ${yellow(a)}")).void
 
   def notifyMac(actions: List[String]): IO[Unit] =
     val summary = actions.take(3).mkString("; ").replace("\"", "'")
     shOpt(List("osascript", "-e",
-      s"""display notification "$summary" with title "Recally orchestrator" sound name "Glass"""")).void
-
-  // Native multi-select picker for newly-unblocked issues; the chosen ones get
-  // the 'ready' label via gh, and the next tick's precheck dispatches them.
-  // The dialog is the approval — nothing is labelled without a click.
-  // ('choose from list' has no giving-up-after parameter; the dialog waits
-  // for a human, which is fine on a forked fiber.)
-  // Returns true if the dialog was actually shown; false means a real failure
-  // (automation permission), in which case the issues stay unprompted so the
-  // picker retries next tick rather than going permanently silent.
-  def promptReadyPicker(toPrompt: List[ReadyIssue]): IO[Boolean] =
-    val rows = toPrompt.map(i => s"#${i.number} ${i.title}".replace("\"", "'").replace("\\", "/"))
-    val listLiteral = rows.map(r => "\"" + r + "\"").mkString("{", ", ", "}")
-    val script = s"""choose from list $listLiteral with title "Recally orchestrator" with prompt "Unblocked tickets — select the ones that are ready:" with multiple selections allowed"""
-    shOpt(List("osascript", "-e", script)).flatMap {
-      case None =>
-        IO.println("[ready] picker could not be shown (automation permission?); falling back to notification only").as(false)
-      case Some(out) if out.trim == "false" || out.trim.isEmpty =>
-        IO.println(s"[ready] picker dismissed for ${toPrompt.map(_.number).map(n => s"#$n").mkString(", ")}").as(true)
-      case Some(out) =>
-        val chosen = "#(\\d+)".r.findAllMatchIn(out).map(_.group(1).toInt).toList
-        if chosen.isEmpty then IO.pure(true)
-        else
-          IO.println(s"[ready] labelling via picker: ${chosen.map(n => s"#$n").mkString(", ")}") >>
-            chosen.traverse(n =>
-              gh(List("issue", "edit", n.toString, "--repo", GithubRepo, "--add-label", "ready")).void
-            ).as(true)
-    }
+      s"""display notification "$summary" with title "Recally orchestrator 🍊" sound name "Glass"""")).void
 
   // --- main loop ---
 
-  def tick(dryRun: Boolean, stepScope: Option[String], runId: String, awaitPicker: Boolean): IO[State] =
+  val HeartbeatEvery = 10 // ticks
+
+  def tick(dryRun: Boolean, stepScope: Option[String], runId: String,
+           tickNum: Int, forcePrint: Boolean): IO[State] =
     for
       state <- loadState
       repoId <- resolveRepoId
-      tracked <-
+      reconciled <-
         if dryRun then IO.pure(state.tracked)
-        else state.tracked.traverse(reconcile(_, repoId, runId))
-      active = tracked.filter(t => ActivePhases(t.phase))
+        else state.tracked.traverse(reconcile(_, repoId, runId)).map(_.flatten)
+      active = reconciled.filter(t => ActivePhases(t.phase))
       freeSlots = WorktreeCap - active.size
       prs <- openPrs
-      claimed = prs.flatMap(_.closes).toSet
       candidates <- if freeSlots > 0 then readyIssues else IO.pure(Nil)
       scoped = candidates.filter(c => stepScope.forall(scope => c.labels.contains(scope)))
-      fresh = scoped.filterNot(c => tracked.exists(_.issue == c.number)).take(freeSlots)
+      fresh = scoped.filterNot(c => reconciled.exists(_.issue == c.number)).take(freeSlots)
       dispatched <-
-        if dryRun then
-          IO.println(s"[dry-run] scope=${stepScope.getOrElse("all")} active=${active.size} free=$freeSlots dispatchable=${fresh.map(_.number).mkString(", ")}")
-            .as(tracked)
-        else fresh.traverse(c => dispatchIssue(c, AgentPool.head, repoId, runId)).map(tracked ++ _)
-      awaiting <- stepScope.fold(IO.pure(List.empty[ReadyIssue]))(awaitingReady(_, claimed))
-      actions = buildActions(dispatched, prs, awaiting.map(_.number))
-      _ <- printStatus(dispatched, freeSlots, actions)
-      toPrompt = awaiting.filterNot(i => state.readyPrompted.contains(i.number))
-      shownPrompted = state.readyPrompted ++ toPrompt.map(_.number)
+        if dryRun then IO.pure(reconciled)
+        else fresh.traverse(c => dispatchIssue(c, AgentPool.head, repoId, runId)).map(reconciled ++ _)
+      freeAfter = WorktreeCap - dispatched.count(t => ActivePhases(t.phase))
+      actions = buildActions(dispatched, prs)
+      signature = statusSignature(dispatched, freeAfter, actions)
+      changed = signature != state.lastStatus
       _ <-
         if dryRun then
-          if toPrompt.nonEmpty then
-            IO.println(s"[would-prompt] ${toPrompt.map(i => s"#${i.number}").mkString(" ")} — picker would offer these")
-          else IO.unit
+          printPanel("(dry-run)", stepScope, dispatched, freeAfter, actions,
+            List(s"dispatchable now: ${if fresh.isEmpty then "none" else fresh.map(_.number).mkString(", ")}"))
+        else if forcePrint || changed then printChange(dispatched, freeAfter, actions)
+        else if tickNum % HeartbeatEvery == 0 then heartbeat(dispatched, actions)
+        else IO.unit
+      _ <-
+        if dryRun then IO.unit
         else
-          val changed = actions != state.lastActionNeeded
-          (if changed && actions.nonEmpty then notifyMac(actions) else IO.unit) >>
-            (if toPrompt.isEmpty then IO.pure(state.readyPrompted)
-             else if awaitPicker then
-               // single-tick mode: wait for the click; only record as prompted
-               // if the dialog actually showed, so a permissions failure retries
-               promptReadyPicker(toPrompt).map(shown => if shown then shownPrompted else state.readyPrompted)
-             else
-               // loop mode: never stall the tick on a dialog; record optimistically
-               // (a show failure is logged and the action-needed banner still fires)
-               promptReadyPicker(toPrompt).start.as(shownPrompted)
-            ).flatMap(rp => saveState(State(dispatched, actions, rp)))
-    yield State(dispatched, actions, shownPrompted)
+          val actionsChanged = actions != state.lastActionNeeded
+          (if actionsChanged && actions.nonEmpty then notifyMac(actions) else IO.unit) >>
+            saveState(State(dispatched, actions, signature))
+    yield State(dispatched, actions, signature)
 
-  def loop(stepScope: Option[String], runId: String): IO[Unit] =
-    tick(dryRun = false, stepScope, runId, awaitPicker = false) >> IO.sleep(PollInterval) >> loop(stepScope, runId)
+  def loop(stepScope: Option[String], runId: String, tickNum: Int): IO[Unit] =
+    tick(dryRun = false, stepScope, runId, tickNum, forcePrint = false) >>
+      IO.sleep(PollInterval) >> loop(stepScope, runId, tickNum + 1)
 
   def program(args: List[String]): IO[ExitCode] =
     val dryRun = args.contains("--dry-run")
     val once = args.contains("--once")
     val stepScope = args.find(_.startsWith("--step=")).map(_.stripPrefix("--step="))
-    if dryRun then tick(dryRun = true, stepScope, runId = "", awaitPicker = false).void.as(ExitCode.Success)
+    if dryRun then tick(dryRun = true, stepScope, runId = "", tickNum = 0, forcePrint = true).void.as(ExitCode.Success)
     else
       // One Run per process; every orca mutation passes --run explicitly because
       // each CLI call is a fresh process with no binding.
       createRun.flatMap { runId =>
-        IO.println(s"Orchestrator run: $runId (cap=$WorktreeCap pool=${AgentPool.mkString("->")} poll=$PollInterval scope=${stepScope.getOrElse("all")})") >>
-          (if once then tick(dryRun = false, stepScope, runId, awaitPicker = true).void
-           else loop(stepScope, runId))
+        (if once then tick(dryRun = false, stepScope, runId, tickNum = 1, forcePrint = true).void
+         else
+           // startup panel shows the pre-reconcile picture; the first tick prints
+           // the reconciled one (forcePrint via tickNum 0 always printing? no — first
+           // loop tick prints only on change, which it almost always is after startup)
+           loadState.flatMap { state =>
+             val active = state.tracked.filter(t => ActivePhases(t.phase))
+             printPanel(runId, stepScope, state.tracked, WorktreeCap - active.size, state.lastActionNeeded, Nil)
+           } >> loop(stepScope, runId, tickNum = 1))
       }.as(ExitCode.Success)
 
 // .sc entry point: the script wrapper main runs top-level statements, so the
