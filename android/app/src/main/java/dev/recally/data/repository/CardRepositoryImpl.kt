@@ -2,6 +2,7 @@ package dev.recally.data.repository
 
 import androidx.room.withTransaction
 import dev.recally.data.local.RecallyDatabase
+import dev.recally.data.remote.EditCardRequest
 import dev.recally.data.remote.RecallyApi
 import dev.recally.data.remote.apiCall
 import dev.recally.di.IoDispatcher
@@ -11,6 +12,7 @@ import dev.recally.domain.repository.Result
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
 import java.io.IOException
+import java.time.Instant
 import javax.inject.Inject
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -49,6 +51,58 @@ class CardRepositoryImpl
             }
 
         override suspend fun refreshDueCards(): Result<DueSummary> = dueCards(forceRefresh = true)
+
+        // ADR-008 post-approval controls. All three are remote-only writes —
+        // none is queued offline (docs/android.md, "Offline-first sync") —
+        // and none touches FSRS state or the Room due-card cache: the server
+        // stays the scheduling authority and the next refresh of
+        // GET /reviews/due reflects whatever it decided.
+        override suspend fun editCard(
+            cardId: Long,
+            front: String?,
+            back: String?,
+            tags: List<String>?,
+        ): Result<Unit> =
+            withContext(ioDispatcher) {
+                try {
+                    when (
+                        val result =
+                            apiCall { api.editCard(cardId, EditCardRequest(front = front, back = back, tags = tags)) }
+                    ) {
+                        is Result.Success -> Result.Success(Unit)
+                        is Result.Unauthorized -> Result.Unauthorized
+                        is Result.HttpError -> result
+                        is Result.NetworkError -> result
+                    }
+                } catch (cancellation: CancellationException) {
+                    throw cancellation
+                } catch (exception: Exception) {
+                    Result.NetworkError(IOException("failed to edit card $cardId", exception))
+                }
+            }
+
+        override suspend fun suspendCard(cardId: Long): Result<Instant?> = suspendedUntilCall(cardId) { api.suspendCard(it) }
+
+        override suspend fun unsuspendCard(cardId: Long): Result<Instant?> = suspendedUntilCall(cardId) { api.unsuspendCard(it) }
+
+        private suspend fun suspendedUntilCall(
+            cardId: Long,
+            call: suspend (Long) -> dev.recally.data.remote.SuspendedUntilResponse,
+        ): Result<Instant?> =
+            withContext(ioDispatcher) {
+                try {
+                    when (val result = apiCall { call(cardId) }) {
+                        is Result.Success -> Result.Success(result.data.suspendedUntil?.let(Instant::parse))
+                        is Result.Unauthorized -> Result.Unauthorized
+                        is Result.HttpError -> result
+                        is Result.NetworkError -> result
+                    }
+                } catch (cancellation: CancellationException) {
+                    throw cancellation
+                } catch (exception: Exception) {
+                    Result.NetworkError(IOException("failed to update suspension for card $cardId", exception))
+                }
+            }
 
         private suspend fun fetchAndCache(): Result<DueSummary> =
             try {

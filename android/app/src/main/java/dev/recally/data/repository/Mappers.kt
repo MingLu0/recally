@@ -2,6 +2,7 @@ package dev.recally.data.repository
 
 import dev.recally.data.local.DueCardEntity
 import dev.recally.data.local.DueSummaryMetaEntity
+import dev.recally.data.remote.DeckCardDto
 import dev.recally.data.remote.DeckDto
 import dev.recally.data.remote.DueCardDto
 import dev.recally.data.remote.DueCardsResponse
@@ -9,6 +10,7 @@ import dev.recally.data.remote.ForecastDayDto
 import dev.recally.data.remote.StatsResponse
 import dev.recally.domain.model.Card
 import dev.recally.domain.model.Deck
+import dev.recally.domain.model.DeckCard
 import dev.recally.domain.model.DueSummary
 import dev.recally.domain.model.ForecastDay
 import dev.recally.domain.model.Stats
@@ -69,6 +71,17 @@ fun ForecastDayDto.toDomain(): ForecastDay =
     ForecastDay(
         date = date,
         due = due,
+    )
+
+fun DeckCardDto.toDomain(): DeckCard =
+    DeckCard(
+        id = id,
+        type = type,
+        front = front,
+        back = back,
+        chapter = chapter,
+        tags = tags,
+        suspendedUntil = suspendedUntil?.let(Instant::parse),
     )
 
 fun DueCardEntity.toDomain(): Card =
