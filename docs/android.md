@@ -120,7 +120,7 @@ data class ReviewUiState(
 
 ### Repositories own the data layer
 
-ViewModels talk only to repositories — never to a DAO or a Retrofit service directly. A repository is an interface in `domain/repository/` with its implementation in `data/repository/`, bound by a Hilt module, so tests substitute a fake without a network or a database. Repositories return a sealed `Result` type rather than throwing; the ViewModel maps it into `UiState`. Room is the source of truth for due cards, and the repository decides when to refresh from the API — screens never know which side answered.
+ViewModels talk only to repositories — never to a DAO or a Retrofit service directly. A repository is an interface in `domain/repository/` with its implementation in `data/repository/`, bound by a Hilt module, so tests substitute a fake without a network or a database. Repositories return a sealed `Result` type rather than throwing; the ViewModel maps it into `UiState`. Room is the source of truth for due cards, and the repository decides when to refresh from the API — screens never branch on which side answered. The one signal that does cross the seam is `Result.Success.servedFromCache`, set when a forced refresh failed and the cache answered instead: it exists solely so the UI can show the offline bar (design-system.md, *States*), never to change behaviour. A 401 is not a cache-fallback case — the server was reached and rejected the key, so it always surfaces as `Result.Unauthorized` and the "check settings" banner.
 
 ### Rules
 

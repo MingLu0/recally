@@ -14,6 +14,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import dev.recally.ui.screens.settings.SettingsScreen
 import dev.recally.ui.screens.settings.SettingsViewModel
+import dev.recally.ui.screens.today.TodayScreen
+import dev.recally.ui.screens.today.TodayViewModel
 
 /**
  * Single NavHost for the app (docs/android.md, "Architecture"). Each route
@@ -30,7 +32,17 @@ fun RecallyNavHost(
         startDestination = Screen.Today.route,
         modifier = Modifier.padding(contentPadding),
     ) {
-        composable(Screen.Today.route) { }
+        composable(Screen.Today.route) {
+            val todayViewModel: TodayViewModel = hiltViewModel()
+            val todayUiState by todayViewModel.uiState.collectAsStateWithLifecycle()
+
+            TodayScreen(
+                uiState = todayUiState,
+                onStartReview = { navController.navigate(Screen.Review.route) },
+                onOpenSettings = { navController.navigate(Screen.Settings.route) },
+                onRetry = todayViewModel::refresh,
+            )
+        }
         composable(Screen.Review.route) { }
         composable(Screen.SessionSummary.route) { }
         composable(Screen.Approve.route) { }

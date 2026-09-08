@@ -17,7 +17,12 @@ import org.junit.Test
 class RepositoryDomainBoundaryTest {
     @Test
     fun test_dto_never_reaches_domain() {
-        val repositories = listOf(CardRepository::class.java, DeckRepository::class.java)
+        val repositories =
+            listOf(
+                CardRepository::class.java,
+                DeckRepository::class.java,
+                dev.recally.domain.repository.StatsRepository::class.java,
+            )
         repositories.forEach { repositoryInterface ->
             assertEquals(
                 "repository interfaces live in domain/repository",
