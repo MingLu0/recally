@@ -55,7 +55,13 @@ object Orchestrator:
     given upickle.default.ReadWriter[TrackedIssue] = upickle.default.macroRW
   // lastActionNeeded is the dedup signature for desktop notifications: a
   // notification fires only when the action-needed set changes.
-  case class State(tracked: List[TrackedIssue], lastActionNeeded: List[String] = Nil)
+  // readyPrompted records which issues the ready-picker dialog has already
+  // shown (picked or dismissed), so it re-pops only for newly unblocked ones.
+  case class State(
+    tracked: List[TrackedIssue],
+    lastActionNeeded: List[String] = Nil,
+    readyPrompted: List[Int] = Nil,
+  )
   object State:
     given upickle.default.ReadWriter[State] = upickle.default.macroRW
 
@@ -357,9 +363,9 @@ object Orchestrator:
   // Open sub-issues in the step scope that are unblocked, unassigned and
   // unclaimed by a PR but not labelled 'ready' — the only thing standing
   // between them and dispatch is the human's label.
-  def awaitingReady(stepLabel: String, claimed: Set[Int]): IO[List[Int]] =
+  def awaitingReady(stepLabel: String, claimed: Set[Int]): IO[List[ReadyIssue]] =
     val Array(owner, name) = GithubRepo.split("/")
-    val query = """query($owner:String!,$name:String!){repository(owner:$owner,name:$name){issues(first:100,states:OPEN){nodes{number labels(first:20){nodes{name}} assignees(first:5){totalCount} parent{number} subIssues(first:1){totalCount}}}}}"""
+    val query = """query($owner:String!,$name:String!){repository(owner:$owner,name:$name){issues(first:100,states:OPEN){nodes{number title labels(first:20){nodes{name}} assignees(first:5){totalCount} parent{number} subIssues(first:1){totalCount}}}}}"""
     gh(List("api", "graphql", "-f", s"owner=$owner", "-f", s"name=$name", "-f", s"query=$query"))
       .map(ujson.read(_))
       .flatMap { json =>
@@ -375,9 +381,9 @@ object Orchestrator:
           val n = i("number").num.toInt
           gh(List("api", s"repos/$GithubRepo/issues/$n/dependencies/blocked_by",
               "-q", """[.[] | select(.state == "open")] | length"""))
-            .map(count => if count.trim == "0" then Some(n) else None)
+            .map(count => if count.trim == "0" then Some(ReadyIssue(n, i("title").str, Nil)) else None)
             .handleError(_ => None) // report fails closed too: error means not listed
-        }.map(_.flatten.sorted)
+        }.map(_.flatten.sortBy(_.number))
       }
 
   def buildActions(tracked: List[TrackedIssue], prs: List[OpenPr], awaiting: List[Int]): List[String] =
@@ -403,9 +409,36 @@ object Orchestrator:
     shOpt(List("osascript", "-e",
       s"""display notification "$summary" with title "Recally orchestrator" sound name "Glass"""")).void
 
+  // Native multi-select picker for newly-unblocked issues; the chosen ones get
+  // the 'ready' label via gh, and the next tick's precheck dispatches them.
+  // The dialog is the approval — nothing is labelled without a click.
+  // ('choose from list' has no giving-up-after parameter; the dialog waits
+  // for a human, which is fine on a forked fiber.)
+  // Returns true if the dialog was actually shown; false means a real failure
+  // (automation permission), in which case the issues stay unprompted so the
+  // picker retries next tick rather than going permanently silent.
+  def promptReadyPicker(toPrompt: List[ReadyIssue]): IO[Boolean] =
+    val rows = toPrompt.map(i => s"#${i.number} ${i.title}".replace("\"", "'").replace("\\", "/"))
+    val listLiteral = rows.map(r => "\"" + r + "\"").mkString("{", ", ", "}")
+    val script = s"""choose from list $listLiteral with title "Recally orchestrator" with prompt "Unblocked tickets — select the ones that are ready:" with multiple selections allowed"""
+    shOpt(List("osascript", "-e", script)).flatMap {
+      case None =>
+        IO.println("[ready] picker could not be shown (automation permission?); falling back to notification only").as(false)
+      case Some(out) if out.trim == "false" || out.trim.isEmpty =>
+        IO.println(s"[ready] picker dismissed for ${toPrompt.map(_.number).map(n => s"#$n").mkString(", ")}").as(true)
+      case Some(out) =>
+        val chosen = "#(\\d+)".r.findAllMatchIn(out).map(_.group(1).toInt).toList
+        if chosen.isEmpty then IO.pure(true)
+        else
+          IO.println(s"[ready] labelling via picker: ${chosen.map(n => s"#$n").mkString(", ")}") >>
+            chosen.traverse(n =>
+              gh(List("issue", "edit", n.toString, "--repo", GithubRepo, "--add-label", "ready")).void
+            ).as(true)
+    }
+
   // --- main loop ---
 
-  def tick(dryRun: Boolean, stepScope: Option[String], runId: String): IO[State] =
+  def tick(dryRun: Boolean, stepScope: Option[String], runId: String, awaitPicker: Boolean): IO[State] =
     for
       state <- loadState
       repoId <- resolveRepoId
@@ -424,31 +457,45 @@ object Orchestrator:
           IO.println(s"[dry-run] scope=${stepScope.getOrElse("all")} active=${active.size} free=$freeSlots dispatchable=${fresh.map(_.number).mkString(", ")}")
             .as(tracked)
         else fresh.traverse(c => dispatchIssue(c, AgentPool.head, repoId, runId)).map(tracked ++ _)
-      awaiting <- stepScope.fold(IO.pure(List.empty[Int]))(awaitingReady(_, claimed))
-      actions = buildActions(dispatched, prs, awaiting)
+      awaiting <- stepScope.fold(IO.pure(List.empty[ReadyIssue]))(awaitingReady(_, claimed))
+      actions = buildActions(dispatched, prs, awaiting.map(_.number))
       _ <- printStatus(dispatched, freeSlots, actions)
+      toPrompt = awaiting.filterNot(i => state.readyPrompted.contains(i.number))
+      shownPrompted = state.readyPrompted ++ toPrompt.map(_.number)
       _ <-
-        if dryRun then IO.unit
+        if dryRun then
+          if toPrompt.nonEmpty then
+            IO.println(s"[would-prompt] ${toPrompt.map(i => s"#${i.number}").mkString(" ")} — picker would offer these")
+          else IO.unit
         else
           val changed = actions != state.lastActionNeeded
           (if changed && actions.nonEmpty then notifyMac(actions) else IO.unit) >>
-            saveState(State(dispatched, actions))
-    yield State(dispatched, actions)
+            (if toPrompt.isEmpty then IO.pure(state.readyPrompted)
+             else if awaitPicker then
+               // single-tick mode: wait for the click; only record as prompted
+               // if the dialog actually showed, so a permissions failure retries
+               promptReadyPicker(toPrompt).map(shown => if shown then shownPrompted else state.readyPrompted)
+             else
+               // loop mode: never stall the tick on a dialog; record optimistically
+               // (a show failure is logged and the action-needed banner still fires)
+               promptReadyPicker(toPrompt).start.as(shownPrompted)
+            ).flatMap(rp => saveState(State(dispatched, actions, rp)))
+    yield State(dispatched, actions, shownPrompted)
 
   def loop(stepScope: Option[String], runId: String): IO[Unit] =
-    tick(dryRun = false, stepScope, runId) >> IO.sleep(PollInterval) >> loop(stepScope, runId)
+    tick(dryRun = false, stepScope, runId, awaitPicker = false) >> IO.sleep(PollInterval) >> loop(stepScope, runId)
 
   def program(args: List[String]): IO[ExitCode] =
     val dryRun = args.contains("--dry-run")
     val once = args.contains("--once")
     val stepScope = args.find(_.startsWith("--step=")).map(_.stripPrefix("--step="))
-    if dryRun then tick(dryRun = true, stepScope, runId = "").void.as(ExitCode.Success)
+    if dryRun then tick(dryRun = true, stepScope, runId = "", awaitPicker = false).void.as(ExitCode.Success)
     else
       // One Run per process; every orca mutation passes --run explicitly because
       // each CLI call is a fresh process with no binding.
       createRun.flatMap { runId =>
         IO.println(s"Orchestrator run: $runId (cap=$WorktreeCap pool=${AgentPool.mkString("->")} poll=$PollInterval scope=${stepScope.getOrElse("all")})") >>
-          (if once then tick(dryRun = false, stepScope, runId).void
+          (if once then tick(dryRun = false, stepScope, runId, awaitPicker = true).void
            else loop(stepScope, runId))
       }.as(ExitCode.Success)
 
