@@ -343,7 +343,9 @@ class ReviewViewModelTest {
                     { rating -> outcome(rating, step = 1, lapsed = false, duplicate = true) },
                     { rating -> outcome(rating, step = null) },
                 )
-            reviewRepository.rateHandler = { rating -> responses.removeFirst()(rating) }
+            // removeAt(0), not removeFirst(): the latter resolves to JDK 21's
+            // SequencedCollection method, which android.jar does not have.
+            reviewRepository.rateHandler = { rating -> responses.removeAt(0)(rating) }
             val viewModel =
                 newViewModel(
                     cards = listOf(card(id = 1, step = 0)),

@@ -17,6 +17,8 @@ import dev.recally.ui.screens.approve.ApproveViewModel
 import dev.recally.ui.screens.decks.BookDetailScreen
 import dev.recally.ui.screens.decks.DecksScreen
 import dev.recally.ui.screens.decks.DecksViewModel
+import dev.recally.ui.screens.review.ReviewScreen
+import dev.recally.ui.screens.review.ReviewViewModel
 import dev.recally.ui.screens.settings.SettingsScreen
 import dev.recally.ui.screens.settings.SettingsViewModel
 import dev.recally.ui.screens.today.TodayScreen
@@ -50,7 +52,24 @@ fun RecallyNavHost(
                 onRetry = todayViewModel::refresh,
             )
         }
-        composable(Screen.Review.route) { }
+        composable(Screen.Review.route) {
+            val reviewViewModel: ReviewViewModel = hiltViewModel()
+            val reviewUiState by reviewViewModel.uiState.collectAsStateWithLifecycle()
+
+            ReviewScreen(
+                uiState = reviewUiState,
+                onFlip = reviewViewModel::flip,
+                onRate = reviewViewModel::rate,
+                onBury = reviewViewModel::bury,
+                onStartEdit = reviewViewModel::startEdit,
+                onDismissEdit = reviewViewModel::dismissEdit,
+                onEditCard = reviewViewModel::editCard,
+                onClose = { navController.popBackStack() },
+                onOpenSettings = { navController.navigate(Screen.Settings.route) },
+                onRetry = reviewViewModel::loadSession,
+                onDone = { navController.popBackStack() },
+            )
+        }
         composable(Screen.SessionSummary.route) { }
         composable(Screen.Approve.route) {
             val approveViewModel: ApproveViewModel = hiltViewModel()
