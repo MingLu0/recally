@@ -48,7 +48,7 @@ Use the backend through the CLI for ~14 days. Before starting, write down the nu
 ### 5. Notifications
 - FCM HTTP v1 push via `firebase-admin`; `push_runs` table; one-per-day and unreviewed-batch policy; deep links.
 - **Tests**: notifier sends once inside `PUSH_WINDOW` and not again the same day; skips while any card in the latest `push_runs` row has no `review_logs` entry after `sent_at`; sends nothing outside the window.
-- **You verify**: leave due cards unreviewed overnight. Exactly one notification arrives inside the window and tapping it opens the review session. Leave those cards unreviewed another day: no push. `push_runs` has one row whose `card_ids` match the cards shown.
+- **You verify**: leave due cards unreviewed overnight. Exactly one notification arrives inside the window and tapping it opens **Today** (not a review session directly — [android.md](android.md), *Push notifications*: the count the notification names stays correct there when some cards were already reviewed before the tap). Leave those cards unreviewed another day: no push. `push_runs` has one row whose `card_ids` match the cards shown.
 
 ### 6a. FSRS optimizer + stats
 - Nightly optimizer (stage A) via `POST /jobs/run {"job":"optimizer"}`; Stats screen.
@@ -67,7 +67,7 @@ The Android design ([design-system.md](design/design-system.md)) displays six th
 Ordered by how much depends on it.
 
 ### G1. Pending counts
-Today's "8 to approve" / "3 need you" tiles, the Approve header's "8 pending", and the summary sheet's "Review 8 pending cards" all need a count without fetching the list. `GET /cards/pending` returns `cards[]` and no counts; calling `.size` on two full lists is wrong on a home screen that must render before the queue is reachable (`android.md:34`, `android.md:45`).
+Today's "8 to approve" / "3 need you" tiles, the Approve header's "8 pending", and the summary sheet's "Review 8 pending cards" all need a count without fetching the list. `GET /cards/pending` returns `cards[]` and no counts; calling `.size` on two full lists is wrong on a home screen that must render before the queue is reachable — the approval queue requires connectivity ([android.md](android.md), *Offline-first sync*).
 
 **Add** `counts: { "pending_review": 5, "needs_human": 3 }` to `GET /cards/pending`, or a separate `GET /cards/pending/count`. One gap, three screens.
 - **Tests**: with 5 `pending_review` and 3 `needs_human` rows, the counts field matches; approving one card decrements the right bucket.
@@ -107,10 +107,6 @@ Decks shows "2 TRUNCATED" per book. `truncated` is a `highlights` column and `GE
 
 **Either** add a `truncated` count to `GET /decks`, **or** drop the badge from the Decks screen. It is informational only; hard rule 7 is not at stake, since nothing in the UI offers to reconstruct the clipped text.
 - **Tests**: a book with two truncated source highlights reports 2, whether or not those cards are approved.
-
-### Also open (design decisions, not API gaps)
-
-Recorded in `design-system.md` under *Open decisions*: dark theme is undesigned and needed before release; and the bottom navigation, the session progress indicator, the separate "needs you" filter, and the summary sheet's three-bucket rating grouping are all additions to `android.md` rather than things it specifies. Each needs that doc updated or the element dropped.
 
 ## Productionization phases
 

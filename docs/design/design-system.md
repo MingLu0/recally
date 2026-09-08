@@ -96,7 +96,7 @@ All ten current artboards conform to this scale — verified 2026-09-07. Anythin
 
 ## Components
 
-### Rating row (`ui/review/RatingRow.kt`)
+### Rating row (`ui/screens/review/RatingRow.kt`)
 Four equal columns, `grid` with 8dp gap, each **66dp tall** (over the 44dp minimum). Good is `success`-filled; the others are outlined with a 1.5dp border tinted from their own semantic colour.
 
 Light: outlined tiles sit on `ground` with a pale tinted border. Dark: both fill and border are re-derived — a faint tinted fill (`#2A1C1A` danger, `#2A2119` warn, `#16302A` success) under a stronger border (`#6B3730`, `#6B4A2C`, `#2F6B56`), so the outline still carries against `surface`. Mapping the light borders directly leaves them invisible.
@@ -106,24 +106,24 @@ Light: outlined tiles sit on `ground` with a pale tinted border. Dark: both fill
 ### Card surface
 Light: no fill at all — the card is `ground`, defined solely by its 1dp `line` border. Dark: `surface` fill plus the same border. `md` radius, no shadow in either theme. Internal sections separated by 1dp `line-soft`. Never nest a bordered card inside a bordered card — use a divider.
 
-### Stats strip (`ui/today/StatsStrip.kt`)
+### Stats strip (`ui/screens/today/StatsStrip.kt`)
 One bordered unit. Left cell fixed 104dp wide with a right `line` border, holding the streak. Right region holds three metrics in an equal grid. A full-width `primary` action bar is fused to the bottom, inside the same border and radius clip — it is part of the strip, not a separate button.
 
-### Session progress (`ui/review/SessionProgress.kt`)
+### Session progress (`ui/screens/review/SessionProgress.kt`)
 A single 6dp `pill` bar with proportional fills — `success` for cards answered Good/Easy, `warn` for those pending a repeat — plus a "N left" count in `caption`/`ink-faint`.
 
-**Not a fixed segment-per-card bar.** `docs/android.md:14` re-queues Again/Hard cards inside the session, so a 12-card session produces more than 12 presentations. A fixed denominator would either jump backwards mid-session or silently drop the repeat. The header reads "6 done · 1 to repeat" rather than "7 of 12" for the same reason: **cards remaining, never a fixed total.** Derived from local session state; the server owns the real schedule.
+**Not a fixed segment-per-card bar.** `docs/android.md` (*Screens → 2. Review session*) re-queues Again/Hard cards inside the session, so a 12-card session produces more than 12 presentations. A fixed denominator would either jump backwards mid-session or silently drop the repeat. The header reads "6 done · 1 to repeat" rather than "7 of 12" for the same reason: **cards remaining, never a fixed total.** Derived from local session state; the server owns the real schedule.
 
-### Chapter group header (`ui/approve/ChapterHeader.kt`)
+### Chapter group header (`ui/screens/approve/ChapterHeader.kt`)
 15×20dp book-colour spine chip, then book title (`label`, 700 `ink`), then `· chapter` (`label`, 400 `ink-faint`). Groups a run of cards; the flat list from `GET /cards/pending` is grouped client-side, ordered by book, chapter, `export_position`.
 
-### Critique block (`ui/approve/CritiqueBlock.kt`)
+### Critique block (`ui/screens/approve/CritiqueBlock.kt`)
 `#FDF6F3` fill, 3dp `accent` left rule, radius `0 8 8 0`. Label "CRITIC" in `badge`/`warn`, body in `body-sm`/`#6B5A4F`. Visually subordinate to the card text — it is context, not content.
 
-### Cloze rendering (`ui/common/ClozeText.kt`)
+### Cloze rendering (`ui/components/ClozeText.kt`)
 `{{c1::answer}}` renders as the answer text on `primary-wash` with a 2dp `primary` bottom border, 4dp radius, 1×7dp padding, weight 700, colour `primary`. **Never show raw braces.** In review (unflipped) the same span renders as a blank of equivalent width. `docs/android.md` does not specify this; it is a design decision recorded here.
 
-### Source-highlight disclosure (`ui/approve/HighlightDisclosure.kt`)
+### Source-highlight disclosure (`ui/screens/approve/HighlightDisclosure.kt`)
 Collapsed by default, above a `line-soft` top divider: chevron + "N source highlight(s)" in `label`/`ink-muted`. A grouped unit can carry several and they would otherwise dominate the card. Expanded, each highlight is `body-sm`/`ink-muted` with a `warn` "truncated" chip where `truncated` is true.
 
 ### Bottom sheet
@@ -132,28 +132,28 @@ Collapsed by default, above a `line-soft` top divider: chevron + "N source highl
 ### Bottom navigation
 Four items: Today, Decks, Stats, Settings. Active item's icon sits in a 34dp `primary` filled circle with a white glyph; its label is `caption`/700/`primary`. Inactive icons are 21dp `ink-faint` strokes with `caption`/500 labels. 1dp `line-soft` top border.
 
-`docs/android.md` does not specify navigation. This is a design decision: Review and Approve are entered from Today rather than being nav destinations, because both are modal tasks you finish and leave.
+Adopted into `docs/android.md` (*Navigation*): Review and Approve are entered from Today rather than being nav destinations, because both are modal tasks you finish and leave.
 
 ## Screens → packages → endpoints
 
-Package root `dev.recally.ui` (`docs/android.md:63-69`).
+Package root `dev.recally.ui` — layout in `docs/android.md`, *Project structure*.
 
 | Artboard | Package | Endpoint |
 |---|---|---|
-| Today | `ui/today` | `GET /reviews/due`, `GET /stats`, `GET /decks` |
-| Review — front | `ui/review` | `GET /reviews/due` |
-| Review — flipped | `ui/review` | `POST /reviews/{id}/rate`, queued to `POST /reviews/rate-batch` |
-| Session summary | `ui/review` | local session state + `GET /reviews/due` for next-due |
-| Approval queue | `ui/approve` | `GET /cards/pending`, `POST /cards/{id}/approve`, `POST /cards/{id}/reject` |
-| Decks | `ui/decks` | `GET /decks` |
-| Book — chapters | `ui/decks` | `GET /decks/{book_id}/cards`, grouped client-side by chapter |
-| Stats | `ui/stats` | `GET /stats` |
-| Settings | `ui/settings` | connection test against any authenticated endpoint |
+| Today | `ui/screens/today` | `GET /reviews/due`, `GET /stats`, `GET /decks` |
+| Review — front | `ui/screens/review` | `GET /reviews/due` |
+| Review — flipped | `ui/screens/review` | `POST /reviews/{id}/rate`, queued to `POST /reviews/rate-batch` |
+| Session summary | `ui/screens/review` | local session state + `GET /reviews/due` for next-due |
+| Approval queue | `ui/screens/approve` | `GET /cards/pending`, `POST /cards/{id}/approve`, `POST /cards/{id}/reject` |
+| Decks | `ui/screens/decks` | `GET /decks` |
+| Book — chapters | `ui/screens/decks` | `GET /decks/{book_id}/cards`, grouped client-side by chapter |
+| Stats | `ui/screens/stats` | `GET /stats` |
+| Settings | `ui/screens/settings` | connection test against any authenticated endpoint |
 | States | — | reference sheet; every screen implements these |
 
 All ten screens are drawn. Two notes on the later ones:
 
-- **Book detail expands chapters in place** rather than pushing a third screen. One book has 30 chapters (*30 Agents in 30 Days*), so a third navigation level would be tedious to browse. Cards are read-only here per `docs/android.md:22` — no rating, no approve.
+- **Book detail expands chapters in place** rather than pushing a third screen. One book has 30 chapters (*30 Agents in 30 Days*), so a third navigation level would be tedious to browse. Cards are read-only here per `docs/android.md` (*Screens → 4. Decks*) — no rating, no approve.
 - **Stats invents nothing.** Every figure maps one-to-one onto `GET /stats`: `streak_days`, `reviews_today`, `retention_30d`, `forecast[]`, `lapse_rate_by_type`. It is the only screen with no G-gap dependency.
 
 ## States
@@ -162,15 +162,15 @@ Every screen implements these. They are as much a part of the design as the happ
 
 | State | Treatment |
 |---|---|
-| Offline | Persistent bar below the app bar: `warn-wash` fill, `warn` text, "Offline — N ratings queued". Review works; Approve is disabled with an explanatory row, per `docs/android.md:34`. |
-| 401 | `danger-wash` banner, "Check your API key in Settings", tapping opens Settings. Never a crash (`docs/android.md:40`). |
+| Offline | Persistent bar below the app bar: `warn-wash` fill, `warn` text, "Offline — N ratings queued". Review works; Approve is disabled with an explanatory row, per `docs/android.md` (*Offline-first sync*). |
+| 401 | `danger-wash` banner, "Check your API key in Settings", tapping opens Settings. Never a crash (`docs/android.md`, *Connecting to the backend*). |
 | Nothing due | Today's action bar becomes `line`-bordered and `ink-faint`: "Nothing due — next card in 4 hours". |
 | Queue drained | Approve shows a centred `success` check with "Queue clear". |
 | Loading | Skeleton blocks in `line-soft` at the real component's dimensions. No spinners. |
 | `needs_human` | `danger-wash` "NEEDS YOU" badge on the card; also a filter chip on Approve. |
 | `truncated` | `warn-wash` "TRUNCATED SOURCE" badge. Flag only — **never** attempt to reconstruct the text (`AGENTS.md` hard rule 7). |
 | Push window | Read-only status row, never a toggle. `PUSH_WINDOW` is a server env var in `RECALLY_TIMEZONE` local time (`docs/config.md`), and `devices` carries no per-device preference — a switch would imply control the backend does not offer. State the window and say where it is set. |
-| Connection test | Four results, all specified: connected, 401, no answer, and **HTTPS required** — the network security config (`docs/android.md:45`) blocks cleartext to any non-private host before a request leaves the phone. |
+| Connection test | Four results, all specified: connected, 401, no answer, and **HTTPS required** — the network security config (`docs/android.md`, *Connecting to the backend*) blocks cleartext to any non-private host before a request leaves the phone. |
 
 ## Constraints this design must not break
 
@@ -179,7 +179,7 @@ From `AGENTS.md` hard rules — the design is bound by these, not merely aware o
 1. **Nothing enters FSRS without human approval** (rule 1). Bulk "Approve all N clean" acts only on `pending_review` cards that passed round-1 accept; `needs_human` cards are excluded from any bulk action and must be opened individually.
 2. **The pipeline never sets `rejected`** (rule 9). Reject is a human action in the UI only.
 3. **The client never computes FSRS state** (rule 5, ADR-005). Same-session re-queueing of Again/Hard cards uses `learning_steps_minutes` from `GET /reviews/due` to decide *when to show a card again in this session* — the server owns the real schedule, and the summary sheet's "next due" comes from the server, never from client arithmetic.
-4. **Ratings carry the client `rated_at`** and flush via `rate-batch` in order (`docs/android.md:33`). The UI must not renumber or reorder the queue.
+4. **Ratings carry the client `rated_at`** and flush via `rate-batch` in order (`docs/android.md`, *Offline-first sync*). The UI must not renumber or reorder the queue.
 5. **`response_ms` is flip-to-rate.** Nothing that hints at the answer or invites a decision may be on screen before the flip — hence the separate front artboard with a single button.
 
 ## API gaps this design depends on
@@ -197,14 +197,4 @@ Tracked as **G1–G4** in [`docs/roadmap.md`](../roadmap.md) → *Feature gaps*,
 | G5 | Per-card due dates and state; chapter counts | `GET /decks/{book_id}/cards` has no documented response at all. Needs `state` + `due` per card, and a `chapters` count on `GET /decks`. | Book, Decks |
 | G6 | "2 TRUNCATED" per book | A truncated count on `GET /decks`, or drop the badge. | Decks |
 
-Fixed during the audit, recorded so they are not reintroduced: Good/Easy interval hints (violated hard rule 5); a "142 reviews / 38 new" stats strip mixing three timeframes under one "week" heading, when `NEW_CARDS_PER_DAY` caps new cards at 10; a fixed 12-segment progress bar incompatible with same-session re-queueing; "Lapsed" as a summary label, colliding with the spec's `lapse_rate_by_type`; and an approval card missing its required approve/edit/reject row (`docs/android.md:19`).
-
-## Open decisions
-
-1. **Bottom navigation** — my proposal; `docs/android.md` does not specify navigation. If adopted, that doc should say so.
-2. **Session progress indicator** — beyond what `docs/android.md:11-15` asks for.
-3. **"Needs you" as its own filter and Today tile** — `docs/android.md:17-20` folds `needs_human` into the single queue.
-4. **Summary buckets** — the sheet groups four ratings into three rows (Good or Easy / Rated Hard / Rated Again). Deliberately avoids the word "lapse", which has a distinct FSRS meaning in `docs/data-model.md`.
-5. **Theme switching** — the app follows the system theme. No in-app toggle is designed; `docs/android.md` does not ask for one. Add it to Settings if you want manual control.
-
-Per `AGENTS.md` ("when a doc and this file disagree, the doc wins"), each of these needs either a change to `docs/android.md` / `docs/api-spec.md` or removal from the design.
+Fixed during the audit, recorded so they are not reintroduced: Good/Easy interval hints (violated hard rule 5); a "142 reviews / 38 new" stats strip mixing three timeframes under one "week" heading, when `NEW_CARDS_PER_DAY` caps new cards at 10; a fixed 12-segment progress bar incompatible with same-session re-queueing; "Lapsed" as a summary label, colliding with the spec's `lapse_rate_by_type`; and an approval card missing its required approve/edit/reject row (`docs/android.md`, *Screens → 3. Approval queue*).

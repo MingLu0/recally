@@ -10,6 +10,8 @@ That document also lists the API fields the design needs but `api-spec.md` does 
 
 Screen composables are pure (see *Architecture* below), so each artboard maps to a `@Preview` with a hand-built `UiState`.
 
+The app follows the **system theme** and ships no in-app toggle — the design system specifies both light and dark token sets, and a manual switch would be one more setting to maintain for a preference a single-user app never expresses.
+
 ## Architecture
 
 Clean architecture with the scaffold pattern, carried over from the SummarizeAI app so both projects read the same way. Three layers, dependencies point inward: `ui` → `domain` → `data`. Nothing in `data/` imports Compose; nothing in `ui/` imports Retrofit or Room.
@@ -136,6 +138,10 @@ ViewModels talk only to repositories — never to a DAO or a Retrofit service di
 - Build a preview's state from a ViewModel or a Hilt-injected fake — a preview that needs the graph is not a preview.
 - Let a `data/` type (Room entity, Retrofit DTO) reach a composable — map to a domain model in the repository.
 
+## Navigation
+
+Bottom navigation with four items: **Today, Decks, Stats, Settings**. Review and Approve are entered *from* Today, not nav destinations — both are modal tasks you finish and leave, so a permanent nav seat would invite abandoning a session mid-task. The visual spec is the *Bottom navigation* component in [design-system.md](design/design-system.md).
+
 ## Screens
 
 ### 1. Today
@@ -144,16 +150,18 @@ ViewModels talk only to repositories — never to a DAO or a Retrofit service di
 
 ### 2. Review session
 - Card front → tap to flip → rating buttons: Again / Hard / Good / Easy.
+- **Session progress**: a single `pill` progress bar plus a "N left" count — **cards left, never "N of 12"**. The same-session relearning below re-queues Again/Hard cards inside the session, so the denominator is not fixed and a fixed bar would jump backwards or silently drop the repeat.
 - Response time captured automatically (`response_ms`, measured flip-to-rate) for review_logs. The clock starts at the flip, not at card display: the interval that predicts recall is the time spent retrieving the answer, not the time spent reading the front.
 - **Bury** (overflow action, available before flipping): drops the card from the rest of today's session via `POST /cards/{id}/bury`. This is the honest alternative to rating a card you don't want to answer — a dishonest rating corrupts `review_logs`, which trains both the FSRS optimizer and the Learner. Requires connectivity; offline, the action is unavailable rather than queued, since the session is over before it would sync.
 - **Edit** (overflow action, after flipping): fix wording in place via `PATCH /cards/{id}`. Scheduling is untouched (ADR-008).
 - **Same-session relearning**: FSRS learning steps are minutes long, so a card rated Again or Hard comes back inside the session. The client re-queues it after the step interval from `learning_steps_minutes` (or at the end of the queue if the session is shorter than the step). Which step applies is seeded from the card's `step` in `GET /reviews/due` — a card already at step 1 must not restart at step 0.
 - Offline, no rate response comes back, so the client keeps its own in-session step counter: it advances one step on a card it re-queues, stops re-queueing past the last entry in `learning_steps_minutes`, and overwrites the counter with the `step` from the rate response whenever a rating is posted online. This counter is a display timer for *when to show the card again in this session*, nothing more — the client never runs FSRS, the server owns the real state, and the local view is corrected on the next `GET /reviews/due` (ADR-005).
-- Session summary at end (reviewed count, time, lapses). Reviewed count and elapsed time are local; the lapse count sums the `lapsed` flag over rate responses with `duplicate: false`, because whether a rating is a lapse depends on FSRS state the server owns (Again on a card already in `learning` is not a lapse) and a replayed rating reports `lapsed: false`.
+- Session summary at end: reviewed count, elapsed time, and the session's ratings grouped into three rows — **Good or Easy / Rated Hard / Rated Again**. Reviewed count and elapsed time are local. The rows are named by rating, never "lapses": whether an Again is a lapse depends on FSRS state the server owns (Again on a card already in `learning` is not a lapse, and a replayed rating reports `lapsed: false`), so a client-side lapse count would misname the bucket. The server-side `lapsed` flag on rate responses remains the source for the lapse figures on Stats.
 
 ### 3. Approval queue
 - Pending cards grouped by chapter, with front/back, critic critique, and all source highlights shown for context (a grouped card has several).
 - Approve / edit inline / reject (with optional reason).
+- `needs_human` cards get their own **"needs you" filter chip** rather than being folded indistinguishably into the single queue — they are the cards the Writer ⇄ Critic loop could not clear, so they are opened individually and excluded from any bulk approve (hard rule 1).
 
 ### 4. Decks
 - Book list → chapters → cards. Browsing, plus the per-card controls from ADR-008: edit (`PATCH /cards/{id}`), suspend and unsuspend. Suspended cards are shown here with their state — this screen is the only way back from a suspend, so it cannot filter them out.

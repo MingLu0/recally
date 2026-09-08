@@ -59,7 +59,8 @@ Publishing the result to the artifact URL above keeps that link working; publish
 
 ## Open items
 
-`design-system.md` ends with two lists that matter before anyone builds:
+`design-system.md` ends with one list that matters before anyone builds:
 
 - **API gaps G1–G6** — data the designs show that no documented endpoint returns. Tracked with proposed field shapes and test gates in [`../roadmap.md`](../roadmap.md) under *Feature gaps*.
-- **Open decisions** — four additions to `android.md` that need adopting or dropping (bottom navigation, session progress indicator, the separate "needs you" filter, the summary sheet's rating buckets).
+
+The former *Open decisions* (bottom navigation, session progress indicator, the "needs you" filter, the summary sheet's rating buckets, theme switching) were adopted into [`../android.md`](../android.md) and are no longer open.
