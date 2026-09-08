@@ -198,7 +198,7 @@
       "x": 0,
       "y": -280,
       "w": 780,
-      "text": "Recally — pure white + teal\n\nSettled: flat Headway-style structure, deep teal palette, pure white ground.\n\nOne change from the white mockup you picked. That version had a faint grey wash inside each card and darker borders, which is what made the cards read slightly dirty. On a white ground the right move is the opposite — no card fill at all, and let a single hairline border do the structuring. Cards are now transparent; only the ground and the borders exist. It is cleaner than what you approved, not a departure from it.\n\nFive screens here. Review is split into front and flipped because the rating row must not exist before the flip — response_ms is measured flip-to-rate (docs/android.md:14), so anything that biases the timing has to be absent."
+      "text": "Recally — pure white + teal\n\nSettled: flat Headway-style structure, deep teal palette, pure white ground.\n\nOne change from the white mockup you picked. That version had a faint grey wash inside each card and darker borders, which is what made the cards read slightly dirty. On a white ground the right move is the opposite — no card fill at all, and let a single hairline border do the structuring. Cards are now transparent; only the ground and the borders exist. It is cleaner than what you approved, not a departure from it.\n\nFive screens here. Review is split into front and flipped because the rating row must not exist before the flip — response_ms is measured flip-to-rate (docs/android.md, *Review session*), so anything that biases the timing has to be absent."
     },
     {
       "id": "n-today",
@@ -222,7 +222,7 @@
       "x": 1220,
       "y": 1085,
       "w": 560,
-      "text": "REVIEW — FLIPPED\n\nGood is the only filled button; the other three are outlined. Colour marks the expected path, and the common tap is the easiest to hit without looking.\n\nInterval hints on Again and Hard ONLY. Those two come from learning_steps_minutes in /reviews/due. Good and Easy projections do not exist before you rate — the server returns next_due afterwards — and computing them client-side would break hard rule 5.\n\nProgress is 'cards left', not 'N of 12': android.md:14 re-queues Again/Hard cards inside the session, so the total is not fixed."
+      "text": "REVIEW — FLIPPED\n\nGood is the only filled button; the other three are outlined. Colour marks the expected path, and the common tap is the easiest to hit without looking.\n\nInterval hints on Again and Hard ONLY. Those two come from learning_steps_minutes in /reviews/due. Good and Easy projections do not exist before you rate — the server returns next_due afterwards — and computing them client-side would break hard rule 5.\n\nProgress is 'cards left', not 'N of 12': docs/android.md (*Review session*) re-queues Again/Hard cards inside the session, so the total is not fixed."
     },
     {
       "id": "n-sheet",
@@ -230,7 +230,7 @@
       "x": 1830,
       "y": 1085,
       "w": 560,
-      "text": "SESSION SUMMARY\n\nCovers what docs/android.md:15 asks for — reviewed count, time, lapses — plus the streak band and next-due.\n\nRows are named by the rating (Good or Easy / Rated Hard / Rated Again) rather than 'Lapsed', because lapse has a specific FSRS meaning in data-model.md and a card rated Again while still in learning is not a lapse.\n\nSecond button routes into the approval queue so it does not rot between ingests. If that is noise at the end of a session, it drops to a text link."
+      "text": "SESSION SUMMARY\n\nCovers what docs/android.md (*Review session*) asks for — reviewed count, time, and the rating buckets — plus the streak band and next-due.\n\nRows are named by the rating (Good or Easy / Rated Hard / Rated Again) rather than 'Lapsed', because lapse has a specific FSRS meaning in data-model.md and a card rated Again while still in learning is not a lapse.\n\nSecond button routes into the approval queue so it does not rot between ingests. If that is noise at the end of a session, it drops to a text link."
     },
     {
       "id": "n-approve",
@@ -238,7 +238,7 @@
       "x": 2440,
       "y": 1085,
       "w": 560,
-      "text": "APPROVAL QUEUE — the densest screen, so the real test of this style\n\nFrom docs/api-spec.md:47-56 and docs/android.md:17-20.\n\n• Cloze renders as a styled blank, not raw {{c1::...}} braces. The doc does not say how to show these; this is my call.\n• Critic critique gets a bordered block, visually subordinate to the card text.\n• Source highlights collapse behind a disclosure — a grouped unit can have several and they would otherwise dominate.\n• Every card carries approve/edit/reject, per android.md:19.\n• NEEDS YOU, READY and TRUNCATED SOURCE map to needs_human, pending_review and the truncated flag. Truncated is flagged, never reconstructed (hard rule 7).\n• 'Approve 5 ready' acts only on pending_review cards; needs_human ones must be opened individually. A human tap is still human approval, so hard rule 1 holds — but there is no batch endpoint documented yet."
+      "text": "APPROVAL QUEUE — the densest screen, so the real test of this style\n\nFrom docs/api-spec.md and docs/android.md (*Approval queue*).\n\n• Cloze renders as a styled blank, not raw {{c1::...}} braces. The doc does not say how to show these; this is my call.\n• Critic critique gets a bordered block, visually subordinate to the card text.\n• Source highlights collapse behind a disclosure — a grouped unit can have several and they would otherwise dominate.\n• Every card carries approve/edit/reject, per docs/android.md (*Approval queue*).\n• NEEDS YOU, READY and TRUNCATED SOURCE map to needs_human, pending_review and the truncated flag. Truncated is flagged, never reconstructed (hard rule 7).\n• 'Approve 5 ready' acts only on pending_review cards; needs_human ones must be opened individually. A human tap is still human approval, so hard rule 1 holds — but there is no batch endpoint documented yet."
     },
     {
       "id": "n-open",
@@ -246,7 +246,7 @@
       "x": 5490,
       "y": 0,
       "w": 360,
-      "text": "AUDITED 2026-09-07 against android.md + api-spec.md\n\nFixed in these artboards:\n• Good/Easy interval hints removed — no endpoint gives a projection before you rate, and computing one client-side breaks hard rule 5. Again/Hard stay: derivable from learning_steps_minutes.\n• Stats strip was '142 reviews / 38 new' under one 'week' heading, mixing three timeframes — and NEW_CARDS_PER_DAY caps new at 10. Now reviews_today and new_count, labelled Today.\n• Progress bar was 12 fixed segments. android.md:14 re-queues Again/Hard cards inside the session, so 12 cards make MORE than 12 presentations. Now 'cards left', never a fixed total.\n• Summary said 'Lapsed'; lapse has a specific FSRS meaning in data-model.md. Now named by the rating.\n• Second approval card had no approve/edit/reject row — android.md:19 requires it on every card.\n\nSTILL BLOCKED on API fields (see design-system.md):\n1. Pending counts — no endpoint returns them; feeds three screens.\n2. Per-book progress % — needs a field AND a definition; undefined today.\n3. 'Next card due in 4h' — forecast is day-granularity.\n4. Bulk approve — no batch endpoint documented."
+      "text": "AUDITED 2026-09-07 against android.md + api-spec.md\n\nFixed in these artboards:\n• Good/Easy interval hints removed — no endpoint gives a projection before you rate, and computing one client-side breaks hard rule 5. Again/Hard stay: derivable from learning_steps_minutes.\n• Stats strip was '142 reviews / 38 new' under one 'week' heading, mixing three timeframes — and NEW_CARDS_PER_DAY caps new at 10. Now reviews_today and new_count, labelled Today.\n• Progress bar was 12 fixed segments. docs/android.md (*Review session*) re-queues Again/Hard cards inside the session, so 12 cards make MORE than 12 presentations. Now 'cards left', never a fixed total.\n• Summary said 'Lapsed'; lapse has a specific FSRS meaning in data-model.md. Now named by the rating.\n• Second approval card had no approve/edit/reject row — docs/android.md (*Approval queue*) requires it on every card.\n\nSTILL BLOCKED on API fields (see design-system.md):\n1. Pending counts — no endpoint returns them; feeds three screens.\n2. Per-book progress % — needs a field AND a definition; undefined today.\n3. 'Next card due in 4h' — forecast is day-granularity.\n4. Bulk approve — no batch endpoint documented."
     },
     {
       "id": "n-decks",
@@ -254,7 +254,7 @@
       "x": 3050,
       "y": 1085,
       "w": 560,
-      "text": "DECKS\n\nandroid.md:22 — book list, read-only. Each row carries the progress bar (G2) and a due count from GET /decks.\n\nThe TRUNCATED count per book is derived client-side from the cards list, not a new field.\n\nThe dashed import row is secondary: the watched folder on your Mac is the real ingest path (roadmap step 1)."
+      "text": "DECKS\n\ndocs/android.md (*Decks*) — book list, read-only. Each row carries the progress bar (G2) and a due count from GET /decks.\n\nThe TRUNCATED count per book is derived client-side from the cards list, not a new field.\n\nThe dashed import row is secondary: the watched folder on your Mac is the real ingest path (roadmap step 1)."
     },
     {
       "id": "n-book",
@@ -262,7 +262,7 @@
       "x": 3660,
       "y": 1085,
       "w": 560,
-      "text": "BOOK — CHAPTERS → CARDS\n\nThe second level of android.md:22. Chapters expand in place rather than pushing another screen — with 30 chapters in one book, a third level of navigation would be tedious.\n\nCards are read-only here: no rating, no approve. Due dates shown for scheduled cards, 'Not scheduled' for new ones.\n\nA NEW card is dimmed to 62% so scheduled cards read first."
+      "text": "BOOK — CHAPTERS → CARDS\n\nThe second level of the Decks screen (docs/android.md, *Decks*). Chapters expand in place rather than pushing another screen — with 30 chapters in one book, a third level of navigation would be tedious.\n\nCards are read-only here: no rating, no approve. Due dates shown for scheduled cards, 'Not scheduled' for new ones.\n\nA NEW card is dimmed to 62% so scheduled cards read first."
     },
     {
       "id": "n-stats",
@@ -278,7 +278,7 @@
       "x": 4880,
       "y": 1085,
       "w": 560,
-      "text": "SETTINGS\n\nandroid.md:36-40 — base URL, API key, connection test. Key is masked with a reveal toggle and stored in EncryptedSharedPreferences; nothing is baked into the build.\n\nThe connection-test result is a persistent inline block, not a toast — you need to read it while fixing the URL.\n\nQueued-ratings count exposes the sync state from android.md:33, so a stuck queue is visible rather than silent."
+      "text": "SETTINGS\n\ndocs/android.md (*Connecting to the backend*) — base URL, API key, connection test. Key is masked with a reveal toggle and stored in EncryptedSharedPreferences; nothing is baked into the build.\n\nThe connection-test result is a persistent inline block, not a toast — you need to read it while fixing the URL.\n\nQueued-ratings count exposes the sync state from docs/android.md (*Offline-first sync*), so a stuck queue is visible rather than silent."
     },
     {
       "id": "n-states",
@@ -286,7 +286,7 @@
       "x": 0,
       "y": 2790,
       "w": 1180,
-      "text": "STATES — as much a part of the spec as the happy path\n\nOffline (review works, approve does not — android.md:34), 401 as a banner rather than a crash (android.md:40), nothing-due, queue-clear, loading skeletons, the badge set, and the cloze treatment on both sides of the flip.\n\nSkeletons are blocks at the real component's dimensions, never spinners — the layout should not jump when data lands.\n\nCloze unflipped is a rule of the answer's width, not a '____' or the raw {{c1::...}}. Width hints at length without giving the answer away."
+      "text": "STATES — as much a part of the spec as the happy path\n\nOffline (review works, approve does not — docs/android.md, *Offline-first sync*), 401 as a banner rather than a crash (docs/android.md, *Connecting to the backend*), nothing-due, queue-clear, loading skeletons, the badge set, and the cloze treatment on both sides of the flip.\n\nSkeletons are blocks at the real component's dimensions, never spinners — the layout should not jump when data lands.\n\nCloze unflipped is a rule of the answer's width, not a '____' or the raw {{c1::...}}. Width hints at length without giving the answer away."
     },
     {
       "id": "dk-brief",

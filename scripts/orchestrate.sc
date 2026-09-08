@@ -27,7 +27,7 @@ object Orchestrator:
   val MaxConflictFixes = 2  // rebase dispatches per PR before needs_human
   val GithubRepo = "MingLu0/recally"
   val PrecheckScript = "scripts/orca-ready-issues.sh"
-  val PromptFile = "scripts/orca-autostart-prompt.md"
+  val PromptFile: os.RelPath = os.rel / "scripts" / "orca-autostart-prompt.md"
   val StatePath = os.pwd / ".orca" / "orchestrator-state.json"
   val TddEvidenceMarker = "## TDD evidence"
   val RateLimitSignatures = List("rate limit", "429", "usage limit", "quota", "limit reached")
@@ -137,6 +137,8 @@ object Orchestrator:
   case object WaitingOnHuman extends WorkerStatus
   case object Unknown extends WorkerStatus
 
+  // Shape verified against a live worker-show: result.dispatch.status
+  // (dispatched → completed/failed) and result.worker.state (ready → ...).
   def workerStatus(dispatchId: String): IO[WorkerStatus] =
     shOpt(List("orca", "orchestration", "worker-show", "--dispatch", dispatchId, "--json")).map {
       case None => Unknown
@@ -144,13 +146,15 @@ object Orchestrator:
         val json = ujson.read(raw)
         val result = if json.obj.get("ok").exists(_.bool) then json("result") else json
         val waiting = findKey(result, "agentWait").exists(v => v != ujson.Null)
-        val statusText = findString(result, Set("status", "state", "stage", "failedStage"))
-          .map(_.toLowerCase).getOrElse("")
+        def strAt(container: String, key: String): String =
+          findKey(result, container).flatMap(findKey(_, key)).collect { case ujson.Str(s) => s.toLowerCase }.getOrElse("")
+        val dispatchStatus = strAt("dispatch", "status")
+        val workerState = strAt("worker", "state")
         val isRateLimited = RateLimitSignatures.exists(raw.toLowerCase.contains)
         if waiting then WaitingOnHuman
-        else if statusText.contains("fail") || statusText.contains("error") then Failed(isRateLimited)
-        else if statusText.contains("run") || statusText.contains("progress") || statusText.contains("ready") then Running
-        else if statusText.contains("success") || statusText.contains("complete") || statusText.contains("done") || statusText.contains("settled") then Settled
+        else if dispatchStatus.contains("fail") || dispatchStatus.contains("error") || workerState.contains("fail") then Failed(isRateLimited)
+        else if dispatchStatus.contains("complete") || dispatchStatus.contains("success") || workerState.contains("exit") then Settled
+        else if dispatchStatus.nonEmpty || workerState.nonEmpty then Running // dispatched/ready/running all mean in flight
         else Unknown
     }.handleError(_ => Unknown)
 
@@ -158,19 +162,25 @@ object Orchestrator:
 
   def promptText: String = os.read(os.pwd / PromptFile)
 
-  def createTask(spec: String, title: String): IO[String] =
-    orca(List("orchestration", "task-create", "--spec", spec, "--task-title", title))
+  // Each orca invocation is a fresh process, so the Run binding from
+  // run-create does not persist: every mutation must pass --run explicitly.
+  def createRun: IO[String] =
+    orca(List("orchestration", "run-create", "--objective", "recally orchestrator"))
+      .flatMap(requiredString(_, Set("runId", "id"), "run id"))
+
+  def createTask(spec: String, title: String, runId: String): IO[String] =
+    orca(List("orchestration", "task-create", "--spec", spec, "--task-title", title, "--run", runId))
       .flatMap(requiredString(_, Set("taskId", "id"), "task id"))
 
-  def startWorker(taskId: String, issue: Int, agent: String, retryOf: Option[String]): IO[String] =
-    val base = List("orchestration", "worker-start", "--task", taskId, "--worktree", s"issue:$issue", "--agent", agent)
+  def startWorker(taskId: String, issue: Int, agent: String, retryOf: Option[String], runId: String): IO[String] =
+    val base = List("orchestration", "worker-start", "--task", taskId, "--worktree", s"issue:$issue", "--agent", agent, "--run", runId)
     orca(base ::: retryOf.toList.flatMap(id => List("--retry-of", id)))
       .flatMap(requiredString(_, Set("dispatchId", "dispatch"), "dispatch id"))
 
   def slugify(title: String): String =
     title.toLowerCase.replaceAll("[^a-z0-9]+", "-").stripPrefix("-").stripSuffix("-").take(40)
 
-  def dispatchIssue(candidate: ReadyIssue, agent: String, repoId: String): IO[TrackedIssue] =
+  def dispatchIssue(candidate: ReadyIssue, agent: String, repoId: String, runId: String): IO[TrackedIssue] =
     val assignment = s"\n\n---\nOrchestrator assignment: your issue is #${candidate.number}. " +
       s"Skip the 'Pick the issue' step; claim #${candidate.number} and implement it."
     for
@@ -178,15 +188,15 @@ object Orchestrator:
       _ <- orca(List("worktree", "create", "--repo", s"id:$repoId",
         "--name", s"issue-${candidate.number}-${slugify(candidate.title)}",
         "--issue", candidate.number.toString, "--base-branch", "main"))
-      taskId <- createTask(promptText + assignment, s"Issue #${candidate.number}: ${candidate.title}")
-      dispatchId <- startWorker(taskId, candidate.number, agent, retryOf = None)
+      taskId <- createTask(promptText + assignment, s"Issue #${candidate.number}: ${candidate.title}", runId)
+      dispatchId <- startWorker(taskId, candidate.number, agent, retryOf = None, runId)
     yield TrackedIssue(candidate.number, candidate.title, taskId, dispatchId, agent,
       attempts = 1, conflictFixes = 0, conflictDispatchId = None, evidenceNudged = false, Phase.Dispatched)
 
-  def redispatch(t: TrackedIssue, agent: String, spec: String, title: String): IO[String] =
+  def redispatch(t: TrackedIssue, agent: String, spec: String, title: String, runId: String): IO[String] =
     for
-      taskId <- createTask(spec, title)
-      dispatchId <- startWorker(taskId, t.issue, agent, retryOf = Some(t.dispatchId))
+      taskId <- createTask(spec, title, runId)
+      dispatchId <- startWorker(taskId, t.issue, agent, retryOf = Some(t.dispatchId), runId)
     yield dispatchId
 
   def nextAgent(current: String): Option[String] =
@@ -204,7 +214,7 @@ object Orchestrator:
   def releaseWorker(dispatchId: String): IO[Unit] =
     shOpt(List("orca", "orchestration", "worker-release", "--dispatch", dispatchId, "--json")).void
 
-  def reconcile(t: TrackedIssue, repoId: String): IO[TrackedIssue] =
+  def reconcile(t: TrackedIssue, repoId: String, runId: String): IO[TrackedIssue] =
     if !ActivePhases(t.phase) then IO.pure(t)
     else issueState(t.issue).flatMap {
       case "CLOSED" =>
@@ -217,28 +227,29 @@ object Orchestrator:
             if merged.nonEmpty then
               IO.println(s"[merged] #${t.issue}") *> releaseWorker(t.dispatchId) *> IO.pure(t.copy(phase = Phase.Merged))
             else open match
-              case pr :: _ => reconcileOpenPr(t, pr, repoId)
-              case Nil => reconcileNoPr(t, repoId)
+              case pr :: _ => reconcileOpenPr(t, pr, repoId, runId)
+              case Nil => reconcileNoPr(t, repoId, runId)
         yield result
     }
 
-  def reconcileOpenPr(t: TrackedIssue, pr: ujson.Value, repoId: String): IO[TrackedIssue] =
+  def reconcileOpenPr(t: TrackedIssue, pr: ujson.Value, repoId: String, runId: String): IO[TrackedIssue] =
     val tracked = t.copy(phase = Phase.PrOpen)
     val mergeable = findString(pr, Set("mergeable")).getOrElse("UNKNOWN")
-    if mergeable == "CONFLICTING" then handleConflict(tracked, pr, repoId)
-    else handleEvidence(tracked, pr, repoId)
+    if mergeable == "CONFLICTING" then handleConflict(tracked, pr, repoId, runId)
+    else handleEvidence(tracked, pr, repoId, runId)
 
-  def handleConflict(t: TrackedIssue, pr: ujson.Value, repoId: String): IO[TrackedIssue] =
+  def handleConflict(t: TrackedIssue, pr: ujson.Value, repoId: String, runId: String): IO[TrackedIssue] =
     val prNumber = pr("number").num.toInt
     t.conflictDispatchId match
       case Some(id) =>
         workerStatus(id).flatMap {
-          case Running => IO.pure(t) // fix in flight
-          case Failed(_) | Settled | Unknown | WaitingOnHuman => dispatchConflictFix(t, prNumber, repoId)
+          case Running | Unknown => IO.pure(t) // fix in flight, or unverifiable — never double-dispatch
+          case WaitingOnHuman => escalate(t, "conflict-fix worker is parked on a question only a human can answer.")
+          case Failed(_) | Settled => dispatchConflictFix(t, prNumber, repoId, runId) // done but still conflicting
         }
-      case None => dispatchConflictFix(t, prNumber, repoId)
+      case None => dispatchConflictFix(t, prNumber, repoId, runId)
 
-  def dispatchConflictFix(t: TrackedIssue, prNumber: Int, repoId: String): IO[TrackedIssue] =
+  def dispatchConflictFix(t: TrackedIssue, prNumber: Int, repoId: String, runId: String): IO[TrackedIssue] =
     if t.conflictFixes >= MaxConflictFixes then
       gh(List("pr", "comment", prNumber.toString, "--repo", GithubRepo, "--body",
         s"Orchestrator: still conflicting with `main` after ${t.conflictFixes} rebase attempts. Leaving this for a human.")).attempt *>
@@ -249,11 +260,11 @@ object Orchestrator:
         "code and a doc disagree, the doc wins), re-run `uv run pytest`, `uv run ruff check .` and " +
         "`uv run mypy src/` from backend/, force-push, and then follow the merge policy again."
       IO.println(s"[conflict] #${t.issue} PR #$prNumber conflicting; dispatching rebase (attempt ${t.conflictFixes + 1})") *>
-        redispatch(t, t.agent, spec, s"Rebase issue #${t.issue} onto main").map { newDispatchId =>
+        redispatch(t, t.agent, spec, s"Rebase issue #${t.issue} onto main", runId).map { newDispatchId =>
           t.copy(conflictFixes = t.conflictFixes + 1, conflictDispatchId = Some(newDispatchId))
         }
 
-  def handleEvidence(t: TrackedIssue, pr: ujson.Value, repoId: String): IO[TrackedIssue] =
+  def handleEvidence(t: TrackedIssue, pr: ujson.Value, repoId: String, runId: String): IO[TrackedIssue] =
     val prNumber = pr("number").num.toInt
     if isDocsOnly(pr) then IO.pure(t) // waits for a human by policy; no evidence to demand
     else
@@ -268,13 +279,13 @@ object Orchestrator:
               "existed, next to the green run, then follow the merge policy again. If the red run never " +
               "happened, say so in the PR and stop."
             IO.println(s"[evidence] #${t.issue} PR #$prNumber missing TDD evidence; nudging") *>
-              redispatch(t, t.agent, spec, s"TDD evidence for issue #${t.issue}")
+              redispatch(t, t.agent, spec, s"TDD evidence for issue #${t.issue}", runId)
                 .map(newDispatchId => t.copy(dispatchId = newDispatchId, evidenceNudged = true))
           case _ =>
             escalate(t, s"PR #$prNumber still lacks the `$TddEvidenceMarker` section after a nudge.")
         }
 
-  def reconcileNoPr(t: TrackedIssue, repoId: String): IO[TrackedIssue] =
+  def reconcileNoPr(t: TrackedIssue, repoId: String, runId: String): IO[TrackedIssue] =
     workerStatus(t.dispatchId).flatMap {
       case Running | Unknown => IO.pure(t)
       case Settled =>
@@ -285,7 +296,7 @@ object Orchestrator:
         nextAgent(t.agent) match
           case Some(failover) =>
             IO.println(s"[failover] #${t.issue}: ${t.agent} rate-limited; hot-swapping to $failover") *>
-              redispatch(t, failover, promptText + assignmentFor(t), s"Issue #${t.issue}: ${t.title}").map { newDispatchId =>
+              redispatch(t, failover, promptText + assignmentFor(t), s"Issue #${t.issue}: ${t.title}", runId).map { newDispatchId =>
                 t.copy(dispatchId = newDispatchId, agent = failover, attempts = t.attempts + 1)
               }
           case None =>
@@ -293,7 +304,7 @@ object Orchestrator:
       case Failed(_) =>
         if t.attempts < MaxAttempts then
           IO.println(s"[retry] #${t.issue}: worker failed; retry ${t.attempts + 1} on ${t.agent}") *>
-            redispatch(t, t.agent, promptText + assignmentFor(t), s"Issue #${t.issue}: ${t.title}").map { newDispatchId =>
+            redispatch(t, t.agent, promptText + assignmentFor(t), s"Issue #${t.issue}: ${t.title}", runId).map { newDispatchId =>
               t.copy(dispatchId = newDispatchId, attempts = t.attempts + 1)
             }
         else escalate(t, s"worker failed ${t.attempts} times; giving up.")
@@ -327,13 +338,13 @@ object Orchestrator:
 
   // --- main loop ---
 
-  def tick(dryRun: Boolean, stepScope: Option[String]): IO[State] =
+  def tick(dryRun: Boolean, stepScope: Option[String], runId: String): IO[State] =
     for
       state <- loadState
       repoId <- resolveRepoId
       tracked <-
         if dryRun then IO.pure(state.tracked)
-        else state.tracked.traverse(reconcile(_, repoId))
+        else state.tracked.traverse(reconcile(_, repoId, runId))
       active = tracked.filter(t => ActivePhases(t.phase))
       freeSlots = WorktreeCap - active.size
       candidates <- if freeSlots > 0 then readyIssues else IO.pure(Nil)
@@ -342,21 +353,27 @@ object Orchestrator:
       _ <-
         if dryRun then
           IO.println(s"[dry-run] scope=${stepScope.getOrElse("all")} active=${active.size} free=$freeSlots dispatchable=${fresh.map(_.number).mkString(", ")}")
-        else fresh.traverse(c => dispatchIssue(c, AgentPool.head, repoId)).flatMap { newOnes =>
+        else fresh.traverse(c => dispatchIssue(c, AgentPool.head, repoId, runId)).flatMap { newOnes =>
           saveState(State(tracked ++ newOnes))
         }
     yield State(tracked)
 
-  def loop(stepScope: Option[String]): IO[Unit] =
-    tick(dryRun = false, stepScope) >> IO.sleep(PollInterval) >> loop(stepScope)
+  def loop(stepScope: Option[String], runId: String): IO[Unit] =
+    tick(dryRun = false, stepScope, runId) >> IO.sleep(PollInterval) >> loop(stepScope, runId)
 
   def program(args: List[String]): IO[ExitCode] =
     val dryRun = args.contains("--dry-run")
     val once = args.contains("--once")
     val stepScope = args.find(_.startsWith("--step=")).map(_.stripPrefix("--step="))
-    if dryRun then tick(dryRun = true, stepScope).void.as(ExitCode.Success)
-    else if once then tick(dryRun = false, stepScope).void.as(ExitCode.Success)
-    else IO.println(s"Orchestrator started: cap=$WorktreeCap pool=${AgentPool.mkString("->")} poll=$PollInterval scope=${stepScope.getOrElse("all")}") >> loop(stepScope).as(ExitCode.Success)
+    if dryRun then tick(dryRun = true, stepScope, runId = "").void.as(ExitCode.Success)
+    else
+      // One Run per process; every orca mutation passes --run explicitly because
+      // each CLI call is a fresh process with no binding.
+      createRun.flatMap { runId =>
+        IO.println(s"Orchestrator run: $runId (cap=$WorktreeCap pool=${AgentPool.mkString("->")} poll=$PollInterval scope=${stepScope.getOrElse("all")})") >>
+          (if once then tick(dryRun = false, stepScope, runId).void
+           else loop(stepScope, runId))
+      }.as(ExitCode.Success)
 
 // .sc entry point: the script wrapper main runs top-level statements, so the
 // IOApp object above must be invoked explicitly.

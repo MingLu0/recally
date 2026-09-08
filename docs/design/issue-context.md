@@ -38,7 +38,7 @@ All under `docs/design/`. Canvas: https://claude.ai/code/artifact/25472047-e5cc-
 - **No status bar is drawn** in any artboard — the OS renders its own. Do not add one.
 - **`response_ms` is flip-to-rate.** Nothing that hints at the answer or invites a decision may be on screen before the flip — hence the separate front and flipped screens.
 - **The client never computes FSRS state** (hard rule 5, ADR-005). Interval hints appear on Again and Hard only, derived from `learning_steps_minutes`; Good and Easy have no projection available before rating.
-- **Session progress is "cards left", never "N of 12".** `docs/android.md:14` re-queues Again/Hard cards inside the session, so the total is not fixed.
+- **Session progress is "cards left", never "N of 12".** `docs/android.md` (*Screens → 2. Review session*) re-queues Again/Hard cards inside the session, so the total is not fixed.
 - **`truncated` is flagged, never reconstructed** (hard rule 7).
 - **Bulk approve excludes `needs_human` cards** (hard rule 1).
 - Screen composables are pure (`docs/android.md`, *Architecture*), so each artboard maps to a `@Preview` with a hand-built `UiState`.
@@ -58,4 +58,4 @@ Six API gaps, **G1–G6** in [`docs/roadmap.md`](docs/roadmap.md) under *Feature
 
 If an issue covers a screen with an open gap, either resolve the gap in `api-spec.md` first or scope the dependent element out — do not invent a field.
 
-Four further additions to `docs/android.md` are listed under *Open decisions* in `design-system.md` (bottom navigation, session progress indicator, the separate "needs you" filter, the summary sheet's rating buckets). Each needs adopting into that doc or dropping from the design.
+Navigation (bottom nav: Today, Decks, Stats, Settings; Review and Approve entered from Today), the session progress indicator, the "needs you" filter chip, the summary sheet's rating buckets, and system-theme-following are all specified in `docs/android.md` (*Design*, *Navigation*, *Screens*) — build to that doc, they are settled.
