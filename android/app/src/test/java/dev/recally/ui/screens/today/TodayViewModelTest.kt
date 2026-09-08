@@ -21,6 +21,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import java.io.IOException
+import java.time.Instant
 
 /**
  * ViewModel gate for roadmap step 4f (issue #57). Fake repositories on a
@@ -47,6 +48,19 @@ class TodayViewModelTest {
         override suspend fun dueCards(forceRefresh: Boolean): Result<DueSummary> = refreshResult
 
         override suspend fun refreshDueCards(): Result<DueSummary> = refreshResult
+
+        // ADR-008 controls (step 4j) — Today never calls them.
+        override suspend fun editCard(
+            cardId: Long,
+            front: String?,
+            back: String?,
+            tags: List<String>?,
+        ): Result<Unit> = throw UnsupportedOperationException("Today never edits cards")
+
+        override suspend fun suspendCard(cardId: Long): Result<Instant?> = throw UnsupportedOperationException("Today never suspends cards")
+
+        override suspend fun unsuspendCard(cardId: Long): Result<Instant?> =
+            throw UnsupportedOperationException("Today never unsuspends cards")
     }
 
     private class FakeStatsRepository(
