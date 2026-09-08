@@ -113,7 +113,7 @@ def patch_card(card_id: int, body: PatchCardRequest, session: SessionDep) -> Car
 def bury_card(card_id: int, session: SessionDep, container: ContainerDep) -> SuspensionResponse:
     """Hide the card for the rest of the local day; it clears itself at the boundary."""
     card = _approved_card(session, card_id)
-    boundary = bury(card, now=utc_now(), timezone_name=container.settings.recally_timezone)
+    boundary = bury(card, now=utc_now(), timezone_name=container.settings.timezone)
     session.commit()
     return SuspensionResponse(suspended_until=boundary)
 
