@@ -21,7 +21,7 @@ object Orchestrator:
 
   // --- configuration (ADR-013) ---
   val WorktreeCap = 10
-  val AgentPool = List("claude", "opencode")
+  val AgentPool = List("opencode", "claude")
   val PollInterval = 60.seconds
   val MaxAttempts = 2       // dispatch retries per issue before needs_human
   val MaxConflictFixes = 2  // rebase dispatches per PR before needs_human

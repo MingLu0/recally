@@ -9,7 +9,7 @@ How the project gets built: which tools hold the backlog, run the agents, and ga
 | Backlog | GitHub Issues + milestones | Repo already lives on GitHub; Orca opens worktrees from issues natively; zero cost |
 | Progress view | GitHub Project board "[Recally Roadmap](https://github.com/users/MingLu0/projects/2)" | One pane across parallel agents; issues stay the source of truth |
 | Agent control plane | [Orca](https://www.onorca.dev/) | Parallel worktrees, diff review with line comments back to the agent, GitHub issue/PR drawer, BYO subscription |
-| Coding agent | Claude Code (any Orca-supported CLI works; the orchestrator's failover pool is claude → opencode) | Reads `AGENTS.md` / `CLAUDE.md` |
+| Coding agent | OpenCode (any Orca-supported CLI works; the orchestrator's failover pool is opencode → claude) | Reads `AGENTS.md` / `CLAUDE.md` |
 | Parallel dispatcher | `scripts/orchestrate.sc` (scala-cli, ADR-013) | Hand-started, stateful: dispatches up to 10 `ready` sub-issues, retries on failure, fixes merge conflicts by rebase dispatch |
 | Agent instructions | `AGENTS.md` | Hard rules and conventions; the docs are the spec |
 
@@ -22,7 +22,9 @@ Not used: Linear (single-user project, paid tier + AI credits for anything beyon
 3. Create one GitHub issue per roadmap step (1–6). Body = the step's bullets plus its **Tests** and **You verify** gates verbatim. The issue closes only after *You verify* passes, not on merge. Sub-issues where a step fans out (table below); a sub-issue carries only a Tests gate, written as the named test functions that must exist and pass plus a `Done when` checklist (ADR-012). The `roadmap-issues` skill in `.claude/skills/` carries the templates and the wiring commands. Milestones: `Backend` (steps 1–3), `App` (steps 4–6). Step 0 is a manual checklist issue, assigned to the human, in no milestone.
 4. Project board `Recally Roadmap`: columns Todo / In Progress / In Review / Verifying / Done, and the built-in workflows *item added → Todo*, *PR merged → Verifying*, *item closed → Done*. There is no built-in "PR opened" trigger, so In Review is set by hand or by Orca.
 5. Orca: add the repo, connect GitHub, setup script `cd backend && uv sync`.
-6. scala-cli (needed only to run the orchestrator; Java 17+ suffices for it).
+6. scala-cli (needed only to run the orchestrator; Java 17+ suffices for it). To silence its
+   outdated-dependency hints: `scala-cli config suppress-warning.outdated-dependencies-files true`
+   (global, machine-level; the pinned versions in `orchestrate.sc` stay as they are).
 
 ## The per-issue loop
 
@@ -154,7 +156,7 @@ scala-cli scripts/orchestrate.sc -- --step=step-4       # only issues carrying t
 
 It reads eligibility from `scripts/orca-ready-issues.sh --all` (the same five conditions — the
 orchestrator never decides dispatchability itself), keeps up to 10 issues in flight, hot-swaps a
-rate-limited agent along the pool `claude → opencode`, and dispatches a rebase into the same worktree
+rate-limited agent along the pool `opencode → claude`, and dispatches a rebase into the same worktree
 when a PR goes CONFLICTING (twice, then it leaves the PR for a human with a comment). State lives in
 `.orca/orchestrator-state.json` (gitignored) and is reconciled against GitHub every tick, so restarting
 it never double-dispatches. It never runs `gh pr merge` — merge authority stays with the worktree
