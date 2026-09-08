@@ -1,0 +1,485 @@
+{
+  "pages": [
+    {
+      "id": "page-1",
+      "name": "Recally — white + teal"
+    },
+    {
+      "id": "page-dark",
+      "name": "Dark"
+    },
+    {
+      "id": "page-0",
+      "name": "Ground comparison"
+    },
+    {
+      "id": "page-2",
+      "name": "Earlier: Headway blue"
+    },
+    {
+      "id": "page-3",
+      "name": "Earlier: Soft / Ink"
+    },
+    {
+      "id": "page-4",
+      "name": "Earlier: first flat takes"
+    }
+  ],
+  "artboards": [
+    {
+      "file": "RcWhite.dc.html",
+      "title": "Today",
+      "page": "page-1",
+      "x": 0,
+      "y": 0,
+      "w": 560,
+      "h": 1040
+    },
+    {
+      "file": "RcFront.dc.html",
+      "title": "Review — front",
+      "page": "page-1",
+      "x": 610,
+      "y": 0,
+      "w": 560,
+      "h": 1040
+    },
+    {
+      "file": "RcReview.dc.html",
+      "title": "Review — flipped",
+      "page": "page-1",
+      "x": 1220,
+      "y": 0,
+      "w": 560,
+      "h": 1040
+    },
+    {
+      "file": "RcSheet.dc.html",
+      "title": "Session summary",
+      "page": "page-1",
+      "x": 1830,
+      "y": 0,
+      "w": 560,
+      "h": 1040
+    },
+    {
+      "file": "RcApprove.dc.html",
+      "title": "Approval queue",
+      "page": "page-1",
+      "x": 2440,
+      "y": 0,
+      "w": 560,
+      "h": 1040
+    },
+    {
+      "file": "RcToday.dc.html",
+      "title": "1 — Warm cream #FAF7F2",
+      "page": "page-0",
+      "x": 0,
+      "y": 0,
+      "w": 560,
+      "h": 1040
+    },
+    {
+      "file": "RcCool.dc.html",
+      "title": "2 — Cool near-white #FBFBFA",
+      "page": "page-0",
+      "x": 610,
+      "y": 0,
+      "w": 560,
+      "h": 1040
+    },
+    {
+      "file": "HwToday.dc.html",
+      "title": "Today — blue",
+      "page": "page-2",
+      "x": 0,
+      "y": 0,
+      "w": 560,
+      "h": 1040
+    },
+    {
+      "file": "HwReview.dc.html",
+      "title": "Review — blue",
+      "page": "page-2",
+      "x": 610,
+      "y": 0,
+      "w": 560,
+      "h": 1040
+    },
+    {
+      "file": "HwSheet.dc.html",
+      "title": "Sheet — blue",
+      "page": "page-2",
+      "x": 1220,
+      "y": 0,
+      "w": 560,
+      "h": 1040
+    },
+    {
+      "file": "SoftToday.dc.html",
+      "title": "Soft · Today",
+      "page": "page-3",
+      "x": 0,
+      "y": 0,
+      "w": 560,
+      "h": 1040
+    },
+    {
+      "file": "SoftReview.dc.html",
+      "title": "Soft · Review",
+      "page": "page-3",
+      "x": 610,
+      "y": 0,
+      "w": 560,
+      "h": 1040
+    },
+    {
+      "file": "InkToday.dc.html",
+      "title": "Ink · Today",
+      "page": "page-3",
+      "x": 1220,
+      "y": 0,
+      "w": 560,
+      "h": 1040
+    },
+    {
+      "file": "InkReview.dc.html",
+      "title": "Ink · Review",
+      "page": "page-3",
+      "x": 1830,
+      "y": 0,
+      "w": 560,
+      "h": 1040
+    },
+    {
+      "file": "Main.dc.html",
+      "title": "A — Calm Material 3",
+      "page": "page-4",
+      "x": 0,
+      "y": 0,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "file": "Editorial.dc.html",
+      "title": "B — Editorial",
+      "page": "page-4",
+      "x": 470,
+      "y": 0,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "file": "Bold.dc.html",
+      "title": "C — Bold",
+      "page": "page-4",
+      "x": 940,
+      "y": 0,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "file": "Focus.dc.html",
+      "title": "D — Dark focus",
+      "page": "page-4",
+      "x": 1410,
+      "y": 0,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "file": "RcDecks.dc.html",
+      "title": "Decks",
+      "page": "page-1",
+      "x": 3050,
+      "y": 0,
+      "w": 560,
+      "h": 1040
+    },
+    {
+      "file": "RcBook.dc.html",
+      "title": "Book — chapters",
+      "page": "page-1",
+      "x": 3660,
+      "y": 0,
+      "w": 560,
+      "h": 1040
+    },
+    {
+      "file": "RcStats.dc.html",
+      "title": "Stats",
+      "page": "page-1",
+      "x": 4270,
+      "y": 0,
+      "w": 560,
+      "h": 1040
+    },
+    {
+      "file": "RcSettings.dc.html",
+      "title": "Settings",
+      "page": "page-1",
+      "x": 4880,
+      "y": 0,
+      "w": 560,
+      "h": 1040
+    },
+    {
+      "file": "RcStates.dc.html",
+      "title": "States",
+      "page": "page-1",
+      "x": 0,
+      "y": 1420,
+      "w": 1180,
+      "h": 1320
+    },
+    {
+      "file": "DarkNeutral.dc.html",
+      "title": "Today",
+      "page": "page-dark",
+      "x": 0,
+      "y": 0,
+      "w": 560,
+      "h": 1040
+    },
+    {
+      "file": "DkFront.dc.html",
+      "title": "Review — front",
+      "page": "page-dark",
+      "x": 610,
+      "y": 0,
+      "w": 560,
+      "h": 1040
+    },
+    {
+      "file": "DkReview.dc.html",
+      "title": "Review — flipped",
+      "page": "page-dark",
+      "x": 1220,
+      "y": 0,
+      "w": 560,
+      "h": 1040
+    },
+    {
+      "file": "DkSheet.dc.html",
+      "title": "Session summary",
+      "page": "page-dark",
+      "x": 1830,
+      "y": 0,
+      "w": 560,
+      "h": 1040
+    },
+    {
+      "file": "DkApprove.dc.html",
+      "title": "Approval queue",
+      "page": "page-dark",
+      "x": 2440,
+      "y": 0,
+      "w": 560,
+      "h": 1040
+    },
+    {
+      "file": "DkDecks.dc.html",
+      "title": "Decks",
+      "page": "page-dark",
+      "x": 3050,
+      "y": 0,
+      "w": 560,
+      "h": 1040
+    },
+    {
+      "file": "DkBook.dc.html",
+      "title": "Book — chapters",
+      "page": "page-dark",
+      "x": 3660,
+      "y": 0,
+      "w": 560,
+      "h": 1040
+    },
+    {
+      "file": "DkStats.dc.html",
+      "title": "Stats",
+      "page": "page-dark",
+      "x": 4270,
+      "y": 0,
+      "w": 560,
+      "h": 1040
+    },
+    {
+      "file": "DkSettings.dc.html",
+      "title": "Settings",
+      "page": "page-dark",
+      "x": 4880,
+      "y": 0,
+      "w": 560,
+      "h": 1040
+    },
+    {
+      "file": "DkStates.dc.html",
+      "title": "States",
+      "page": "page-dark",
+      "x": 0,
+      "y": 1420,
+      "w": 1180,
+      "h": 1320
+    }
+  ],
+  "annotations": [
+    {
+      "id": "main-brief",
+      "page": "page-1",
+      "x": 0,
+      "y": -280,
+      "w": 780,
+      "text": "Recally — pure white + teal\n\nSettled: flat Headway-style structure, deep teal palette, pure white ground.\n\nOne change from the white mockup you picked. That version had a faint grey wash inside each card and darker borders, which is what made the cards read slightly dirty. On a white ground the right move is the opposite — no card fill at all, and let a single hairline border do the structuring. Cards are now transparent; only the ground and the borders exist. It is cleaner than what you approved, not a departure from it.\n\nFive screens here. Review is split into front and flipped because the rating row must not exist before the flip — response_ms is measured flip-to-rate (docs/android.md:14), so anything that biases the timing has to be absent."
+    },
+    {
+      "id": "n-today",
+      "page": "page-1",
+      "x": 0,
+      "y": 1085,
+      "w": 560,
+      "text": "TODAY\n\nStats strip carries the look: streak walled off left, three metrics right, action bar fused to the bottom. Colour appears almost only on numbers.\n\nBook rail uses solid cover blocks with a progress bar per book. The dashed third slot is the import affordance — the watched folder is the real ingest path, so this is a secondary route, not the main one."
+    },
+    {
+      "id": "n-front",
+      "page": "page-1",
+      "x": 610,
+      "y": 1085,
+      "w": 560,
+      "text": "REVIEW — FRONT\n\nQuestion alone, one full-width button. No rating row, no interval hints, nothing that hints at the answer or invites a pre-flip decision.\n\nThis matters for data quality: response_ms is the flip-to-rate duration, so a visible rating row before the flip would corrupt what that number means."
+    },
+    {
+      "id": "n-flip",
+      "page": "page-1",
+      "x": 1220,
+      "y": 1085,
+      "w": 560,
+      "text": "REVIEW — FLIPPED\n\nGood is the only filled button; the other three are outlined. Colour marks the expected path, and the common tap is the easiest to hit without looking.\n\nInterval hints on Again and Hard ONLY. Those two come from learning_steps_minutes in /reviews/due. Good and Easy projections do not exist before you rate — the server returns next_due afterwards — and computing them client-side would break hard rule 5.\n\nProgress is 'cards left', not 'N of 12': android.md:14 re-queues Again/Hard cards inside the session, so the total is not fixed."
+    },
+    {
+      "id": "n-sheet",
+      "page": "page-1",
+      "x": 1830,
+      "y": 1085,
+      "w": 560,
+      "text": "SESSION SUMMARY\n\nCovers what docs/android.md:15 asks for — reviewed count, time, lapses — plus the streak band and next-due.\n\nRows are named by the rating (Good or Easy / Rated Hard / Rated Again) rather than 'Lapsed', because lapse has a specific FSRS meaning in data-model.md and a card rated Again while still in learning is not a lapse.\n\nSecond button routes into the approval queue so it does not rot between ingests. If that is noise at the end of a session, it drops to a text link."
+    },
+    {
+      "id": "n-approve",
+      "page": "page-1",
+      "x": 2440,
+      "y": 1085,
+      "w": 560,
+      "text": "APPROVAL QUEUE — the densest screen, so the real test of this style\n\nFrom docs/api-spec.md:47-56 and docs/android.md:17-20.\n\n• Cloze renders as a styled blank, not raw {{c1::...}} braces. The doc does not say how to show these; this is my call.\n• Critic critique gets a bordered block, visually subordinate to the card text.\n• Source highlights collapse behind a disclosure — a grouped unit can have several and they would otherwise dominate.\n• Every card carries approve/edit/reject, per android.md:19.\n• NEEDS YOU, READY and TRUNCATED SOURCE map to needs_human, pending_review and the truncated flag. Truncated is flagged, never reconstructed (hard rule 7).\n• 'Approve 5 ready' acts only on pending_review cards; needs_human ones must be opened individually. A human tap is still human approval, so hard rule 1 holds — but there is no batch endpoint documented yet."
+    },
+    {
+      "id": "n-open",
+      "page": "page-1",
+      "x": 5490,
+      "y": 0,
+      "w": 360,
+      "text": "AUDITED 2026-09-07 against android.md + api-spec.md\n\nFixed in these artboards:\n• Good/Easy interval hints removed — no endpoint gives a projection before you rate, and computing one client-side breaks hard rule 5. Again/Hard stay: derivable from learning_steps_minutes.\n• Stats strip was '142 reviews / 38 new' under one 'week' heading, mixing three timeframes — and NEW_CARDS_PER_DAY caps new at 10. Now reviews_today and new_count, labelled Today.\n• Progress bar was 12 fixed segments. android.md:14 re-queues Again/Hard cards inside the session, so 12 cards make MORE than 12 presentations. Now 'cards left', never a fixed total.\n• Summary said 'Lapsed'; lapse has a specific FSRS meaning in data-model.md. Now named by the rating.\n• Second approval card had no approve/edit/reject row — android.md:19 requires it on every card.\n\nSTILL BLOCKED on API fields (see design-system.md):\n1. Pending counts — no endpoint returns them; feeds three screens.\n2. Per-book progress % — needs a field AND a definition; undefined today.\n3. 'Next card due in 4h' — forecast is day-granularity.\n4. Bulk approve — no batch endpoint documented."
+    },
+    {
+      "id": "n-ground",
+      "page": "page-0",
+      "x": 0,
+      "y": -190,
+      "w": 620,
+      "text": "The two grounds not chosen — kept for reference.\n\nCream is warmer and separates cards effortlessly; cool near-white splits the difference. You picked pure white, which is on the first page."
+    },
+    {
+      "id": "n-blue",
+      "page": "page-2",
+      "x": 0,
+      "y": -190,
+      "w": 620,
+      "text": "Headway's blue palette on cream — the first pass at this structure, before the teal and white decisions."
+    },
+    {
+      "id": "n-soft",
+      "page": "page-3",
+      "x": 0,
+      "y": -190,
+      "w": 620,
+      "text": "Round two — soft pastel and ink-and-paper, from the pet-app reference."
+    },
+    {
+      "id": "n-first",
+      "page": "page-4",
+      "x": 0,
+      "y": -190,
+      "w": 620,
+      "text": "Round one — flat screens, no device frame. Review card only."
+    },
+    {
+      "id": "n-decks",
+      "page": "page-1",
+      "x": 3050,
+      "y": 1085,
+      "w": 560,
+      "text": "DECKS\n\nandroid.md:22 — book list, read-only. Each row carries the progress bar (G2) and a due count from GET /decks.\n\nThe TRUNCATED count per book is derived client-side from the cards list, not a new field.\n\nThe dashed import row is secondary: the watched folder on your Mac is the real ingest path (roadmap step 1)."
+    },
+    {
+      "id": "n-book",
+      "page": "page-1",
+      "x": 3660,
+      "y": 1085,
+      "w": 560,
+      "text": "BOOK — CHAPTERS → CARDS\n\nThe second level of android.md:22. Chapters expand in place rather than pushing another screen — with 30 chapters in one book, a third level of navigation would be tedious.\n\nCards are read-only here: no rating, no approve. Due dates shown for scheduled cards, 'Not scheduled' for new ones.\n\nA NEW card is dimmed to 62% so scheduled cards read first."
+    },
+    {
+      "id": "n-stats",
+      "page": "page-1",
+      "x": 4270,
+      "y": 1085,
+      "w": 560,
+      "text": "STATS\n\nEverything here comes from GET /stats — no invented fields. streak_days, reviews_today, retention_30d, forecast[] and lapse_rate_by_type map one-to-one.\n\nForecast is a 7-bar chart; today is the filled bar, the rest muted, so 'what is coming' reads at a glance.\n\nLapse rate compares qa 11% vs cloze 18% from the documented payload. The line underneath is the only interpretation on the screen."
+    },
+    {
+      "id": "n-settings",
+      "page": "page-1",
+      "x": 4880,
+      "y": 1085,
+      "w": 560,
+      "text": "SETTINGS\n\nandroid.md:36-40 — base URL, API key, connection test. Key is masked with a reveal toggle and stored in EncryptedSharedPreferences; nothing is baked into the build.\n\nThe connection-test result is a persistent inline block, not a toast — you need to read it while fixing the URL.\n\nQueued-ratings count exposes the sync state from android.md:33, so a stuck queue is visible rather than silent."
+    },
+    {
+      "id": "n-states",
+      "page": "page-1",
+      "x": 0,
+      "y": 2790,
+      "w": 1180,
+      "text": "STATES — as much a part of the spec as the happy path\n\nOffline (review works, approve does not — android.md:34), 401 as a banner rather than a crash (android.md:40), nothing-due, queue-clear, loading skeletons, the badge set, and the cloze treatment on both sides of the flip.\n\nSkeletons are blocks at the real component's dimensions, never spinners — the layout should not jump when data lands.\n\nCloze unflipped is a rule of the answer's width, not a '____' or the raw {{c1::...}}. Width hints at length without giving the answer away."
+    },
+    {
+      "id": "dk-brief",
+      "page": "page-dark",
+      "x": 0,
+      "y": -250,
+      "w": 760,
+      "text": "Dark theme — near-black #121413, accent #4FB894\n\nElevated surfaces: cards take a #232725 fill one step above the ground and keep a faint border. Hairlines alone do not separate on dark, so lightness carries the hierarchy. This is the one structural departure from light mode, where cards have no fill at all.\n\nEvery colour is RE-DERIVED, not inverted — each hue lifted until it carries on a dark ground, each wash darkened to match. Inverting a light palette mechanically is what makes dark modes look wrong.\n\nAll ten screens, matching the light set one-for-one. Full token table with both columns is in design-system.md."
+    },
+    {
+      "id": "dk-checks",
+      "page": "page-dark",
+      "x": 5490,
+      "y": 0,
+      "w": 340,
+      "text": "CONTRAST — verified, not eyeballed\n\nWCAG AA (4.5 body, 3.0 large/UI), measured on BOTH ground and surface. Text on a card is the harder case and is what these were tuned to.\n\nOn #232725 surface:\n• ink 14.4:1\n• ink-muted 7.8:1\n• ink-faint 4.8:1\n• primary 6.8:1\n\nTwo things the numbers caught:\n1. ink-faint failed AA on surfaces at 3.9 — the naive dark equivalent was too dim. Lifted.\n2. Surface/ground separation was 1.11, too weak to read as elevation. Widened to 1.24 — below ~1.2 it disappears, much above it and cards look grey rather than raised.\n\nHAND-TUNED, not mapped: the review card's rating tiles. Their light form is an outlined tile tinted from its own semantic colour; on dark both fill and border needed re-deriving or the outline vanishes."
+    },
+    {
+      "id": "dk-states",
+      "page": "page-dark",
+      "x": 0,
+      "y": 2790,
+      "w": 1180,
+      "text": "STATES — dark\n\nSame seven states plus the four connection-test results. The washes are the interesting part: warn-wash, danger-wash and success-wash are darkened (#3A2A1C, #3A1F1C, #123528) rather than lightened, so a badge still reads as a tinted chip rather than a glowing block.\n\nSkeletons use line (#2C302E) on surface — the same relationship as light mode, where they use line-soft on ground."
+    }
+  ],
+  "launch": {
+    "view": "canvas",
+    "page": "page-dark"
+  }
+}

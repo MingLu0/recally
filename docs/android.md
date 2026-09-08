@@ -2,6 +2,12 @@
 
 Native Android. Kotlin + Jetpack Compose + Material 3.
 
+## Design
+
+Visual spec: [`docs/design/design-system.md`](design/design-system.md) — colour roles, type scale, component specs, and the per-screen states. Screen mockups live on a [design canvas](https://claude.ai/code/artifact/25472047-e5cc-473c-8709-81f1ffebf89f); artboard sources are committed under `docs/design/`.
+
+That document also lists the API fields the design needs but `api-spec.md` does not yet provide — resolve those before building.
+
 ## Screens
 
 ### 1. Today

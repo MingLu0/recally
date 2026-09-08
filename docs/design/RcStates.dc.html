@@ -1,0 +1,218 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&display=swap">
+  <style>
+    body { margin: 0; font-family: 'Inter Tight', system-ui, sans-serif; }
+    a { color: #1f6f5c; } a:hover { color: #175646; }
+  </style>
+</helmet>
+
+<div style="width: 1180px; height: 1320px; background: #ffffff; box-sizing: border-box; overflow: hidden; padding: 28px 30px; display: flex; flex-direction: column; gap: 22px;">
+
+  <div style="display: flex; flex-direction: column; gap: 4px;">
+    <span style="font-size: 24px; font-weight: 800; color: #17181a; letter-spacing: -0.7px;">States</span>
+    <span style="font-size: 14px; font-weight: 400; color: #76766d;">Every screen implements these. Shown at real width (390dp) so the treatments can be lifted directly.</span>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 26px;">
+
+    <!-- OFFLINE -->
+    <div style="display: flex; flex-direction: column; gap: 9px;">
+      <span style="font-size: 12px; font-weight: 700; color: #94948d; letter-spacing: 0.6px;">OFFLINE</span>
+      <div style="border: 1px solid #e3e3e0; border-radius: 12px; overflow: hidden;">
+        <div style="background: #f8e6d8; padding: 11px 14px; display: flex; align-items: center; gap: 10px;">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#b85c2e" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"></line><path d="M16.7 13.3a5 5 0 0 1 2.2 1.2"></path><path d="M5 12.6a10 10 0 0 1 5.2-2.5"></path><path d="M10.7 5.1a16 16 0 0 1 10.4 4.2"></path><path d="M1.4 8.8a16 16 0 0 1 3.6-2.5"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg>
+          <span style="font-size: 13px; font-weight: 700; color: #b85c2e;">Offline &mdash; 5 ratings queued</span>
+        </div>
+        <div style="padding: 14px; display: flex; flex-direction: column; gap: 9px;">
+          <span style="font-size: 13px; line-height: 19px; font-weight: 400; color: #57574f;">Review still works fully. Ratings sync when you reconnect.</span>
+          <div style="border-top: 1px solid #f0f0ee; padding-top: 11px; display: flex; align-items: center; gap: 9px; opacity: 0.5;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94948d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+            <span style="font-size: 13px; font-weight: 500; color: #94948d;">Approve needs a connection</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 401 -->
+    <div style="display: flex; flex-direction: column; gap: 9px;">
+      <span style="font-size: 12px; font-weight: 700; color: #94948d; letter-spacing: 0.6px;">401 &mdash; BAD KEY</span>
+      <div style="border: 1px solid #e3e3e0; border-radius: 12px; overflow: hidden;">
+        <div style="background: #f7dedb; padding: 12px 14px; display: flex; align-items: center; gap: 10px;">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#c0453a" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+          <span style="flex-grow: 1; font-size: 13px; font-weight: 700; color: #c0453a;">Check your API key</span>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#c0453a" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+        </div>
+        <div style="padding: 14px;">
+          <span style="font-size: 13px; line-height: 19px; font-weight: 400; color: #57574f;">Tapping opens Settings. A bad key is a banner, never a crash.</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- NOTHING DUE -->
+    <div style="display: flex; flex-direction: column; gap: 9px;">
+      <span style="font-size: 12px; font-weight: 700; color: #94948d; letter-spacing: 0.6px;">NOTHING DUE</span>
+      <div style="border: 1px solid #e3e3e0; border-radius: 12px; overflow: hidden;">
+        <div style="padding: 13px 14px; border-bottom: 1px solid #f0f0ee; display: flex; justify-content: space-between;">
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 2px;">
+            <span style="font-size: 19px; font-weight: 800; color: #d97742;">9</span>
+            <span style="font-size: 11px; color: #94948d;">streak</span>
+          </div>
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 2px;">
+            <span style="font-size: 19px; font-weight: 800; color: #1f6f5c;">23</span>
+            <span style="font-size: 11px; color: #94948d;">reviewed</span>
+          </div>
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 2px;">
+            <span style="font-size: 19px; font-weight: 800; color: #2f9e6e;">87%</span>
+            <span style="font-size: 11px; color: #94948d;">retention</span>
+          </div>
+        </div>
+        <div style="padding: 13px 14px; display: flex; align-items: center; justify-content: center; gap: 8px;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94948d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>
+          <span style="font-size: 13px; font-weight: 600; color: #76766d;">Nothing due &mdash; next card in 4 hours</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- QUEUE CLEAR -->
+    <div style="display: flex; flex-direction: column; gap: 9px;">
+      <span style="font-size: 12px; font-weight: 700; color: #94948d; letter-spacing: 0.6px;">QUEUE CLEAR</span>
+      <div style="border: 1px solid #e3e3e0; border-radius: 12px; padding: 32px 14px; display: flex; flex-direction: column; align-items: center; gap: 11px;">
+        <svg width="42" height="42" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="#dbf0e6"></circle><path d="M8 12.5l2.5 2.5L16 9.5" stroke="#2f9e6e" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 3px;">
+          <span style="font-size: 15px; font-weight: 800; color: #17181a; letter-spacing: -0.3px;">Queue clear</span>
+          <span style="font-size: 13px; font-weight: 400; color: #94948d; text-align: center;">Nothing waiting for approval.</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- LOADING -->
+    <div style="display: flex; flex-direction: column; gap: 9px;">
+      <span style="font-size: 12px; font-weight: 700; color: #94948d; letter-spacing: 0.6px;">LOADING &mdash; SKELETON</span>
+      <div style="border: 1px solid #e3e3e0; border-radius: 12px; overflow: hidden;">
+        <div style="display: flex;">
+          <div style="width: 104px; flex-shrink: 0; border-right: 1px solid #f0f0ee; padding: 14px 10px; display: flex; flex-direction: column; align-items: center; gap: 7px;">
+            <div style="width: 44px; height: 13px; border-radius: 5px; background: #f0f0ee;"></div>
+            <div style="width: 28px; height: 19px; border-radius: 5px; background: #f0f0ee;"></div>
+          </div>
+          <div style="flex-grow: 1; padding: 14px 10px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px;">
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 6px;">
+              <div style="width: 30px; height: 19px; border-radius: 5px; background: #f0f0ee;"></div>
+              <div style="width: 42px; height: 10px; border-radius: 999px; background: #f4f4f2;"></div>
+            </div>
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 6px;">
+              <div style="width: 30px; height: 19px; border-radius: 5px; background: #f0f0ee;"></div>
+              <div style="width: 42px; height: 10px; border-radius: 999px; background: #f4f4f2;"></div>
+            </div>
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 6px;">
+              <div style="width: 30px; height: 19px; border-radius: 5px; background: #f0f0ee;"></div>
+              <div style="width: 42px; height: 10px; border-radius: 999px; background: #f4f4f2;"></div>
+            </div>
+          </div>
+        </div>
+        <div style="background: #f0f0ee; height: 43px;"></div>
+      </div>
+      <span style="font-size: 12px; font-weight: 400; color: #94948d;">Blocks at the real component's size. No spinners.</span>
+    </div>
+
+    <!-- BADGES -->
+    <div style="display: flex; flex-direction: column; gap: 9px;">
+      <span style="font-size: 12px; font-weight: 700; color: #94948d; letter-spacing: 0.6px;">CARD BADGES</span>
+      <div style="border: 1px solid #e3e3e0; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 11px;">
+        <div style="display: flex; flex-wrap: wrap; gap: 7px;">
+          <div style="border-radius: 5px; background: #f7dedb; padding: 3px 8px;">
+            <span style="font-size: 11px; font-weight: 700; color: #c0453a; letter-spacing: 0.4px;">NEEDS YOU</span>
+          </div>
+          <div style="border-radius: 5px; background: #e4f0eb; padding: 3px 8px;">
+            <span style="font-size: 11px; font-weight: 700; color: #1f6f5c; letter-spacing: 0.4px;">READY</span>
+          </div>
+          <div style="border-radius: 5px; background: #f8e6d8; padding: 3px 8px;">
+            <span style="font-size: 11px; font-weight: 700; color: #b85c2e; letter-spacing: 0.4px;">TRUNCATED SOURCE</span>
+          </div>
+          <div style="border-radius: 5px; border: 1px solid #e3e3e0; padding: 3px 8px;">
+            <span style="font-size: 11px; font-weight: 600; color: #76766d; letter-spacing: 0.4px;">CLOZE</span>
+          </div>
+          <div style="border-radius: 5px; background: #f4f4f2; padding: 3px 8px;">
+            <span style="font-size: 11px; font-weight: 700; color: #76766d; letter-spacing: 0.4px;">LEARNING</span>
+          </div>
+        </div>
+        <span style="font-size: 12px; line-height: 18px; font-weight: 400; color: #94948d; border-top: 1px solid #f0f0ee; padding-top: 10px;">NEEDS YOU = needs_human, READY = pending_review (card statuses). LEARNING = the FSRS state; there is no &quot;new&quot; state in FSRS 6 — a fresh card is learning at step 0. TRUNCATED flags a clipped source and is never an offer to reconstruct it (hard rule 7).</span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- connection test states -->
+  <div style="display: flex; flex-direction: column; gap: 9px;">
+    <span style="font-size: 12px; font-weight: 700; color: #94948d; letter-spacing: 0.6px;">CONNECTION TEST &mdash; ALL FOUR RESULTS</span>
+    <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px;">
+
+      <div style="border: 1px solid #e3e3e0; border-radius: 12px; padding: 13px 14px; display: flex; align-items: center; gap: 11px;">
+        <svg width="21" height="21" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="#dbf0e6"></circle><path d="M8 12.5l2.5 2.5L16 9.5" stroke="#2f9e6e" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        <div style="display: flex; flex-direction: column; gap: 1px; min-width: 0;">
+          <span style="font-size: 14px; font-weight: 700; color: #1f6f5c;">Connected</span>
+          <span style="font-size: 12px; font-weight: 400; color: #76766d;">Responded in 42 ms</span>
+        </div>
+      </div>
+
+      <div style="border: 1px solid #e3e3e0; border-radius: 12px; padding: 13px 14px; display: flex; align-items: center; gap: 11px;">
+        <svg width="21" height="21" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="#f7dedb"></circle><path d="M12 7.5v5" stroke="#c0453a" stroke-width="2.4" stroke-linecap="round"></path><circle cx="12" cy="16.2" r="1.3" fill="#c0453a"></circle></svg>
+        <div style="display: flex; flex-direction: column; gap: 1px; min-width: 0;">
+          <span style="font-size: 14px; font-weight: 700; color: #c0453a;">Key rejected</span>
+          <span style="font-size: 12px; font-weight: 400; color: #76766d;">401 &mdash; check the API key</span>
+        </div>
+      </div>
+
+      <div style="border: 1px solid #e3e3e0; border-radius: 12px; padding: 13px 14px; display: flex; align-items: center; gap: 11px;">
+        <svg width="21" height="21" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="#f8e6d8"></circle><path d="M8 8l8 8M16 8l-8 8" stroke="#b85c2e" stroke-width="2.2" stroke-linecap="round"></path></svg>
+        <div style="display: flex; flex-direction: column; gap: 1px; min-width: 0;">
+          <span style="font-size: 14px; font-weight: 700; color: #b85c2e;">No answer</span>
+          <span style="font-size: 12px; font-weight: 400; color: #76766d;">Is the Mac awake and on this network?</span>
+        </div>
+      </div>
+
+      <div style="border: 1px solid #e3e3e0; border-radius: 12px; padding: 13px 14px; display: flex; align-items: center; gap: 11px;">
+        <svg width="21" height="21" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="#f8e6d8"></circle><rect x="8" y="11" width="8" height="6" rx="1.4" stroke="#b85c2e" stroke-width="1.8"></rect><path d="M9.6 11V9.4a2.4 2.4 0 0 1 4.8 0V11" stroke="#b85c2e" stroke-width="1.8" stroke-linecap="round"></path></svg>
+        <div style="display: flex; flex-direction: column; gap: 1px; min-width: 0;">
+          <span style="font-size: 14px; font-weight: 700; color: #b85c2e;">HTTPS required</span>
+          <span style="font-size: 12px; font-weight: 400; color: #76766d;">Plain http:// only on your home network</span>
+        </div>
+      </div>
+
+    </div>
+    <span style="font-size: 12px; line-height: 18px; font-weight: 400; color: #94948d;">The last one is the network security config from android.md:45 surfacing: cleartext is permitted only for private ranges (10.*, 172.16-31.*, 192.168.*, *.local). Any other http:// host is blocked before a request is made.</span>
+  </div>
+
+  <!-- cloze treatment -->
+  <div style="display: flex; flex-direction: column; gap: 9px;">
+    <span style="font-size: 12px; font-weight: 700; color: #94948d; letter-spacing: 0.6px;">CLOZE &mdash; BOTH SIDES</span>
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 26px;">
+      <div style="border: 1px solid #e3e3e0; border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 7px;">
+        <span style="font-size: 11px; font-weight: 700; color: #94948d; letter-spacing: 0.5px;">UNFLIPPED</span>
+        <span style="font-size: 15px; line-height: 26px; font-weight: 500; color: #17181a;">The <span style="display: inline-block; width: 132px; height: 5px; background: #cfe0da; border-radius: 999px; vertical-align: middle; margin: 0 3px;"></span> is the gap between intent and instructions.</span>
+      </div>
+      <div style="border: 1px solid #e3e3e0; border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 7px;">
+        <span style="font-size: 11px; font-weight: 700; color: #94948d; letter-spacing: 0.5px;">REVEALED</span>
+        <span style="font-size: 15px; line-height: 26px; font-weight: 500; color: #17181a;">The <span style="background: #e4f0eb; border-bottom: 2px solid #1f6f5c; border-radius: 5px; padding: 1px 7px; font-weight: 700; color: #1f6f5c;">Gulf of Specification</span> is the gap between intent and instructions.</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

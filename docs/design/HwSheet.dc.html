@@ -1,0 +1,110 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&display=swap">
+  <style>
+    body { margin: 0; font-family: 'Inter Tight', system-ui, sans-serif; }
+    a { color: #0b63f6; } a:hover { color: #0a4fc4; }
+  </style>
+</helmet>
+
+<div style="width: 560px; height: 1040px; background: #ece7df; display: flex; align-items: center; justify-content: center; box-sizing: border-box; overflow: hidden; position: relative;">
+
+  <div style="position: relative; width: 414px; height: 868px; background: #17181a; border-radius: 56px; padding: 12px; box-sizing: border-box; box-shadow: 0 24px 60px rgba(40,35,28,0.3), 0 4px 14px rgba(40,35,28,0.16);">
+    <div style="width: 390px; height: 844px; background: #fdf8f0; border-radius: 44px; overflow: hidden; position: relative;">
+
+      <!-- SCREEN CONTENT — no status bar drawn -->
+      <div style="width: 390px; height: 844px; display: flex; flex-direction: column; box-sizing: border-box; background: #fdf8f0; position: relative;">
+
+        <!-- dimmed page behind the sheet -->
+        <div style="position: absolute; left: 0; top: 0; width: 390px; height: 844px; background: #fdf8f0;">
+          <div style="padding: 62px 20px 16px 20px; display: flex; align-items: center; gap: 11px; border-bottom: 1px solid #e8e1d6;">
+            <div style="width: 34px; height: 34px; border-radius: 9px; background: #17181a; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#fdf8f0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"></rect><line x1="8" y1="8" x2="16" y2="8"></line><line x1="8" y1="12" x2="14" y2="12"></line></svg>
+            </div>
+            <span style="font-size: 25px; font-weight: 800; color: #17181a; letter-spacing: -0.9px;">Recally</span>
+          </div>
+          <div style="padding: 18px 20px 0 20px;">
+            <div style="border: 1px solid #e2dbd0; border-radius: 10px; background: #ffffff; height: 122px;"></div>
+          </div>
+          <div style="padding: 26px 20px 0 20px;">
+            <div style="font-size: 22px; font-weight: 800; color: #17181a; letter-spacing: -0.7px;">Waiting for you</div>
+          </div>
+        </div>
+
+        <!-- scrim -->
+        <div style="position: absolute; left: 0; top: 0; width: 390px; height: 844px; background: rgba(35,30,24,0.34);"></div>
+
+        <!-- bottom sheet -->
+        <div style="position: absolute; left: 0; bottom: 0; width: 390px; background: #ffffff; border-radius: 22px 22px 0 0; padding: 10px 20px 26px 20px; box-sizing: border-box; display: flex; flex-direction: column; gap: 18px;">
+
+          <div style="align-self: center; width: 38px; height: 4px; border-radius: 2px; background: #ddd7cc;"></div>
+
+          <div style="display: flex; flex-direction: column; gap: 4px;">
+            <div style="font-size: 27px; font-weight: 800; color: #17181a; letter-spacing: -0.9px;">Session complete</div>
+            <div style="font-size: 14px; font-weight: 400; color: #7d766c;">12 cards in 6 min 40 s</div>
+          </div>
+
+          <!-- breakdown rows -->
+          <div style="border: 1px solid #e2dbd0; border-radius: 12px; overflow: hidden;">
+
+            <div style="padding: 14px 15px; display: flex; align-items: center; gap: 13px; border-bottom: 1px solid #f0ebe2;">
+              <svg width="30" height="30" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="#dcfce7"></circle><path d="M8 12.5l2.5 2.5L16 9.5" stroke="#16a34a" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+              <span style="flex-grow: 1; font-size: 16px; font-weight: 500; color: #17181a;">Knew it</span>
+              <span style="font-size: 19px; font-weight: 800; color: #16a34a; letter-spacing: -0.4px;">9</span>
+            </div>
+
+            <div style="padding: 14px 15px; display: flex; align-items: center; gap: 13px; border-bottom: 1px solid #f0ebe2;">
+              <svg width="30" height="30" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="#ffedd5"></circle><path d="M12 7.5v5" stroke="#ea580c" stroke-width="2.4" stroke-linecap="round"></path><circle cx="12" cy="16.2" r="1.3" fill="#ea580c"></circle></svg>
+              <span style="flex-grow: 1; font-size: 16px; font-weight: 500; color: #17181a;">Struggled</span>
+              <span style="font-size: 19px; font-weight: 800; color: #ea580c; letter-spacing: -0.4px;">2</span>
+            </div>
+
+            <div style="padding: 14px 15px; display: flex; align-items: center; gap: 13px;">
+              <svg width="30" height="30" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="#fee2e2"></circle><path d="M14.5 9.5l-5 5M9.5 9.5l5 5" stroke="#dc2626" stroke-width="2.4" stroke-linecap="round"></path></svg>
+              <span style="flex-grow: 1; font-size: 16px; font-weight: 500; color: #17181a;">Lapsed</span>
+              <span style="font-size: 19px; font-weight: 800; color: #dc2626; letter-spacing: -0.4px;">1</span>
+            </div>
+
+            <div style="background: #16a34a; padding: 11px 14px; display: flex; align-items: center; justify-content: center;">
+              <span style="font-size: 13px; font-weight: 700; color: #ffffff; letter-spacing: 0.7px;">STREAK EXTENDED &middot; 10 DAYS</span>
+            </div>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 9px; background: #fdf8f0; border-radius: 10px; padding: 12px 14px;">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#7d766c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>
+            <span style="font-size: 14px; font-weight: 500; color: #5c564e;">Next card due in <span style="font-weight: 700; color: #17181a;">4 hours</span></span>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 9px;">
+            <div style="height: 54px; border-radius: 12px; background: #0b63f6; display: flex; align-items: center; justify-content: center;">
+              <span style="font-size: 16px; font-weight: 700; color: #ffffff; letter-spacing: -0.2px;">Done</span>
+            </div>
+            <div style="height: 54px; border-radius: 12px; background: #ffffff; border: 1.5px solid #e2dbd0; display: flex; align-items: center; justify-content: center;">
+              <span style="font-size: 16px; font-weight: 700; color: #17181a; letter-spacing: -0.2px;">Review 8 pending cards</span>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

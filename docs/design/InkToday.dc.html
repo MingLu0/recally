@@ -1,0 +1,157 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap">
+  <style>
+    body { margin: 0; font-family: 'Plus Jakarta Sans', system-ui, sans-serif; }
+    a { color: #b4622a; } a:hover { color: #8f4d20; }
+  </style>
+</helmet>
+
+<div style="width: 560px; height: 1040px; background: #f6efe4; display: flex; align-items: center; justify-content: center; box-sizing: border-box; overflow: hidden; position: relative;">
+
+  <div style="position: absolute; left: -70px; top: 90px; width: 320px; height: 720px; background: #eddfc8; border-radius: 200px; transform: rotate(-13deg);"></div>
+  <div style="position: absolute; right: -100px; bottom: 40px; width: 290px; height: 580px; background: #f1e6d3; border-radius: 180px; transform: rotate(11deg);"></div>
+
+  <div style="position: relative; width: 414px; height: 868px; background: #1a1714; border-radius: 56px; padding: 12px; box-sizing: border-box; box-shadow: 0 24px 60px rgba(60,40,20,0.26), 0 4px 14px rgba(60,40,20,0.14);">
+    <div style="width: 390px; height: 844px; background: #fffdf9; border-radius: 44px; overflow: hidden; position: relative;">
+
+      <!-- SCREEN CONTENT — no status bar drawn -->
+      <div style="width: 390px; height: 844px; display: flex; flex-direction: column; box-sizing: border-box; background: #fffdf9;">
+
+        <!-- greeting -->
+        <div style="padding: 68px 22px 0 22px; display: flex; align-items: flex-start; justify-content: space-between; gap: 16px;">
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            <div style="font-family: 'Fraunces', Georgia, serif; font-size: 29px; font-weight: 600; color: #211c17; letter-spacing: -0.6px; line-height: 34px;">Good morning</div>
+            <div style="font-size: 14px; font-weight: 500; color: #8a7d6d; letter-spacing: -0.1px;">12 cards are ready for you today</div>
+          </div>
+          <div style="width: 44px; height: 44px; border-radius: 22px; border: 1px solid #ece2d2; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4a4038" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.7 21a2 2 0 0 1-3.4 0"></path></svg>
+          </div>
+        </div>
+
+        <!-- book spines, not avatars -->
+        <div style="padding: 26px 22px 0 22px; display: flex; gap: 12px; align-items: flex-end;">
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <div style="width: 54px; height: 74px; border-radius: 5px 9px 9px 5px; background: #b4622a; border-left: 5px solid #8f4d20; display: flex; align-items: flex-end; padding: 8px 7px; box-sizing: border-box; box-shadow: 0 2px 6px rgba(90,60,30,0.18);">
+              <span style="font-family: 'Fraunces', serif; font-size: 15px; font-weight: 700; color: #fdf3e6;">E</span>
+            </div>
+            <span style="font-size: 11px; font-weight: 600; color: #4a4038; text-align: center;">Evals</span>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <div style="width: 54px; height: 74px; border-radius: 5px 9px 9px 5px; background: #3f5f52; border-left: 5px solid #2f483f; display: flex; align-items: flex-end; padding: 8px 7px; box-sizing: border-box; box-shadow: 0 2px 6px rgba(90,60,30,0.18);">
+              <span style="font-family: 'Fraunces', serif; font-size: 15px; font-weight: 700; color: #eaf2ee;">A</span>
+            </div>
+            <span style="font-size: 11px; font-weight: 600; color: #4a4038; text-align: center;">Agents</span>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <div style="width: 54px; height: 74px; border-radius: 5px 9px 9px 5px; border: 1.5px dashed #d9cdb9; display: flex; align-items: center; justify-content: center; box-sizing: border-box;">
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#a89a86" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            </div>
+            <span style="font-size: 11px; font-weight: 600; color: #a89a86; text-align: center;">Import</span>
+          </div>
+        </div>
+
+        <!-- two-up tiles -->
+        <div style="padding: 24px 22px 0 22px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 13px;">
+          <div style="background: #211c17; border-radius: 18px; padding: 17px 16px; display: flex; flex-direction: column; gap: 12px; height: 106px; box-sizing: border-box;">
+            <svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="#f0b35f" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+            <div style="display: flex; flex-direction: column; gap: 2px;">
+              <span style="font-size: 15px; font-weight: 700; color: #fdf8f0;">Start review</span>
+              <span style="font-size: 12px; font-weight: 500; color: #a89a86;">12 due &middot; 5 new</span>
+            </div>
+          </div>
+          <div style="background: #f7f0e4; border-radius: 18px; padding: 17px 16px; display: flex; flex-direction: column; gap: 12px; height: 106px; box-sizing: border-box;">
+            <svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="#b4622a" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
+            <div style="display: flex; flex-direction: column; gap: 2px;">
+              <span style="font-size: 15px; font-weight: 700; color: #3d2f22;">Approve</span>
+              <span style="font-size: 12px; font-weight: 500; color: #94826c;">8 waiting</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- streak -->
+        <div style="padding: 26px 22px 0 22px; display: flex; align-items: baseline; justify-content: space-between;">
+          <span style="font-family: 'Fraunces', Georgia, serif; font-size: 20px; font-weight: 600; color: #211c17; letter-spacing: -0.3px;">Your streak</span>
+          <span style="font-size: 13px; font-weight: 600; color: #b4622a;">See all</span>
+        </div>
+
+        <div style="padding: 14px 22px 0 22px;">
+          <div style="border: 1px solid #f0e7d8; border-radius: 20px; padding: 20px 18px 18px 18px; display: flex; flex-direction: column; gap: 16px; background: #fffefb;">
+
+            <div style="display: flex; align-items: center; justify-content: center; padding-top: 2px;">
+              <div style="position: relative; width: 190px; height: 108px;">
+                <svg width="190" height="108" viewBox="0 0 190 108" fill="none">
+                  <path d="M18 100 A 77 77 0 1 1 172 100" stroke="#f2ebdd" stroke-width="15" stroke-linecap="round" fill="none"></path>
+                  <path d="M18 100 A 77 77 0 0 1 155 52" stroke="#d98b3a" stroke-width="15" stroke-linecap="round" fill="none"></path>
+                  <circle cx="155" cy="52" r="9" fill="#b4622a"></circle>
+                  <circle cx="155" cy="52" r="3.5" fill="#fffdf9"></circle>
+                </svg>
+                <div style="position: absolute; left: 0; top: 42px; width: 190px; display: flex; flex-direction: column; align-items: center; gap: 1px;">
+                  <span style="font-family: 'Fraunces', Georgia, serif; font-size: 36px; font-weight: 600; color: #211c17; letter-spacing: -1px; line-height: 40px;">9</span>
+                  <span style="font-size: 13px; font-weight: 500; color: #8a7d6d;">days in a row</span>
+                </div>
+              </div>
+            </div>
+
+            <div style="height: 1px; background: #f4ecdf;"></div>
+
+            <div style="display: flex; justify-content: space-between;">
+              <div style="display: flex; flex-direction: column; gap: 3px;">
+                <span style="font-size: 11px; font-weight: 600; color: #a89a86; letter-spacing: 0.2px;">Reviewed today</span>
+                <span style="font-family: 'Fraunces', serif; font-size: 18px; font-weight: 600; color: #33291f;">23</span>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 3px;">
+                <span style="font-size: 11px; font-weight: 600; color: #a89a86; letter-spacing: 0.2px;">Retention</span>
+                <span style="font-family: 'Fraunces', serif; font-size: 18px; font-weight: 600; color: #33291f;">87%</span>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 3px;">
+                <span style="font-size: 11px; font-weight: 600; color: #a89a86; letter-spacing: 0.2px;">Cards</span>
+                <span style="font-family: 'Fraunces', serif; font-size: 18px; font-weight: 600; color: #33291f;">131</span>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- bottom nav -->
+        <div style="margin-top: auto; border-top: 1px solid #f4ecdf; padding: 12px 14px 26px 14px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));">
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 5px;">
+            <svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="#b4622a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
+            <span style="font-size: 11px; font-weight: 700; color: #b4622a;">Today</span>
+          </div>
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 5px;">
+            <svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="#a89a86" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+            <span style="font-size: 11px; font-weight: 600; color: #a89a86;">Decks</span>
+          </div>
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 5px;">
+            <svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="#a89a86" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+            <span style="font-size: 11px; font-weight: 600; color: #a89a86;">Stats</span>
+          </div>
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 5px;">
+            <svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="#a89a86" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6h.09A1.65 1.65 0 0 0 10 3.09V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9v.09a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+            <span style="font-size: 11px; font-weight: 600; color: #a89a86;">Settings</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

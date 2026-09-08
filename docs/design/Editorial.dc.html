@@ -1,0 +1,83 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+  <style>
+    body { margin: 0; font-family: 'IBM Plex Sans', system-ui, sans-serif; }
+    a { color: #8a5a2b; } a:hover { color: #6b4520; }
+  </style>
+</helmet>
+
+<div style="width: 390px; height: 844px; background: #faf8f4; display: flex; flex-direction: column; box-sizing: border-box; overflow: hidden;">
+
+  <!-- running head -->
+  <div style="padding: 24px 28px 0 28px; display: flex; flex-direction: column; gap: 18px;">
+    <div style="display: flex; align-items: baseline; justify-content: space-between;">
+      <div style="font-size: 10px; font-weight: 600; color: #8a8378; letter-spacing: 1.4px; text-transform: uppercase;">Evals for AI Engineers</div>
+      <div style="font-size: 10px; font-weight: 500; color: #8a8378; letter-spacing: 1.4px;">7&thinsp;/&thinsp;12</div>
+    </div>
+    <div style="height: 1px; background: #ddd8ce;"></div>
+  </div>
+
+  <!-- the page -->
+  <div style="flex-grow: 1; padding: 0 28px; display: flex; flex-direction: column; min-height: 0; overflow: hidden;">
+
+    <div style="padding-top: 40px; display: flex; flex-direction: column; gap: 8px;">
+      <div style="font-size: 11px; color: #a09889; letter-spacing: 0.4px; font-style: italic; font-family: 'Newsreader', Georgia, serif;">Chapter 3 &middot; Error Analysis</div>
+    </div>
+
+    <div style="padding-top: 20px; font-family: 'Newsreader', Georgia, 'Times New Roman', serif; font-size: 29px; line-height: 40px; font-weight: 400; color: #21201d; text-wrap: pretty; letter-spacing: -0.2px;">Why evaluate traces rather than individual steps?</div>
+
+    <div style="padding-top: 32px; display: flex; align-items: center; gap: 12px;">
+      <div style="height: 1px; background: #ddd8ce; flex-grow: 1;"></div>
+      <div style="font-size: 9px; color: #b3ab9c; letter-spacing: 2px; text-transform: uppercase;">Answer</div>
+      <div style="height: 1px; background: #ddd8ce; flex-grow: 1;"></div>
+    </div>
+
+    <div style="padding-top: 28px; font-family: 'Newsreader', Georgia, serif; font-size: 20px; line-height: 33px; color: #3d3a34; text-wrap: pretty;">An LLM pipeline's behavior only makes sense end-to-end.</div>
+
+  </div>
+
+  <!-- rating: hairline-separated cells, no fills -->
+  <div style="padding: 0 28px 28px 28px; display: flex; flex-direction: column;">
+    <div style="height: 1px; background: #ddd8ce;"></div>
+    <div style="display: flex; padding-top: 4px;">
+      <div style="flex-grow: 1; height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px;">
+        <span style="font-family: 'Newsreader', Georgia, serif; font-size: 17px; color: #9e3b32;">Again</span>
+        <span style="font-size: 10px; color: #a09889; letter-spacing: 0.4px;">&lt;1m</span>
+      </div>
+      <div style="width: 1px; background: #e6e1d8; margin: 12px 0;"></div>
+      <div style="flex-grow: 1; height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px;">
+        <span style="font-family: 'Newsreader', Georgia, serif; font-size: 17px; color: #8a6a2b;">Hard</span>
+        <span style="font-size: 10px; color: #a09889; letter-spacing: 0.4px;">10m</span>
+      </div>
+      <div style="width: 1px; background: #e6e1d8; margin: 12px 0;"></div>
+      <div style="flex-grow: 1; height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px;">
+        <span style="font-family: 'Newsreader', Georgia, serif; font-size: 17px; color: #21201d; font-weight: 500;">Good</span>
+        <span style="font-size: 10px; color: #a09889; letter-spacing: 0.4px;">4d</span>
+      </div>
+      <div style="width: 1px; background: #e6e1d8; margin: 12px 0;"></div>
+      <div style="flex-grow: 1; height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px;">
+        <span style="font-family: 'Newsreader', Georgia, serif; font-size: 17px; color: #4a6b45;">Easy</span>
+        <span style="font-size: 10px; color: #a09889; letter-spacing: 0.4px;">9d</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

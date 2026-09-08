@@ -1,0 +1,92 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600&display=swap">
+  <style>
+    body { margin: 0; font-family: 'Sora', system-ui, sans-serif; }
+    a { color: #8ba3d9; } a:hover { color: #a7bce8; }
+  </style>
+</helmet>
+
+<div style="width: 390px; height: 844px; background: #0b0c0f; display: flex; flex-direction: column; box-sizing: border-box; overflow: hidden;">
+
+  <!-- minimal chrome: dots, not a bar -->
+  <div style="padding: 26px 24px 0 24px; display: flex; align-items: center; justify-content: center; gap: 6px;">
+    <div style="width: 5px; height: 5px; border-radius: 3px; background: #3a3f4a;"></div>
+    <div style="width: 5px; height: 5px; border-radius: 3px; background: #3a3f4a;"></div>
+    <div style="width: 5px; height: 5px; border-radius: 3px; background: #3a3f4a;"></div>
+    <div style="width: 5px; height: 5px; border-radius: 3px; background: #3a3f4a;"></div>
+    <div style="width: 5px; height: 5px; border-radius: 3px; background: #3a3f4a;"></div>
+    <div style="width: 5px; height: 5px; border-radius: 3px; background: #3a3f4a;"></div>
+    <div style="width: 18px; height: 5px; border-radius: 3px; background: #6f7ea8;"></div>
+    <div style="width: 5px; height: 5px; border-radius: 3px; background: #22252c;"></div>
+    <div style="width: 5px; height: 5px; border-radius: 3px; background: #22252c;"></div>
+    <div style="width: 5px; height: 5px; border-radius: 3px; background: #22252c;"></div>
+    <div style="width: 5px; height: 5px; border-radius: 3px; background: #22252c;"></div>
+    <div style="width: 5px; height: 5px; border-radius: 3px; background: #22252c;"></div>
+  </div>
+
+  <!-- floating card, no visible container edges -->
+  <div style="flex-grow: 1; padding: 0 26px; display: flex; flex-direction: column; justify-content: center; gap: 30px; min-height: 0;">
+
+    <div style="display: flex; flex-direction: column; gap: 7px;">
+      <div style="font-size: 10px; color: #5e6675; letter-spacing: 2.2px; text-transform: uppercase;">3 &middot; Error Analysis</div>
+      <div style="font-size: 11px; font-weight: 300; color: #4e5561; letter-spacing: 0.3px;">Evals for AI Engineers</div>
+    </div>
+
+    <div style="font-size: 25px; line-height: 36px; font-weight: 400; color: #f2f4f8; letter-spacing: -0.2px; text-wrap: pretty;">Why evaluate traces rather than individual steps?</div>
+
+    <div style="display: flex; gap: 5px;">
+      <div style="width: 3px; height: 3px; border-radius: 2px; background: #3a3f4a;"></div>
+      <div style="width: 3px; height: 3px; border-radius: 2px; background: #3a3f4a;"></div>
+      <div style="width: 3px; height: 3px; border-radius: 2px; background: #3a3f4a;"></div>
+      <div style="width: 3px; height: 3px; border-radius: 2px; background: #3a3f4a;"></div>
+      <div style="width: 3px; height: 3px; border-radius: 2px; background: #3a3f4a;"></div>
+      <div style="width: 3px; height: 3px; border-radius: 2px; background: #3a3f4a;"></div>
+      <div style="width: 3px; height: 3px; border-radius: 2px; background: #3a3f4a;"></div>
+      <div style="width: 3px; height: 3px; border-radius: 2px; background: #3a3f4a;"></div>
+    </div>
+
+    <div style="font-size: 19px; line-height: 31px; font-weight: 300; color: #a8aebb; text-wrap: pretty;">An LLM pipeline's behavior only makes sense end-to-end.</div>
+
+  </div>
+
+  <!-- low-contrast rating row: outlined, quiet -->
+  <div style="padding: 0 26px 34px 26px; display: flex; flex-direction: column; gap: 14px;">
+    <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px;">
+      <div style="height: 60px; border-radius: 14px; border: 1px solid #3d2b2e; background: #161012; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;">
+        <span style="font-size: 13px; font-weight: 400; color: #d98b83;">Again</span>
+        <span style="font-size: 10px; font-weight: 300; color: #6b5450;">&lt;1m</span>
+      </div>
+      <div style="height: 60px; border-radius: 14px; border: 1px solid #3d352b; background: #16130f; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;">
+        <span style="font-size: 13px; font-weight: 400; color: #d4ac74;">Hard</span>
+        <span style="font-size: 10px; font-weight: 300; color: #6b6050;">10m</span>
+      </div>
+      <div style="height: 60px; border-radius: 14px; border: 1px solid #2b3a3d; background: #0f1516; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;">
+        <span style="font-size: 13px; font-weight: 400; color: #7fb8b0;">Good</span>
+        <span style="font-size: 10px; font-weight: 300; color: #506a67;">4d</span>
+      </div>
+      <div style="height: 60px; border-radius: 14px; border: 1px solid #2b3340; background: #0f1116; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;">
+        <span style="font-size: 13px; font-weight: 400; color: #8ba3d9;">Easy</span>
+        <span style="font-size: 10px; font-weight: 300; color: #505a6b;">9d</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>
