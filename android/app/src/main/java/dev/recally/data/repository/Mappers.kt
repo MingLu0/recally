@@ -8,6 +8,7 @@ import dev.recally.data.remote.DueCardDto
 import dev.recally.data.remote.DueCardsResponse
 import dev.recally.data.remote.ForecastDayDto
 import dev.recally.data.remote.PendingCardDto
+import dev.recally.data.remote.RateResponse
 import dev.recally.data.remote.StatsResponse
 import dev.recally.domain.model.Card
 import dev.recally.domain.model.Deck
@@ -15,6 +16,7 @@ import dev.recally.domain.model.DeckCard
 import dev.recally.domain.model.DueSummary
 import dev.recally.domain.model.ForecastDay
 import dev.recally.domain.model.PendingCard
+import dev.recally.domain.model.RateOutcome
 import dev.recally.domain.model.Stats
 import kotlinx.serialization.json.Json
 import java.time.Instant
@@ -99,6 +101,16 @@ fun DeckCardDto.toDomain(): DeckCard =
         chapter = chapter,
         tags = tags,
         suspendedUntil = suspendedUntil?.let(Instant::parse),
+    )
+
+fun RateResponse.toDomain(): RateOutcome =
+    RateOutcome(
+        cardId = cardId,
+        nextDue = nextDue.let(Instant::parse),
+        state = state,
+        step = step,
+        lapsed = lapsed,
+        duplicate = duplicate,
     )
 
 fun DueCardEntity.toDomain(): Card =
