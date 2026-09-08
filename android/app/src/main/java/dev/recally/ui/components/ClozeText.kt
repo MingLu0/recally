@@ -31,9 +31,52 @@ import dev.recally.ui.theme.recallyColors
  * renders as the answer on `primary-wash` with a 2dp `primary` bottom border,
  * never as raw braces. Unrevealed (review front) the same span is a blank of
  * equivalent width — the answer is measured and the placeholder sized to it,
- * so the blank does not hint at the answer's length... it *is* the answer's
- * footprint, which the spec defines as "equivalent width".
+ * which the spec defines as "equivalent width".
+ *
+ * Parsing lives in [parseClozeSegments] so the never-raw-braces contract is
+ * unit-testable; the composable only styles what the parser returns.
  */
+data class ClozeSegment(
+    val text: String,
+    val isAnswer: Boolean,
+)
+
+private val CLOZE_MARKER = Regex("""\{\{c\d+::(.*?)}}""")
+
+/** Splits [text] into plain runs and cloze answers; the markers are consumed. */
+fun parseClozeSegments(text: String): List<ClozeSegment> {
+    val segments = mutableListOf<ClozeSegment>()
+    var cursor = 0
+    for (match in CLOZE_MARKER.findAll(text)) {
+        if (match.range.first > cursor) {
+            segments += ClozeSegment(text.substring(cursor, match.range.first), isAnswer = false)
+        }
+        segments += ClozeSegment(match.groupValues[1], isAnswer = true)
+        cursor = match.range.last + 1
+    }
+    if (cursor < text.length) {
+        segments += ClozeSegment(text.substring(cursor), isAnswer = false)
+    }
+    return segments
+}
+
+/**
+ * The text spine of a cloze card: plain runs appended as-is, answers as
+ * inline-content placeholders (carrying the answer as alternate text). No raw
+ * braces in either the revealed or the blank rendering — both use this.
+ */
+fun buildClozeAnnotatedString(text: String): AnnotatedString =
+    buildAnnotatedString {
+        var answerIndex = 0
+        for (segment in parseClozeSegments(text)) {
+            if (segment.isAnswer) {
+                appendInlineContent(clozeContentId(answerIndex++), segment.text)
+            } else {
+                append(segment.text)
+            }
+        }
+    }
+
 @Composable
 fun ClozeText(
     text: String,
@@ -46,29 +89,17 @@ fun ClozeText(
     val textMeasurer = rememberTextMeasurer()
     val density = LocalDensity.current
 
-    val markers = CLOZE_MARKER.findAll(text).toList()
-    if (markers.isEmpty()) {
+    val answers = parseClozeSegments(text).filter { it.isAnswer }
+    if (answers.isEmpty()) {
         Text(text = text, modifier = modifier, style = style, color = color)
         return
     }
 
-    val annotated =
-        buildAnnotatedString {
-            var lastIndex = 0
-            markers.forEachIndexed { index, match ->
-                append(text.substring(lastIndex, match.range.first))
-                appendInlineContent(clozeContentId(index), match.groupValues[1])
-                lastIndex = match.range.last + 1
-            }
-            append(text.substring(lastIndex))
-        }
-
     val answerStyle = style.copy(fontWeight = FontWeight.Bold)
     val inlineContent =
-        markers
-            .mapIndexed { index, match ->
-                val answer = match.groupValues[1]
-                val measured = textMeasurer.measure(AnnotatedString(answer), answerStyle)
+        answers
+            .mapIndexed { index, segment ->
+                val measured = textMeasurer.measure(AnnotatedString(segment.text), answerStyle)
                 val width =
                     with(density) {
                         (measured.size.width.toDp() + CLOZE_HORIZONTAL_PADDING * 2).toSp()
@@ -112,7 +143,7 @@ fun ClozeText(
                                     ),
                         ) {
                             Text(
-                                text = answer,
+                                text = segment.text,
                                 style = answerStyle,
                                 color = if (revealed) colors.primary else Color.Transparent,
                             )
@@ -121,15 +152,13 @@ fun ClozeText(
             }.toMap()
 
     Text(
-        text = annotated,
+        text = buildClozeAnnotatedString(text),
         modifier = modifier,
         style = style,
         color = color,
         inlineContent = inlineContent,
     )
 }
-
-private val CLOZE_MARKER = Regex("""\{\{c1::(.*?)}}""")
 
 private val CLOZE_RADIUS = 4.dp
 private val CLOZE_BORDER_WIDTH = 2.dp
