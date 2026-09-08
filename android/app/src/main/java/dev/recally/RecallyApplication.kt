@@ -1,6 +1,8 @@
 package dev.recally
 
 import android.app.Application
+import androidx.hilt.work.HiltWorkerFactory
+import androidx.work.Configuration
 import dagger.hilt.android.HiltAndroidApp
 import dev.recally.data.settings.SettingsStore
 import dev.recally.di.DefaultDispatcher
@@ -14,15 +16,27 @@ import javax.inject.Inject
 /**
  * Hilt application (docs/android.md, "Architecture"). The composition root
  * for the app; modules live under `di/`.
+ *
+ * Also the WorkManager configuration source so the rating-outbox flush worker
+ * is built by Hilt ([HiltWorkerFactory]); the default initializer is removed
+ * in the manifest.
  */
 @HiltAndroidApp
-class RecallyApplication : Application() {
+class RecallyApplication :
+    Application(),
+    Configuration.Provider {
+    @Inject
+    lateinit var workerFactory: HiltWorkerFactory
+
     @Inject
     lateinit var settingsStore: SettingsStore
 
     @Inject
     @DefaultDispatcher
     lateinit var defaultDispatcher: CoroutineDispatcher
+
+    override val workManagerConfiguration: Configuration
+        get() = Configuration.Builder().setWorkerFactory(workerFactory).build()
 
     private val applicationScope: CoroutineScope by lazy {
         CoroutineScope(SupervisorJob() + defaultDispatcher)

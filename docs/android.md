@@ -265,7 +265,8 @@ android/
     │   └── theme/               # + CombinedPreviews multipreview annotation
     ├── domain/
     │   ├── model/               # Card, Deck, ReviewRating, DueSummary
-    │   └── repository/          # repository interfaces + Result type
+    │   ├── repository/          # repository interfaces + Result type
+    │   └── review/              # same-session relearning timer (ADR-005)
     ├── data/
     │   ├── local/               # Room database, entities, DAOs
     │   ├── remote/              # Retrofit service, DTOs, X-API-Key interceptor
