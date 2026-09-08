@@ -61,8 +61,8 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
 
     // Base URL + API key, Keystore-encrypted (docs/android.md, "Connecting to
-    // the backend"). Explicitly not EncryptedSharedPreferences —
-    // androidx.security:security-crypto never left alpha and is deprecated.
+    // the backend"). DataStore, never the deprecated SharedPreferences
+    // encryption wrapper — the doc carries the why.
     implementation(libs.datastore.preferences)
 
     testImplementation(libs.junit)
