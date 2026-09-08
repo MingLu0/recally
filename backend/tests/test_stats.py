@@ -17,7 +17,6 @@ from zoneinfo import ZoneInfo
 
 import pytest
 from fastapi.testclient import TestClient
-from recally.services.stats import StatsSummary, get_stats
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
@@ -37,6 +36,7 @@ from recally.models import (
     ReviewLog,
     WriterGuidance,
 )
+from recally.services.stats import StatsSummary, get_stats
 
 TEST_API_KEY = "test-key-not-a-real-secret"
 AKL = ZoneInfo("Pacific/Auckland")  # UTC+12 in September (NZST), non-UTC as the gate asks
@@ -279,13 +279,15 @@ def test_lapse_rate_by_guidance_version_keys_are_strings(container: Container) -
 
 def test_curation_yield_is_approved_cards_over_highlights_ingested(container: Container) -> None:
     with container.session() as session:
+        # 4 highlights that produced nothing, plus 4 cards (one highlight each):
+        # 3 approved ÷ 8 ingested.
         for _ in range(4):
             _highlight(session)
         for _ in range(3):
             _card(session, status="approved")
         _card(session, status="pending_review")
         session.commit()
-        assert _stats(session).curation_yield == pytest.approx(0.75)
+        assert _stats(session).curation_yield == pytest.approx(3 / 8)
 
 
 def test_forecast_is_day_granularity_from_card_state_due(container: Container) -> None:

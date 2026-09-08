@@ -12,6 +12,7 @@ documented names are a mix of `RECALLY_*` and bare ones (`LLM_MODEL_WRITER`,
 from datetime import timedelta
 from functools import lru_cache
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -41,6 +42,10 @@ class Settings(BaseSettings):
         gt=0,
         validation_alias="RECALLY_WATCH_DEBOUNCE_MS",
     )
+    # IANA zone owning every day boundary: streaks, "one push per day", the new-card
+    # allotment (docs/config.md). Validated at startup so a typo fails boot rather
+    # than the first midnight rollover.
+    timezone: str = Field(default="Pacific/Auckland", validation_alias="RECALLY_TIMEZONE")
 
     # Per-role model tiers (docs/config.md): cheap for Curator/Critic, stronger for
     # Writer/Learner. The registry passes the resolved one to `llm.py` per call.
@@ -84,6 +89,12 @@ class Settings(BaseSettings):
     fsrs_learning_steps_minutes: str = Field(
         default="1,10", validation_alias="FSRS_LEARNING_STEPS_MINUTES"
     )
+
+    @field_validator("timezone")
+    @classmethod
+    def _timezone_is_an_iana_zone(cls, value: str) -> str:
+        ZoneInfo(value)  # raises ZoneInfoNotFoundError on a typo
+        return value
 
     @field_validator("fsrs_learning_steps_minutes")
     @classmethod
