@@ -10,7 +10,7 @@ How the project gets built: which tools hold the backlog, run the agents, and ga
 | Progress view | GitHub Project board "[Recally Roadmap](https://github.com/users/MingLu0/projects/2)" | One pane across parallel agents; issues stay the source of truth |
 | Agent control plane | [Orca](https://www.onorca.dev/) | Parallel worktrees, diff review with line comments back to the agent, GitHub issue/PR drawer, BYO subscription |
 | Coding agent | OpenCode (any Orca-supported CLI works; the orchestrator's failover pool is opencode → claude) | Reads `AGENTS.md` / `CLAUDE.md` |
-| Parallel dispatcher | `scripts/orchestrate.sc` (scala-cli, ADR-013) | Hand-started, stateful: dispatches up to 10 `ready` sub-issues, retries on failure, fixes merge conflicts by rebase dispatch |
+| Parallel dispatcher | `scripts/orchestrate.sc` (scala-cli, ADR-013) | Hand-started, stateful: dispatches up to 10 unblocked sub-issues, retries on failure, fixes merge conflicts by rebase dispatch |
 | Agent instructions | `AGENTS.md` | Hard rules and conventions; the docs are the spec |
 
 Not used: Linear (single-user project, paid tier + AI credits for anything beyond a board), beads (no Orca integration; would be a second backlog Orca cannot see). Linear Coding Sessions or Orca's SSH/remote mode are optional for unattended backend work only (see "Optional: unattended work").
@@ -45,7 +45,7 @@ GitHub issue
 
 Rules:
 
-- **At most 10 worktrees live at once** (raised from 3 in ADR-013, when the orchestrator took over parallel dispatch). Reviewer bandwidth is still the throttle; it moved from per-PR review to the parent You verify gates, and `ready`-label discipline is what bounds it now.
+- **At most 10 worktrees live at once** (raised from 3 in ADR-013, when the orchestrator took over parallel dispatch). Reviewer bandwidth is still the throttle; it moved from per-PR review to the parent You verify gates, and the dependency graph is what sequences it (ADR-014).
 - **One gate per PR.** Nothing merges without the gate command and its output in the PR description.
 - **No branch reaches `main` without its named tests green**, with the output pasted in the PR (ADR-012). The agent that wrote the code is the worst judge of whether it is right, so the gate is evidence rather than self-assessment: a listed test either exists and passes or it does not. The design-invariant suite (#31) runs on every PR.
 - **A hard rule is Ming's call, never the agent's.** An agent that believes an `AGENTS.md` hard rule is wrong — or that its ticket asks it to work around one — stops and asks. It never quietly overrules one.

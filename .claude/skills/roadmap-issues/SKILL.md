@@ -32,7 +32,7 @@ Create any missing label before filing. Milestones: `Backend` (steps 1–3), `Ap
 gh label create step-N --description "Roadmap step N - <name>" --color 0e8a16
 ```
 
-Existing track labels: `backend` `#1d76db`, `android` `#3ddc84`. Role labels: `blocking` `#b60205`, `ready` `#0e8a16`, `manual` `#fbca04`.
+Existing track labels: `backend` `#1d76db`, `android` `#3ddc84`. Role labels: `blocking` `#b60205`, `manual` `#fbca04`. (`ready` `#0e8a16` still exists on the repo but is retired — ADR-014; never apply it.)
 
 ## Step 2 — Ask the human what the skill cannot decide
 
@@ -78,7 +78,7 @@ The gate is split across the sub-issues: <which one owns the end-to-end assertio
 <table: what is deliberately not built and why — omit if nothing is>
 ````
 
-The parent gets `step-N` + track label, its milestone, and **never `ready`**. Parents are never dispatched and never auto-merged (ADR-010): they carry the `You verify` gate only a human can run.
+The parent gets `step-N` + track label, its milestone, and **is never dispatched**. Parents are never dispatched and never auto-merged (ADR-010, ADR-014): they carry the `You verify` gate only a human can run.
 
 ### Sub-issue
 
@@ -148,7 +148,9 @@ gh api repos/MingLu0/recally/issues/<blocked>/dependencies/blocked_by -X POST \
   -F issue_id="$(gh api repos/MingLu0/recally/issues/<blocker> -q .id)"
 ```
 
-Blockers live **only** in the dependencies API, never in a label — a label would go stale, while a dependency resolves itself when the blocker closes (`workflow.md`, "`ready` vs. a blocker").
+Blockers live **only** in the dependencies API, never in a label — a label would go stale, while a dependency resolves itself when the blocker closes.
+
+**Cross-step edges are part of the wiring, not an afterthought** (the #95 lesson: a step-6 sub-issue with only its backend blockers recorded auto-dispatched while step 4 was still open). When the roadmap says a step is sequential after an earlier one, wire this step's sub-issues `blocked_by` the **prior step's parent** — the parent closes only when its You verify gate passes, which is exactly the gate the roadmap intends. Within a step the roadmap calls sequential ("do not fan out"), chain each sub-issue to its predecessor.
 
 **Two traps, both hit in real use:**
 
@@ -179,9 +181,9 @@ gh api repos/MingLu0/recally/issues/<parent>/sub_issues --jq '.[] | "\(.number) 
 ./scripts/orca-ready-issues.sh; echo "exit=$?"
 ```
 
-`ready` goes only on sub-issues whose spec is genuinely settled and unblocked. It is opt-in and load-bearing: it is now the approval for work to reach `main` without a human reading the diff. Everything else stays unlabelled until its blockers land.
+Since ADR-014 there is no `ready` label to apply: an unblocked, unassigned sub-issue with no open PR is dispatchable as-is. That makes the blocker wiring above the **only** sequencing control — double-check it.
 
-Exit 1 with no output means nothing is dispatchable — correct when no issue carries `ready`, not a failure.
+Exit 1 with no output means nothing is dispatchable — correct when every sub-issue is blocked or assigned, not a failure.
 
 ## What you must supply
 
@@ -197,4 +199,4 @@ The skill gives you the shape. These come from reading the specs, and a weak ver
 - **`--milestone` takes the title** (`App`), not the number.
 - **`gh issue list` can serve a stale read** right after a close. Re-query, or check `gh issue view <n> --json state`.
 - **An interrupt does not un-run completed commands.** If a create loop is interrupted, list the milestone and clean up what landed.
-- **Never put a `You verify` gate on a sub-issue**, and never label a parent `ready`.
+- **Never put a `You verify` gate on a sub-issue**, and never wire a parent as dispatchable (parents are excluded structurally; their closure gates the next step's sub-issues via `blocked_by`).

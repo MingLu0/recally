@@ -230,6 +230,17 @@ object Orchestrator:
          shOpt(List("orca", "worktree", "rm", "--worktree", s"issue:$issue", "--json")).void
        else IO.unit)
 
+  // Reuse an existing issue-linked worktree instead of minting a `-2` suffix
+  // (the #95 duplicate-orphan case: a crash between worktree create and state
+  // save left an untracked worktree, and the next dispatch created another).
+  def worktreeExists(issue: Int): IO[Boolean] =
+    orca(List("worktree", "list")).map { result =>
+      findKey(result, "worktrees").map(_.arr.toList).getOrElse(Nil).exists { w =>
+        findKey(w, "linkedIssue").exists(li =>
+          li != ujson.Null && findKey(li, "number").exists(_.num.toInt == issue))
+      }
+    }.handleError(_ => false) // on listing failure, create as before
+
   def dispatchIssue(candidate: ReadyIssue, agent: String, repoId: String, runId: String): IO[TrackedIssue] =
     val assignment = s"\n\n---\nOrchestrator assignment: your issue is #${candidate.number}. " +
       s"Skip the 'Pick the issue' step; claim #${candidate.number} and implement it."
@@ -238,9 +249,12 @@ object Orchestrator:
       parent = candidate.parent)
     for
       _ <- event(s"🌱 #${candidate.number} dispatched → $agent — ${candidate.title}")
-      _ <- orca(List("worktree", "create", "--repo", s"id:$repoId",
-        "--name", s"issue-${candidate.number}-${slugify(candidate.title)}",
-        "--issue", candidate.number.toString, "--base-branch", "main"))
+      exists <- worktreeExists(candidate.number)
+      _ <-
+        if exists then event(dim(s"   ↳ reusing existing worktree for #${candidate.number}"))
+        else orca(List("worktree", "create", "--repo", s"id:$repoId",
+          "--name", s"issue-${candidate.number}-${slugify(candidate.title)}",
+          "--issue", candidate.number.toString, "--base-branch", "main")).void
       taskId <- createTask(promptText + assignment, s"Issue #${candidate.number}: ${candidate.title}", runId)
       tracked <- startWorker(taskId, candidate.number, agent, retryOf = None, runId)
         .map(dispatchId => blank.copy(taskId = taskId, dispatchId = dispatchId))
