@@ -73,6 +73,8 @@ class ThemeTest {
 
         val lightRoleValues =
             listOf(
+                "background" to RecallyLightColorScheme.background,
+                "onBackground" to RecallyLightColorScheme.onBackground,
                 "surface" to RecallyLightColorScheme.surface,
                 "surfaceContainer" to RecallyLightColorScheme.surfaceContainer,
                 "onSurface" to RecallyLightColorScheme.onSurface,
@@ -88,6 +90,8 @@ class ThemeTest {
             )
         val darkRoleValues =
             listOf(
+                "background" to RecallyDarkColorScheme.background,
+                "onBackground" to RecallyDarkColorScheme.onBackground,
                 "surface" to RecallyDarkColorScheme.surface,
                 "surfaceContainer" to RecallyDarkColorScheme.surfaceContainer,
                 "onSurface" to RecallyDarkColorScheme.onSurface,
@@ -126,6 +130,8 @@ class ThemeTest {
         role: String,
     ): Color =
         when (role) {
+            "background" -> scheme.background
+            "onBackground" -> scheme.onBackground
             "surface" -> scheme.surface
             "surfaceContainer" -> scheme.surfaceContainer
             "onSurface" -> scheme.onSurface
@@ -163,6 +169,23 @@ class ThemeTest {
         assertEquals(Color(0xFFFFFFFF), LightRecallyColorTokens.ground)
         assertNotEquals(LightRecallyColorTokens.ground, DarkRecallyColorTokens.ground)
         assertNotEquals(LightRecallyColorTokens.surface, DarkRecallyColorTokens.surface)
+    }
+
+    @Test
+    fun test_background_role_is_the_ground_token_not_a_tinted_default() {
+        // Scaffold paints its container from colorScheme.background. M3's
+        // default light background is 0xFFFFFBFE — a violet-tinted white that
+        // reads as pink against our pure-white `ground`. The design has one
+        // page background (design-system.md, "Colour": ground), so background
+        // and surface must both carry it.
+        assertEquals(LightRecallyColorTokens.ground, RecallyLightColorScheme.background)
+        assertEquals(DarkRecallyColorTokens.ground, RecallyDarkColorScheme.background)
+        assertEquals(RecallyLightColorScheme.surface, RecallyLightColorScheme.background)
+        assertEquals(RecallyDarkColorScheme.surface, RecallyDarkColorScheme.background)
+
+        // Text on the page background is `ink`, matching onSurface.
+        assertEquals(LightRecallyColorTokens.ink, RecallyLightColorScheme.onBackground)
+        assertEquals(DarkRecallyColorTokens.ink, RecallyDarkColorScheme.onBackground)
     }
 
     @Test

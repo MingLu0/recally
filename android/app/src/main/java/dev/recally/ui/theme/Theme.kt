@@ -16,6 +16,11 @@ import androidx.compose.runtime.staticCompositionLocalOf
  */
 val RecallyLightColorScheme: ColorScheme =
     lightColorScheme(
+        // `background` paints the Scaffold container. Left unset, M3 defaults
+        // it to a violet-tinted white (0xFFFFFBFE) that reads as pink against
+        // our `ground`. The design has one page background, so both carry it.
+        background = LightRecallyColorTokens.ground,
+        onBackground = LightRecallyColorTokens.ink,
         surface = LightRecallyColorTokens.ground,
         surfaceContainer = LightRecallyColorTokens.surface,
         onSurface = LightRecallyColorTokens.ink,
@@ -32,6 +37,8 @@ val RecallyLightColorScheme: ColorScheme =
 
 val RecallyDarkColorScheme: ColorScheme =
     darkColorScheme(
+        background = DarkRecallyColorTokens.ground,
+        onBackground = DarkRecallyColorTokens.ink,
         surface = DarkRecallyColorTokens.ground,
         surfaceContainer = DarkRecallyColorTokens.surface,
         onSurface = DarkRecallyColorTokens.ink,
