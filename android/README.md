@@ -2,7 +2,7 @@
 
 Kotlin + Jetpack Compose. See [../docs/android.md](../docs/android.md).
 
-Step 4a-0 tooling baseline is in: Gradle wrapper (Kotlin DSL, `gradle/libs.versions.toml`), JDK 17 toolchain, ktlint, Android Lint, and the CI `android` job. Only a placeholder `MainActivity` exists so far — the screens land from step 4a onwards (see [../docs/roadmap.md](../docs/roadmap.md)).
+Step 4a foundation is in: the Gradle project builds, Hilt is wired (`RecallyApplication`, `di/DispatchersModule`), and the design system from [../docs/design/design-system.md](../docs/design/design-system.md) is implemented in `app/src/main/java/dev/recally/ui/theme/` — light and dark colour schemes, the Inter Tight type scale on M3 names, spacing/radius constants, the `@CombinedPreviews` multipreview, and the fixed book-cover colour list. `MainActivity` + `AppScaffold` + `RecallyNavHost` are wired with the sealed routes; the screens themselves land from step 4b onwards (see [../docs/roadmap.md](../docs/roadmap.md)).
 
 ```sh
 ./gradlew ktlintCheck              # read-only ktlint (what CI runs)

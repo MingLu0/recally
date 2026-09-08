@@ -1,0 +1,6 @@
+root = true
+
+[*.{kt,kts}]
+# Composable functions are named in PascalCase by Compose convention
+# (MaterialTheme, RecallyTheme, …); they read as factories, not actions.
+ktlint_function_naming_ignore_when_annotated_with = Composable
