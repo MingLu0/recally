@@ -1,10 +1,36 @@
 package dev.recally
 
-import android.app.Activity
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.navigation.compose.rememberNavController
+import dagger.hilt.android.AndroidEntryPoint
+import dev.recally.ui.AppScaffold
+import dev.recally.ui.navigation.RecallyNavHost
+import dev.recally.ui.theme.RecallyTheme
 
 /**
- * Placeholder entry point so the module assembles before the Compose screens
- * land (docs/android.md, "Project structure"). Replaced by the real
- * MainActivity with theme, nav controller and deep-link intent in step 4a.
+ * Entry point: theme, nav controller, deep-link intent (docs/android.md,
+ * "Architecture"). FCM deep links open Today — the notification names a due
+ * count and Today is where that count is actionable (docs/android.md, "Push
+ * notifications"). The nav controller owns the deep link from there.
  */
-class MainActivity : Activity()
+@AndroidEntryPoint
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
+        setContent {
+            RecallyTheme {
+                val navController = rememberNavController()
+                AppScaffold { innerPadding ->
+                    RecallyNavHost(
+                        navController = navController,
+                        contentPadding = innerPadding,
+                    )
+                }
+            }
+        }
+    }
+}

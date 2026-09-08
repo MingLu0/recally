@@ -1,6 +1,9 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.ksp)
+    alias(libs.plugins.hilt)
     alias(libs.plugins.ktlint)
 }
 
@@ -15,10 +18,34 @@ android {
         versionCode = 1
         versionName = "0.1.0"
     }
+
+    buildFeatures {
+        compose = true
+    }
 }
 
 // JDK 17 toolchain (docs/android.md, "Tooling"). Must match the Temurin 17 in
 // the CI android job — a mismatch fails in a way that does not point at itself.
 kotlin {
     jvmToolchain(17)
+}
+
+dependencies {
+    implementation(platform(libs.compose.bom))
+    implementation(libs.compose.material3)
+    implementation(libs.compose.ui.tooling.preview)
+    debugImplementation(libs.compose.ui.tooling)
+
+    implementation(libs.activity.compose)
+    implementation(libs.navigation.compose)
+    implementation(libs.lifecycle.runtime.compose)
+    implementation(libs.lifecycle.viewmodel.compose)
+
+    implementation(libs.hilt.android)
+    ksp(libs.hilt.compiler)
+    implementation(libs.hilt.navigation.compose)
+
+    implementation(libs.core.ktx)
+
+    testImplementation(libs.junit)
 }
