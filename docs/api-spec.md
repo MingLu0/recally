@@ -135,10 +135,11 @@ Clears `suspended_until` (whether set by bury or suspend). FSRS state is unchang
 ## Decks & browsing
 
 ### GET /decks
-Books with card counts and due counts.
+Books with card counts, due counts, and per-book progress.
 ```json
-{ "decks": [ { "book_id": 1, "title": "Evals for AI Engineers", "total": 48, "due": 6 } ] }
+{ "decks": [ { "book_id": 1, "title": "Evals for AI Engineers", "total": 48, "due": 6, "progress": 0.625 } ] }
 ```
+`progress` is the share of the book's approved cards whose FSRS state is `review` (definition in docs/data-model.md, `card_state`); a book with no approved cards reports `0`.
 
 ### GET /decks/{book_id}/cards
 `?chapter=` optional filter. Browse cards per book. Each card carries `suspended_until` (null when in rotation) so the browse view can show suspended cards and offer unsuspend; unlike `/reviews/due`, this list does not filter them out.
