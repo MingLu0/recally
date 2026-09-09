@@ -16,6 +16,7 @@ dependencies = [
     # APScheduler 4.x is a pre-release with a different API; stay on 3.x (roadmap step 0).
     "apscheduler>=3.10,<4",
     "watchdog>=6",
+    "firebase-admin>=7.5.0",
 ]
 
 # The nightly FSRS fit (scheduling/optimizer.py) needs torch + pandas via the
