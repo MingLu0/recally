@@ -118,6 +118,16 @@ cd android && ./gradlew ktlintCheck
 ./gradlew :app:assembleDebug
 ./gradlew ktlintFormat   # writes fixes; what the pre-commit hook runs
 
+# android — ship the debug build to Firebase App Distribution (issue #136).
+# One local command; CI runs the same pair via the dispatch/tag-gated
+# `distribute` job in .github/workflows/ci.yml. Prerequisites, all gitignored:
+#   android/recally-debug.jks + android/keystore.properties   (#135)
+#   android/app/google-services.json                          (Firebase console)
+#   GOOGLE_APPLICATION_CREDENTIALS=<path to a Firebase service-account key>
+#     (console: Project settings → Service accounts → Generate new private key;
+#      the `android-testers` group must exist under App Distribution → Testers)
+cd android && ./gradlew assembleDebug appDistributionUploadDebug
+
 # orchestrator (hand-started parallel dispatcher, ADR-013)
 scala-cli scripts/orchestrate.sc -- --dry-run
 scala-cli scripts/orchestrate.sc -- --step=step-4
