@@ -191,7 +191,6 @@ Tracked as **G1–G4** in [`docs/roadmap.md`](../roadmap.md) → *Feature gaps*,
 | # | Design element | Needs | Where |
 |---|---|---|---|
 | G1 | "8 to approve" / "3 need you" tiles; "8 pending"; "Approve 5 ready" | Counts on `GET /cards/pending`. | Today, Approve, Sheet |
-| G2 | Per-book progress bars (62%, 24%) | A progress field on `GET /decks`, **and** a definition in `docs/data-model.md` — "62% of a book" is currently undefined. | Today |
 | G3 | "Next card due in 4 hours" | A `next_due_at` timestamp. `stats.forecast` is day-granularity. | Sheet |
 | G4 | "Approve 5 ready" bulk action | A batch endpoint, or a recorded decision that the client fans out. `needs_human` cards excluded either way. | Approve |
 | G5 | Per-card due dates and state; chapter counts | `GET /decks/{book_id}/cards` has no documented response at all. Needs `state` + `due` per card, and a `chapters` count on `GET /decks`. | Book, Decks |

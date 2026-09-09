@@ -209,7 +209,7 @@ class DecksViewModelTest {
     }
 
     private fun detailViewModel(): DecksViewModel {
-        deckRepository.decksResult = Result.Success(listOf(Deck(BOOK_ID, "Evals for AI Engineers", 48, 6)))
+        deckRepository.decksResult = Result.Success(listOf(Deck(BOOK_ID, "Evals for AI Engineers", 48, 6, 0.625f)))
         return DecksViewModel(deckRepository, cardRepository, SavedStateHandle(mapOf("bookId" to BOOK_ID)))
     }
 

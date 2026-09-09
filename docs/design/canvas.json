@@ -254,7 +254,7 @@
       "x": 3050,
       "y": 1085,
       "w": 560,
-      "text": "DECKS\n\ndocs/android.md (*Decks*) — book list, read-only. Each row carries the progress bar (G2) and a due count from GET /decks.\n\nThe TRUNCATED count per book is derived client-side from the cards list, not a new field.\n\nThe dashed import row is secondary: the watched folder on your Mac is the real ingest path (roadmap step 1)."
+      "text": "DECKS\n\ndocs/android.md (*Decks*) — book list, read-only. Each row carries the progress bar and a due count from GET /decks.\n\nThe TRUNCATED count per book is derived client-side from the cards list, not a new field.\n\nThe dashed import row is secondary: the watched folder on your Mac is the real ingest path (roadmap step 1)."
     },
     {
       "id": "n-book",

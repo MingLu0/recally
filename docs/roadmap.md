@@ -72,14 +72,6 @@ Today's "8 to approve" / "3 need you" tiles, the Approve header's "8 pending", a
 **Add** `counts: { "pending_review": 5, "needs_human": 3 }` to `GET /cards/pending`, or a separate `GET /cards/pending/count`. One gap, three screens.
 - **Tests**: with 5 `pending_review` and 3 `needs_human` rows, the counts field matches; approving one card decrements the right bucket.
 
-### G2. Per-book progress
-Today's book rail shows a percentage per book (62%, 24%). `GET /decks` returns `{ book_id, title, total, due }` — no progress concept exists anywhere.
-
-This needs a **definition before an endpoint**: `docs/data-model.md` does not say what "62% of a book" means. Candidates: share of cards in FSRS `review` state (rather than `new`/`learning`); share reviewed at least once; mean retrievability. The first is the most defensible and the cheapest to compute.
-
-**Add** the chosen definition to `data-model.md`, then a `progress` field to `GET /decks`.
-- **Tests**: a book with 48 cards, 30 in `review` state, reports the documented figure; a book with no cards reports 0 rather than dividing by zero.
-
 ### G3. Next due timestamp
 The session-summary sheet says "Next card due in 4 hours". `POST /reviews/{id}/rate` returns `next_due` for one card, and `stats.forecast` is day-granularity — neither yields an hours-away figure across the collection.
 
