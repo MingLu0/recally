@@ -81,6 +81,10 @@ class Card(UserScopedMixin, Base):
     status: Mapped[str] = mapped_column(String(32), nullable=False)
     # Critic critique, human rejection reason, or `superseded by <id>` for the Learner.
     status_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Set only on a Learner-driven leech rewrite: the approved card it replaces.
+    # Approving the rewrite sets that card `rejected` with status_reason
+    # `superseded by <id>` (docs/agents.md §7); NULL for every ordinary card.
+    supersedes_card_id: Mapped[int | None] = mapped_column(ForeignKey("cards.id"), nullable=True)
     # `card_state` is created at the same moment this is set.
     approved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     # Last post-approval edit of front/back/tags. FSRS state is untouched by an edit;

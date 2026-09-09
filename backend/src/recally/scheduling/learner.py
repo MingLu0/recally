@@ -14,7 +14,10 @@ The split of labour is the agent contract (docs/backend.md):
   the agent (a discarded call still costs money and still writes an `llm_calls`
   row), calls the Learner variant the registry resolves (`AGENT_LEARNER`), and is
   the only writer — the versioned `writer_guidance` INSERT (hard rule 10: rows are
-  never edited, so a v2 is an append at `max(version) + 1`).
+  never edited, so a v2 is an append at `max(version) + 1`). Learner-named leech
+  ids are validated against the deterministic `detect_leech_card_ids` and routed
+  back through the normal Writer ⇄ Critic path (`pipeline.rewrite_leech_card`);
+  the pipeline, never this module, writes the rewrite's queue status.
 - The Learner agent itself lives in `agents/learner/` and holds no DB session.
 
 Two exclusions in the aggregates are spec (docs/agents.md, stage B), and both look
@@ -44,6 +47,7 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from recally import pipeline
 from recally.agents.base import AgentContext, LearnerRequest
 from recally.models import (
     Book,
@@ -54,6 +58,7 @@ from recally.models import (
     WriterGuidance,
 )
 from recally.models.base import utc_now
+from recally.services.cards import QUEUE_STATUSES
 
 if TYPE_CHECKING:
     from recally.container import Container
@@ -63,16 +68,44 @@ logger = logging.getLogger(__name__)
 # 1=Again is the lapse rating (docs/data-model.md, `review_logs`).
 LAPSE_RATING = 1
 
+# A leech is an approved card with this many lifetime `review_logs` rows at
+# rating=1 (docs/agents.md §7, "failed 3+ times"). `review_logs` has no lapse
+# counter and `reps`/`lapses` are derived from it (docs/data-model.md), so the
+# threshold is defined here. Lifetime, not `state_before='review'` only: the
+# stricter reading flags fewer cards on a signal already expected months out.
+LEECH_LAPSE_THRESHOLD = 3
+
 Bucket = dict[str, Any]
 
 
-def generate_guidance(container: "Container") -> WriterGuidance | None:
-    """The nightly Learner stage-B job: maybe append one `writer_guidance` row.
+def detect_leech_card_ids(session: Session) -> list[int]:
+    """Every approved card at or over the leech threshold, by id, sorted.
 
-    Returns the new row (detached), or `None` when nothing was written — below
+    Deterministic (hard rule 2): a count over `review_logs` — 3 or more lifetime
+    rows at `rating=1`. Only `approved` cards are considered: a card that never
+    entered FSRS has no review history (hard rule 1).
+    """
+    return list(
+        session.scalars(
+            select(ReviewLog.card_id)
+            .join(Card, Card.id == ReviewLog.card_id)
+            .where(Card.status == "approved", ReviewLog.rating == LAPSE_RATING)
+            .group_by(ReviewLog.card_id)
+            .having(func.count() >= LEECH_LAPSE_THRESHOLD)
+            .order_by(ReviewLog.card_id)
+        ).all()
+    )
+
+
+def generate_guidance(container: "Container") -> WriterGuidance | None:
+    """The nightly Learner stage-B job: maybe append one `writer_guidance` row,
+    and route each Learner-named leech back through the normal rewrite path.
+
+    Returns the new row (detached), or `None` when no row was written — below
     `LEARNER_MIN_REVIEWS` (no LLM call either: the threshold comes first), or the
     Learner answered `guidance=None` ("no new row is warranted", which is not a
-    failure). Leech rewrites are 6b-b; this job stops at returning the result.
+    failure). Leech rewrites are independent of the guidance decision: a
+    `guidance=None` answer can still name leech ids.
     """
     settings = container.settings
     with container.session() as session:
@@ -103,6 +136,9 @@ def generate_guidance(container: "Container") -> WriterGuidance | None:
         ),
         ctx,
     )
+    rewritten = _rewrite_leeches(container, result.leech_card_ids)
+    if rewritten:
+        logger.info("learner: queued leech rewrites for cards %s", rewritten)
     if result.guidance is None:
         logger.info("learner: guidance=None — no new writer_guidance row is warranted")
         return None
@@ -127,6 +163,49 @@ def generate_guidance(container: "Container") -> WriterGuidance | None:
         result.rationale,
     )
     return row
+
+
+def _rewrite_leeches(container: "Container", leech_card_ids: list[int]) -> list[int]:
+    """Route each Learner-named leech through the normal Writer ⇄ Critic path.
+
+    The LLM's ids are validated, never trusted: only ids the deterministic
+    detection also flags are rewritten (a hallucinated id cannot take a healthy
+    card into rewrite), and a leech whose rewrite is already queued is skipped —
+    the job runs nightly, and without that guard every night would queue another
+    duplicate while the first awaits the human. The rewrite itself is created by
+    `pipeline.rewrite_leech_card` (agents and jobs hold the seams; the pipeline
+    owns the card writes). Returns the new rewrite card ids.
+    """
+    if not leech_card_ids:
+        return []
+    with container.session() as session:
+        detected = set(detect_leech_card_ids(session))
+        already_queued = set(
+            session.scalars(
+                select(Card.supersedes_card_id).where(
+                    Card.supersedes_card_id.is_not(None),
+                    Card.status.in_(QUEUE_STATUSES),
+                )
+            ).all()
+        )
+    rewrite_ids: list[int] = []
+    for card_id in dict.fromkeys(leech_card_ids):
+        if card_id not in detected:
+            logger.info("learner: ignoring named id %d — not a detected leech", card_id)
+            continue
+        if card_id in already_queued:
+            logger.info("learner: leech %d already has a rewrite in the queue", card_id)
+            continue
+        rewrite_id = pipeline.rewrite_leech_card(
+            settings=container.settings,
+            session_factory=container.session_factory,
+            llm_caller=container.llm_caller,
+            leech_card_id=card_id,
+            agent_registry=container.agent_registry,
+        )
+        if rewrite_id is not None:
+            rewrite_ids.append(rewrite_id)
+    return rewrite_ids
 
 
 def build_review_aggregates(session: Session, *, now: datetime | None = None) -> dict[str, Any]:

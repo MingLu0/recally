@@ -7,10 +7,11 @@ an HTTP request, so this module must not import FastAPI (docs/backend.md,
 "Layering" rule 1; enforced by tests/scheduling/test_jobs_layering.py).
 
 `notify` is wired to the notifier seam step 5b fills. `optimizer` runs the step
-6a-a fit (`scheduling/optimizer.py`). `learner` runs the step 6b-a guidance job
-(`scheduling/learner.py`). `JobNotImplementedError` remains for the next known
-job name that lands before its implementation does: a caller gets a loud 501,
-never a silent success for a job that does not exist yet.
+6a-a fit (`scheduling/optimizer.py`). `learner` runs the step 6b guidance job
+(`scheduling/learner.py`): stage-B guidance plus leech detection and rewrites.
+`JobNotImplementedError` remains for the next known job name that lands before
+its implementation does: a caller gets a loud 501, never a silent success for a
+job that does not exist yet.
 """
 
 from typing import Literal

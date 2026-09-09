@@ -119,12 +119,35 @@ def record_approval(session: Session, card: Card) -> datetime:
     `card_state`): the row is created `learning` at step 0, due at the approval
     time. The caller validates that the card is awaiting a decision (404/409 at
     its own layer) and commits.
+
+    When the approved card is a leech rewrite (`supersedes_card_id` set), the
+    card it replaces is retired in the same transaction — see `_supersede`.
     """
     card.status = "approved"
     approved_at = utc_now()
     card.approved_at = approved_at
     session.add(new_card_state(card_id=card.id, due=approved_at, user_id=card.user_id))
+    _supersede(session, card)
     return approved_at
+
+
+def _supersede(session: Session, card: Card) -> None:
+    """Retire the card a leech rewrite replaces (docs/agents.md §7).
+
+    The old card becomes `rejected` with `status_reason="superseded by <id>"`,
+    `<id>` being the rewrite's. Only statuses change: the superseded card's
+    `card_state` row is left untouched, here and everywhere — FSRS state is never
+    recomputed (ADR-008). An ordinary card (`supersedes_card_id` NULL) changes
+    exactly one row. Rejecting the rewrite never reaches here, so a turned-down
+    replacement leaves the leech `approved` and in rotation.
+    """
+    if card.supersedes_card_id is None:
+        return
+    superseded = session.get(Card, card.supersedes_card_id)
+    if superseded is None:
+        return
+    superseded.status = "rejected"
+    superseded.status_reason = f"superseded by {card.id}"
 
 
 def record_rejection(session: Session, card: Card, *, reason: str) -> None:
