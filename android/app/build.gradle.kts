@@ -1,3 +1,6 @@
+import com.google.firebase.appdistribution.gradle.firebaseAppDistribution
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -6,6 +9,7 @@ plugins {
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
     alias(libs.plugins.ktlint)
+    alias(libs.plugins.firebase.appdistribution)
 }
 
 // google-services.json is gitignored (it comes from the Firebase console).
@@ -15,6 +19,33 @@ if (file("google-services.json").exists()) {
     apply(plugin = "com.google.gms.google-services")
 }
 
+// Versioning lives in one place: gradle.properties, so a bump edits one file
+// instead of scattered literals (issue #135).
+val appVersionCode = (findProperty("recally.versionCode") as String?)?.toInt() ?: 1
+val appVersionName = findProperty("recally.versionName") as String? ?: "0.1.0"
+
+// Stable debug signing: keystore.properties is gitignored and names a fixed
+// keystore, so a rebuild installs over the top instead of being refused for a
+// changed signature. Without the file (clean checkout, CI) the build falls
+// back to the AGP-generated ~/.android/debug.keystore and still succeeds.
+val debugKeystorePropertiesFile = rootProject.file("keystore.properties")
+val debugKeystoreProperties =
+    Properties().apply {
+        if (debugKeystorePropertiesFile.exists()) {
+            debugKeystorePropertiesFile.inputStream().use { load(it) }
+        }
+    }
+
+// Release notes for the App Distribution upload: the subject of the commit
+// being built, per issue #135.
+val latestCommitSubject =
+    providers
+        .exec {
+            commandLine("git", "log", "-1", "--pretty=%s")
+        }.standardOutput.asText
+        .get()
+        .trim()
+
 android {
     namespace = "dev.recally"
     compileSdk = 36
@@ -23,8 +54,35 @@ android {
         applicationId = "dev.recally"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = appVersionCode
+        versionName = appVersionName
+    }
+
+    signingConfigs {
+        // Overrides the AGP-generated debug config only when the gitignored
+        // keystore.properties is present; otherwise the default stays.
+        named("debug") {
+            if (debugKeystorePropertiesFile.exists()) {
+                storeFile = rootProject.file(debugKeystoreProperties.getProperty("storeFile"))
+                storePassword = debugKeystoreProperties.getProperty("storePassword")
+                keyAlias = debugKeystoreProperties.getProperty("keyAlias")
+                keyPassword = debugKeystoreProperties.getProperty("keyPassword")
+            }
+        }
+    }
+
+    buildTypes {
+        // We build and distribute the DEBUG variant only (issue #135): the
+        // release manifest permits no cleartext, so a release build cannot
+        // reach the phase-1 LAN backend (docs/android.md:203). No release
+        // build type until phase 2 brings TLS.
+        debug {
+            firebaseAppDistribution {
+                artifactType = "APK"
+                groups = "android-testers"
+                releaseNotes = latestCommitSubject
+            }
+        }
     }
 
     buildFeatures {

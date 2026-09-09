@@ -14,6 +14,10 @@ venv/
 !.env.example
 google-services.json
 firebase-*.json
+# Stable debug signing material (issue #135): the keystore and its passwords
+# never enter git.
+keystore.properties
+*.jks
 
 # Local data (repo root only — an unanchored `data/` would also swallow the
 # Android `dev.recally.data` package).
