@@ -31,8 +31,12 @@ import javax.inject.Inject
  * schedule; this ViewModel never computes it.
  *
  * `response_ms` is measured flip-to-rate: [flip] starts the clock, [rate]
- * stops it. Writing ratings to the outbox is step 4i; here a failed post just
- * marks the session offline and the local counter keeps the re-queue honest.
+ * stops it. A rating the server cannot be reached for goes to the Room
+ * outbox ([RatingOutbox.record]) — never to an in-memory counter — and the
+ * "N ratings queued" bar reads the persisted queue depth, so the figure
+ * cannot disagree with what is stored. Every rating carries the `device_id`
+ * from the last `POST /devices` response (docs/android.md, "Offline-first
+ * sync").
  */
 @HiltViewModel
 class ReviewViewModel
@@ -69,6 +73,13 @@ class ReviewViewModel
         )
 
         init {
+            // The queued bar is the DAO's count, not a local counter: a
+            // rating that failed to persist must not inflate it (#115).
+            viewModelScope.launch {
+                ratingOutbox.queuedCount().collect { count ->
+                    _uiState.update { it.copy(queuedRatingCount = count) }
+                }
+            }
             loadSession()
         }
 
@@ -144,18 +155,17 @@ class ReviewViewModel
             }
 
             viewModelScope.launch {
-                when (
-                    val result =
-                        reviewRepository.rate(
-                            ReviewRating(
-                                cardId = current.id,
-                                rating = rating,
-                                responseMs = responseMs,
-                                ratedAt = now,
-                                deviceId = null,
-                            ),
-                        )
-                ) {
+                // The id from the last POST /devices response; it ends up on
+                // review_logs.device_id so the gate can attribute the row.
+                val reviewRating =
+                    ReviewRating(
+                        cardId = current.id,
+                        rating = rating,
+                        responseMs = responseMs,
+                        ratedAt = now,
+                        deviceId = settings.load().deviceId,
+                    )
+                when (val result = reviewRepository.rate(reviewRating)) {
                     is Result.Success -> {
                         val outcome = result.data
                         // A replayed rating reports duplicate: true and moved
@@ -165,10 +175,12 @@ class ReviewViewModel
                         outcome.step?.let { localSteps[current.id] = it }
                         _uiState.update { it.copy(isOffline = false) }
                     }
-                    is Result.NetworkError ->
-                        _uiState.update {
-                            it.copy(isOffline = true, queuedRatingCount = it.queuedRatingCount + 1)
-                        }
+                    is Result.NetworkError -> {
+                        // Persist first (the outbox schedules its own flush); a
+                        // persist failure must not crash the session.
+                        runCatching { ratingOutbox.record(reviewRating) }
+                        _uiState.update { it.copy(isOffline = true) }
+                    }
                     is Result.Unauthorized ->
                         _uiState.update { it.copy(isUnauthorized = true) }
                     is Result.HttpError ->
