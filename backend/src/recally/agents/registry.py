@@ -94,4 +94,5 @@ def resolve(role: str, settings: Settings) -> Any:
 # modules are imported, so the pipeline never imports an implementation directly.
 # New variants append below.
 from recally.agents.curator import default as _curator_default  # noqa: E402, F401
+from recally.agents.learner import default as _learner_default  # noqa: E402, F401
 from recally.agents.writer import default as _writer_default  # noqa: E402, F401

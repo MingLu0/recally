@@ -97,6 +97,10 @@ class Settings(BaseSettings):
     # push"). Below this many review_logs the nightly fit writes nothing, so library
     # defaults stay active (docs/data-model.md, `fsrs_params`).
     optimizer_min_reviews: int = Field(default=400, ge=1, validation_alias="OPTIMIZER_MIN_REVIEWS")
+    # Learner stage B. Below this many review_logs the nightly guidance job writes
+    # nothing and never calls the LLM: a lapse-rate bucket needs on the order of a
+    # hundred reviews to mean anything (docs/config.md, `LEARNER_MIN_REVIEWS`).
+    learner_min_reviews: int = Field(default=100, ge=1, validation_alias="LEARNER_MIN_REVIEWS")
     # Nightly optimizer schedule: a 5-field cron in RECALLY_TIMEZONE.
     learner_cron: str = Field(default="0 3 * * *", validation_alias="LEARNER_CRON")
 

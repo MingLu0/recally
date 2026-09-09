@@ -201,9 +201,9 @@ Contracts are fixed up front (`api-spec.md`, `data-model.md`, `agents.md`), so w
 | 3. FSRS + reviews | py-fsrs engine wrapper | `/reviews/due`, `/rate`, `/rate-batch` · APScheduler notifier · offline replay (ADR-005) · minimal CLI client |
 | 4. Android MVP | Retrofit client + Room entities | Today · Review · Approval Queue screens |
 | 5. Notifications | sequential | — |
-| 6. Learner + stats | sequential | — |
+| 6. Learner + stats | 6a-a nightly FSRS optimizer (#94) | 6a-b Stats screen (#95) · 6b-a Learner stage B: aggregates, agent, versioned writer_guidance (#99) · 6b-b leech detection + rewrites (#100, after 6b-a) |
 
-Steps 5–6 are small and depend on real review data; do not fan them out.
+Step 5 is small; do not fan it out. Step 6 fans out as above: 6b-b needs `LearnerResult.leech_card_ids` from a real Learner call, so it waits on 6b-a, and everything waits on real review data accumulating after 6a.
 
 ## Validation checkpoint
 
