@@ -401,18 +401,34 @@ object Orchestrator:
       case _ => reconcileActive(t, repoId, runId).map(Some(_))
 
   // needs-human is not terminal (ADR-014): the state file follows reality.
+  // PR checks come before the assignee check — a worker that finished keeps
+  // its assignment until merge, so the assignee means nothing once a PR exists.
   def reconcileNeedsHuman(t: TrackedIssue): IO[Option[TrackedIssue]] =
     issueState(t.issue).flatMap {
       case "CLOSED" =>
         event(green(s"🎉 #${t.issue} merged — closed while marked needs-human, following reality")) *>
           sleepWorktree(t.issue, t.dispatchId, announce = true) *> IO.pure(Some(t.copy(phase = Phase.Merged)))
       case _ =>
-        assigneeCount(t.issue).flatMap { count =>
-          if count == 0 then
-            event(s"🧹 #${t.issue} reset (unassigned) — dropped from tracking, redispatchable") *>
-              IO.pure(None)
-          else IO.pure(Some(t))
-        }
+        for
+          merged <- prsForIssue("merged", t.issue)
+          open <- prsForIssue("open", t.issue)
+          result <-
+            if merged.nonEmpty then
+              event(green(s"🎉 #${t.issue} merged — PR #${merged.head("number").num.toInt} landed while marked needs-human")) *>
+                sleepWorktree(t.issue, t.dispatchId, announce = true) *> IO.pure(Some(t.copy(phase = Phase.Merged)))
+            else if open.nonEmpty then
+              // worker recovered from escalation and opened a PR; resume the
+              // normal lifecycle (merge policy, conflict fix, sleep on merge)
+              event(s"🩹 #${t.issue} recovered — PR #${open.head("number").num.toInt} open, back in the flow") *>
+                IO.pure(Some(t.copy(phase = Phase.PrOpen)))
+            else
+              assigneeCount(t.issue).flatMap { count =>
+                if count == 0 then
+                  event(s"🧹 #${t.issue} reset (unassigned) — dropped from tracking, redispatchable") *>
+                    IO.pure(None)
+                else IO.pure(Some(t))
+              }
+        yield result
     }
 
   def reconcileActive(t: TrackedIssue, repoId: String, runId: String): IO[TrackedIssue] =
