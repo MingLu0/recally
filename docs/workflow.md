@@ -151,6 +151,11 @@ when a PR goes CONFLICTING (twice, then it leaves the PR for a human with a comm
 it never double-dispatches. It never runs `gh pr merge` — merge authority stays with the worktree
 agent under the five conditions above.
 
+Loop mode is single-instance: a second start takes one look at the OS-level lock on
+`.orca/orchestrator.lock` and exits with a pointer to the running instance's log (the kernel
+releases the lock on exit or crash, so there is no stale-lock state). `--once` and `--dry-run`
+never lock — they are safe alongside a running loop.
+
 Logging is change-only (ADR-014): on a TTY the dashboard runs in the alternate screen, pinned at
 the top with the event log scrolling beneath (flat print-on-change when piped); events (dispatches,
 merges, conflicts, escalations) always print, a dim heartbeat every ten ticks proves the loop is
