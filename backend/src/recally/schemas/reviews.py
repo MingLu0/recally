@@ -5,6 +5,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from recally.schemas.types import UtcDatetime
 from recally.services.reviews import DueCard, RatingResult
 
 
@@ -23,7 +24,7 @@ class DueCardResponse(BaseModel):
     tags: list[str]
     state: str
     step: int | None
-    due: datetime
+    due: UtcDatetime
 
     @classmethod
     def from_due_card(cls, card: DueCard) -> "DueCardResponse":
@@ -69,8 +70,8 @@ class RateResultResponse(BaseModel):
     moved the card out of `review` into `relearning` — the client cannot derive it."""
 
     card_id: int
-    rated_at: datetime
-    next_due: datetime
+    rated_at: UtcDatetime
+    next_due: UtcDatetime
     state: str
     step: int | None
     lapsed: bool
@@ -108,9 +109,9 @@ class RateBatchResultItem(BaseModel):
     carries the same `status`/`detail` pair a top-level error would."""
 
     card_id: int | None = None
-    rated_at: datetime | None = None
+    rated_at: UtcDatetime | None = None
     ok: bool
-    next_due: datetime | None = None
+    next_due: UtcDatetime | None = None
     state: str | None = None
     step: int | None = None
     lapsed: bool | None = None

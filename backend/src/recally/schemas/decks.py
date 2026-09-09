@@ -1,9 +1,8 @@
 """`GET /decks` and `GET /decks/{book_id}/cards` payloads (docs/api-spec.md)."""
 
-from datetime import datetime
-
 from pydantic import BaseModel
 
+from recally.schemas.types import UtcDatetime
 from recally.services.decks import DeckCard as DeckCardRecord
 from recally.services.decks import DeckSummary
 
@@ -41,7 +40,7 @@ class DeckCard(BaseModel):
     back: str
     chapter: str | None
     tags: list[str]
-    suspended_until: datetime | None
+    suspended_until: UtcDatetime | None
 
     @classmethod
     def from_record(cls, record: DeckCardRecord) -> "DeckCard":

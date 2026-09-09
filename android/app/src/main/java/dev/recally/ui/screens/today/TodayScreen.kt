@@ -2,6 +2,7 @@ package dev.recally.ui.screens.today
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -46,6 +47,7 @@ import dev.recally.ui.theme.recallyColors
 fun TodayScreen(
     uiState: TodayUiState,
     onStartReview: () -> Unit,
+    onOpenApprove: () -> Unit,
     onOpenSettings: () -> Unit,
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
@@ -84,6 +86,7 @@ fun TodayScreen(
                         onStartReview = onStartReview,
                     )
             }
+            ApprovalQueueRow(onOpenApprove = onOpenApprove)
             if (uiState.errorMessage != null && uiState.dueCount == null && !uiState.isLoading) {
                 ErrorRow(message = uiState.errorMessage, onRetry = onRetry)
             }
@@ -121,6 +124,37 @@ private fun WordmarkHeader() {
             style = MaterialTheme.typography.headlineSmall,
             color = colors.ink,
         )
+    }
+}
+
+/**
+ * Entrance to the approval queue. Approve is entered from Today rather than
+ * from the bottom bar (docs/android.md, "Navigation") — it is a modal task you
+ * finish and leave. It carries no count: `GET /cards/pending` returns none, and
+ * G1 is scoped out of step 4 rather than approximated from a list length.
+ */
+@Composable
+private fun ApprovalQueueRow(onOpenApprove: () -> Unit) {
+    val colors = MaterialTheme.recallyColors
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .border(1.dp, colors.line, RoundedCornerShape(RecallyRadius.md))
+                .clickable(onClick = onOpenApprove)
+                .padding(
+                    horizontal = RecallySpacing.cardPadding,
+                    vertical = RecallySpacing.lg,
+                ),
+    ) {
+        Text(
+            text = "Approval queue",
+            style = MaterialTheme.typography.labelLarge,
+            color = colors.ink,
+        )
+        Text(text = "›", style = MaterialTheme.typography.labelLarge, color = colors.inkFaint)
     }
 }
 
@@ -208,6 +242,7 @@ private fun TodayScreenLoadingPreview() {
         TodayScreen(
             uiState = TodayUiState(isLoading = true),
             onStartReview = {},
+            onOpenApprove = {},
             onOpenSettings = {},
             onRetry = {},
         )
@@ -229,6 +264,7 @@ private fun TodayScreenLoadedPreview() {
                     retention30d = 0.87,
                 ),
             onStartReview = {},
+            onOpenApprove = {},
             onOpenSettings = {},
             onRetry = {},
         )
@@ -250,6 +286,7 @@ private fun TodayScreenNothingDuePreview() {
                     retention30d = 0.87,
                 ),
             onStartReview = {},
+            onOpenApprove = {},
             onOpenSettings = {},
             onRetry = {},
         )
@@ -269,6 +306,7 @@ private fun TodayScreenOfflinePreview() {
                     isOffline = true,
                 ),
             onStartReview = {},
+            onOpenApprove = {},
             onOpenSettings = {},
             onRetry = {},
         )
@@ -286,6 +324,7 @@ private fun TodayScreenCheckSettingsPreview() {
                     showCheckSettingsBanner = true,
                 ),
             onStartReview = {},
+            onOpenApprove = {},
             onOpenSettings = {},
             onRetry = {},
         )

@@ -12,6 +12,7 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
+import dev.recally.ui.ComingSoonScreen
 import dev.recally.ui.screens.approve.ApproveScreen
 import dev.recally.ui.screens.approve.ApproveViewModel
 import dev.recally.ui.screens.decks.BookDetailScreen
@@ -48,6 +49,7 @@ fun RecallyNavHost(
             TodayScreen(
                 uiState = todayUiState,
                 onStartReview = { navController.navigate(Screen.Review.route) },
+                onOpenApprove = { navController.navigate(Screen.Approve.route) },
                 onOpenSettings = { navController.navigate(Screen.Settings.route) },
                 onRetry = todayViewModel::refresh,
             )
@@ -118,7 +120,12 @@ fun RecallyNavHost(
                 onOpenSettings = { navController.navigate(Screen.Settings.route) },
             )
         }
-        composable(Screen.Stats.route) { }
+        composable(Screen.Stats.route) {
+            // Stats is roadmap step 6a, not step 4 (issue #51, "Scope"). The
+            // tab is in the nav bar per docs/android.md ("Navigation"), so it
+            // states its own absence rather than rendering blank.
+            ComingSoonScreen(title = "Stats")
+        }
         composable(Screen.Settings.route) {
             val settingsViewModel: SettingsViewModel = hiltViewModel()
             val settingsUiState by settingsViewModel.uiState.collectAsStateWithLifecycle()

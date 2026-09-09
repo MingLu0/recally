@@ -4,11 +4,14 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.runtime.getValue
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import dagger.hilt.android.AndroidEntryPoint
 import dev.recally.data.sync.RatingOutboxWork
 import dev.recally.ui.AppScaffold
 import dev.recally.ui.navigation.RecallyNavHost
+import dev.recally.ui.navigation.navigateToBottomNavDestination
 import dev.recally.ui.theme.RecallyTheme
 
 /**
@@ -28,7 +31,13 @@ class MainActivity : ComponentActivity() {
         setContent {
             RecallyTheme {
                 val navController = rememberNavController()
-                AppScaffold { innerPadding ->
+                val currentBackStackEntry by navController.currentBackStackEntryAsState()
+                AppScaffold(
+                    currentRoute = currentBackStackEntry?.destination?.route,
+                    onDestinationSelected = { destination ->
+                        navController.navigateToBottomNavDestination(destination)
+                    },
+                ) { innerPadding ->
                     RecallyNavHost(
                         navController = navController,
                         contentPadding = innerPadding,
