@@ -273,6 +273,84 @@ def test_decks_counts_only_approved_cards_and_only_due_ones_as_due(
     assert decks[0].due == 1, "the future-due and buried cards are not due (ADR-008)"
 
 
+def test_deck_progress_counts_review_state_cards(client: TestClient, container: Container) -> None:
+    """The G2 definition: 48 approved cards, 30 in FSRS `review` state → 0.625."""
+    with container.session() as session:
+        _book_with_cards(session, approved=48, in_review_state=30)
+
+    body = client.get("/decks", headers={"X-API-Key": TEST_API_KEY}).json()
+
+    assert body["decks"][0]["total"] == 48
+    assert body["decks"][0]["progress"] == 0.625
+
+
+def test_deck_with_no_cards_reports_zero_progress_not_a_divide_by_zero(
+    client: TestClient, container: Container
+) -> None:
+    """A book with no approved cards reports `progress: 0.0` rather than raising."""
+    with container.session() as session:
+        session.add(_book(title="Evals for AI Engineers", external_id="9781098188283"))
+        session.commit()
+
+    response = client.get("/decks", headers={"X-API-Key": TEST_API_KEY})
+
+    assert response.status_code == 200
+    assert response.json()["decks"][0]["progress"] == 0.0
+
+
+def test_deck_progress_ignores_unapproved_cards(client: TestClient, container: Container) -> None:
+    """pending_review cards are in neither the numerator nor the denominator (hard rule 1)."""
+    with container.session() as session:
+        _book_with_cards(session, approved=4, in_review_state=1, pending_review=10)
+
+    body = client.get("/decks", headers={"X-API-Key": TEST_API_KEY}).json()
+
+    assert body["decks"][0]["total"] == 4
+    assert body["decks"][0]["progress"] == 0.25
+
+
+def _book_with_cards(
+    session, *, approved: int, in_review_state: int, pending_review: int = 0
+) -> None:
+    """One book whose cards all hang off a single highlight → unit chain."""
+    now = datetime(2026, 9, 6, 12, 0, 0)
+    book = _book(title="Evals for AI Engineers", external_id="9781098188283")
+    session.add(book)
+    session.flush()
+    highlight = Highlight(
+        book_id=book.id,
+        raw_text="An LLM pipeline's behaviour only makes sense end-to-end.",
+        dedupe_key="e3b0c442-98fc-1c14-9afb-f4c8996fb924",
+        source="oreilly",
+        highlighted_at=now.date(),
+        export_position=0,
+        user_id=1,
+    )
+    run = IngestRun(filename="a-oreilly-annotations.csv", user_id=1)
+    session.add_all([highlight, run])
+    session.flush()
+    unit = CuratedUnit(ingest_run_id=run.id, curated_text="…", decision="keep", tags=[], user_id=1)
+    session.add(unit)
+    session.flush()
+    session.add(CuratedUnitHighlight(unit_id=unit.id, highlight_id=highlight.id, user_id=1))
+
+    for index in range(approved):
+        card = _card(unit.id, status="approved")
+        session.add(card)
+        session.flush()
+        session.add(
+            CardState(
+                card_id=card.id,
+                state="review" if index < in_review_state else "learning",
+                due=now,
+                user_id=1,
+            )
+        )
+    for _ in range(pending_review):
+        session.add(_card(unit.id, status="pending_review"))
+    session.commit()
+
+
 def _book(*, title: str, external_id: str) -> Book:
     return Book(title=title, source="oreilly", external_id=external_id, user_id=1)
 

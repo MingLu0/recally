@@ -9,13 +9,14 @@ data class DeckListResponse(
     val decks: List<DeckDto>,
 )
 
-/** One book with its card counts. */
+/** One book with its card counts and progress. */
 @Serializable
 data class DeckDto(
     @SerialName("book_id") val bookId: Long,
     val title: String,
     val total: Int,
     val due: Int,
+    val progress: Float,
 )
 
 /** `GET /decks/{book_id}/cards` response. */

@@ -8,17 +8,22 @@ from recally.services.decks import DeckSummary
 
 
 class Deck(BaseModel):
-    """One book with its card counts."""
+    """One book with its card counts and progress."""
 
     book_id: int
     title: str
     total: int
     due: int
+    progress: float
 
     @classmethod
     def from_summary(cls, summary: DeckSummary) -> "Deck":
         return cls(
-            book_id=summary.book_id, title=summary.title, total=summary.total, due=summary.due
+            book_id=summary.book_id,
+            title=summary.title,
+            total=summary.total,
+            due=summary.due,
+            progress=summary.progress,
         )
 
 
