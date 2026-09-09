@@ -4,6 +4,7 @@ import dev.recally.data.remote.DeviceRequest
 import dev.recally.data.remote.RecallyApi
 import dev.recally.data.remote.apiCall
 import dev.recally.di.IoDispatcher
+import dev.recally.domain.repository.DeviceRegistrationRepository
 import dev.recally.domain.repository.Result
 import dev.recally.domain.repository.SettingsRepository
 import kotlinx.coroutines.CoroutineDispatcher
@@ -26,8 +27,8 @@ class DeviceRegistrar
         private val api: RecallyApi,
         private val settings: SettingsRepository,
         @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
-    ) {
-        suspend fun register(fcmToken: String): Result<Long> =
+    ) : DeviceRegistrationRepository {
+        override suspend fun register(fcmToken: String): Result<Long> =
             withContext(ioDispatcher) {
                 when (
                     val result =

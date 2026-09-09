@@ -5,4 +5,7 @@
     <string name="nav_decks">Decks</string>
     <string name="nav_stats">Stats</string>
     <string name="nav_settings">Settings</string>
+
+    <!-- FCM due-cards notification channel (docs/android.md, "Push notifications"). -->
+    <string name="notification_channel_due_cards">Due cards</string>
 </resources>
