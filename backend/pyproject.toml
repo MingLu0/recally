@@ -58,6 +58,11 @@ python_version = "3.12"
 files = ["src/recally"]
 strict = true
 
+# firebase-admin ships no py.typed marker.
+[[tool.mypy.overrides]]
+module = "firebase_admin.*"
+ignore_missing_imports = true
+
 # APScheduler 3.x ships no stubs and no py.typed marker.
 [[tool.mypy.overrides]]
 module = ["apscheduler.*"]
