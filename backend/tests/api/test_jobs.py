@@ -2,9 +2,9 @@
 
 The router is a thin adapter over `recally.scheduling.jobs` (docs/backend.md,
 "Wiring and entry points"): `notify` invokes the notifier seam step 5b fills,
-`learner` and `optimizer` are known-but-unbuilt names that must answer 501 — a
-silent success for an unbuilt job is the failure mode to avoid — and an unknown
-name is a plain 422.
+`optimizer` runs the step 6a-a fit, `learner` is a known-but-unbuilt name that
+must answer 501 — a silent success for an unbuilt job is the failure mode to
+avoid — and an unknown name is a plain 422.
 """
 
 from collections.abc import Iterator
@@ -67,10 +67,30 @@ def test_run_notify_invokes_the_notifier_seam(
     assert len(calls) == 1, f"the notifier seam ran {len(calls)} times, expected exactly 1"
 
 
+def test_run_optimizer_no_longer_returns_501(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Step 6a-a retires the placeholder: `{"job": "optimizer"}` runs the fit
+    entry point. The fit itself is mocked — its behaviour is the gate in
+    tests/scheduling/test_optimizer.py; here only the wiring matters."""
+    from recally.scheduling import optimizer
+
+    calls: list[object] = []
+    monkeypatch.setattr(optimizer, "fit_parameters", lambda container: calls.append(container))
+
+    response = client.post(
+        "/jobs/run", headers={"X-API-Key": TEST_API_KEY}, json={"job": "optimizer"}
+    )
+
+    assert response.status_code == 200
+    assert len(calls) == 1, f"the optimizer ran {len(calls)} times, expected exactly 1"
+
+
 def test_unimplemented_jobs_return_501_not_success(client: TestClient) -> None:
-    """`learner` and `optimizer` are registered names whose jobs belong to step
-    6a/6b: they must fail loudly (501 problem+json), never pretend to have run."""
-    for job in ("learner", "optimizer"):
+    """`learner` is a registered name whose job belongs to step 6b: it must fail
+    loudly (501 problem+json), never pretend to have run. (`optimizer` left this
+    list in step 6a-a — see test_run_optimizer_no_longer_returns_501.)"""
+    for job in ("learner",):
         response = client.post("/jobs/run", headers={"X-API-Key": TEST_API_KEY}, json={"job": job})
 
         assert response.status_code == 501, (

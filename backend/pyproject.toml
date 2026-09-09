@@ -18,6 +18,12 @@ dependencies = [
     "watchdog>=6",
 ]
 
+# The nightly FSRS fit (scheduling/optimizer.py) needs torch + pandas via the
+# library's own extra. Kept optional — ~800MB that no Android or CI job needs
+# (docs/architecture.md, "Optimizer"; install: uv sync --extra optimizer).
+[project.optional-dependencies]
+optimizer = ["fsrs[optimizer]"]
+
 [project.scripts]
 recally = "recally.cli:entrypoint"
 
@@ -53,3 +59,8 @@ strict = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    # Fit tests need torch + pandas; they skip when the extra is absent so the
+    # default `uv sync` suite (and CI) stays green and fast.
+    "optimizer: needs the fsrs[optimizer] extra (uv sync --extra optimizer)",
+]
