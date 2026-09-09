@@ -84,6 +84,7 @@ fun TodayScreen(
                         dueCount = uiState.dueCount,
                         nothingDue = uiState.nothingDue,
                         onStartReview = onStartReview,
+                        nextDueLabel = uiState.nextDueLabel,
                     )
             }
             ApprovalQueueRow(onOpenApprove = onOpenApprove)
@@ -284,6 +285,7 @@ private fun TodayScreenNothingDuePreview() {
                     streakDays = 9,
                     reviewsToday = 23,
                     retention30d = 0.87,
+                    nextDueLabel = "next card in 4 hours",
                 ),
             onStartReview = {},
             onOpenApprove = {},

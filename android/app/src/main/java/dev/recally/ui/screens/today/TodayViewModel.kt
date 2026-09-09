@@ -7,6 +7,7 @@ import dev.recally.di.IoDispatcher
 import dev.recally.domain.repository.CardRepository
 import dev.recally.domain.repository.Result
 import dev.recally.domain.repository.StatsRepository
+import dev.recally.ui.formatNextDueIn
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -15,6 +16,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.time.Clock
 import javax.inject.Inject
 
 /**
@@ -32,6 +34,7 @@ class TodayViewModel
         private val cardRepository: CardRepository,
         private val statsRepository: StatsRepository,
         @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
+        private val clock: Clock,
     ) : ViewModel() {
         private val mutableUiState = MutableStateFlow(TodayUiState())
         val uiState: StateFlow<TodayUiState> = mutableUiState.asStateFlow()
@@ -106,6 +109,10 @@ class TodayViewModel
                             streakDays = result.data.streakDays,
                             reviewsToday = result.data.reviewsToday,
                             retention30d = result.data.retention30d,
+                            nextDueLabel =
+                                result.data.nextDueAt?.let { nextDueAt ->
+                                    "next card ${formatNextDueIn(clock.instant(), nextDueAt)}"
+                                },
                         )
                     }
                 Result.Unauthorized ->

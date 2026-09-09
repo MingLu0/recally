@@ -1,5 +1,6 @@
 package dev.recally.ui.screens.stats
 
+import java.time.Instant
 import java.time.LocalDate
 
 /**
@@ -8,11 +9,10 @@ import java.time.LocalDate
  * (design-system.md, "Stats invents nothing"): `streak_days`, `reviews_today`,
  * `retention_30d`, `forecast[]` and `lapse_rate_by_type`, plus
  * `lapse_rate_by_guidance_version` for the section that hides until there is
- * more than one version.
+ * more than one version, and `next_due_at` (issue #134).
  *
  * Deliberately absent: the curation-yield figure (in the response, not on the
- * artboard — issue #95, "Scoped out") and the G3 next-due timestamp (belongs
- * to the session summary).
+ * artboard — issue #95, "Scoped out").
  */
 data class StatsUiState(
     val isLoading: Boolean = false,
@@ -25,6 +25,8 @@ data class StatsUiState(
     val forecast: List<ForecastBar> = emptyList(),
     val lapseRateByType: Map<String, Double> = emptyMap(),
     val lapseRateByGuidanceVersion: List<GuidanceVersionLapseRate> = emptyList(),
+    /** Earliest future due across the collection; null when nothing is scheduled. */
+    val nextDueAt: Instant? = null,
 ) {
     /**
      * Lapse rate by guidance version renders only when there is more than one

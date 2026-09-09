@@ -84,6 +84,7 @@ fun StatsResponse.toDomain(): Stats =
         lapseRateByType = lapseRateByType,
         lapseRateByGuidanceVersion = lapseRateByGuidanceVersion,
         curationYield = curationYield,
+        nextDueAt = nextDueAt?.let(Instant::parse),
         forecast = forecast.map { it.toDomain() },
     )
 

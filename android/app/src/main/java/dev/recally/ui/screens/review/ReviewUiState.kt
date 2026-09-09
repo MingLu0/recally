@@ -77,6 +77,10 @@ data class RatingHints(
  * local; [lapseCount] sums the `lapsed` flag over rate responses with
  * `duplicate: false`, because whether a rating is a lapse depends on state
  * the server owns (docs/api-spec.md, `POST /reviews/{id}/rate`).
+ *
+ * [nextDueLabel] is "Next card due in 4 hours" from `GET /stats`'s
+ * `next_due_at` (issue #134); null when nothing is scheduled or the fetch
+ * failed, and the sheet then simply omits the line.
  */
 data class SessionSummaryUi(
     val reviewedCount: Int,
@@ -85,4 +89,5 @@ data class SessionSummaryUi(
     val hardCount: Int,
     val againCount: Int,
     val lapseCount: Int,
+    val nextDueLabel: String? = null,
 )

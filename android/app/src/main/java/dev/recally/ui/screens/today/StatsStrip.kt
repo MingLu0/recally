@@ -44,8 +44,9 @@ import kotlin.math.roundToInt
  * clip — part of the strip, not a separate button.
  *
  * The nothing-due treatment swaps the action bar for a `line`-bordered,
- * `ink-faint` one (design-system.md, "States"). G3 is scoped out (issue #57),
- * so it reads "Nothing due" with no hours figure.
+ * `ink-faint` one (design-system.md, "States"): "Nothing due", with
+ * [nextDueLabel] appended ("Nothing due — next card in 4 hours") when the
+ * server serves a `next_due_at` (issue #134).
  */
 @Composable
 fun StatsStrip(
@@ -57,6 +58,7 @@ fun StatsStrip(
     nothingDue: Boolean,
     onStartReview: () -> Unit,
     modifier: Modifier = Modifier,
+    nextDueLabel: String? = null,
 ) {
     val colors = MaterialTheme.recallyColors
     Column(
@@ -85,6 +87,7 @@ fun StatsStrip(
             dueCount = dueCount,
             newCount = newCount,
             nothingDue = nothingDue,
+            nextDueLabel = nextDueLabel,
             onStartReview = onStartReview,
         )
     }
@@ -211,11 +214,14 @@ private fun ActionBar(
     dueCount: Int?,
     newCount: Int?,
     nothingDue: Boolean,
+    nextDueLabel: String?,
     onStartReview: () -> Unit,
 ) {
     val colors = MaterialTheme.recallyColors
     val label =
         when {
+            // A null label keeps the bare treatment — never "in 0 hours".
+            nothingDue && nextDueLabel != null -> "NOTHING DUE — ${nextDueLabel.uppercase()}"
             nothingDue -> "NOTHING DUE"
             (dueCount ?: 0) > 0 -> "REVIEW $dueCount ${if (dueCount == 1) "CARD" else "CARDS"} DUE"
             else -> "REVIEW $newCount NEW ${if (newCount == 1) "CARD" else "CARDS"}"

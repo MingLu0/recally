@@ -70,6 +70,7 @@ class StatsViewModel
                             forecast = mapForecast(result.data.forecast, LocalDate.now(clock)),
                             lapseRateByType = result.data.lapseRateByType,
                             lapseRateByGuidanceVersion = mapGuidanceVersions(result.data.lapseRateByGuidanceVersion),
+                            nextDueAt = result.data.nextDueAt,
                         )
                     }
                 Result.Unauthorized ->

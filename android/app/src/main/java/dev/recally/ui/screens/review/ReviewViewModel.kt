@@ -11,6 +11,8 @@ import dev.recally.domain.repository.CardRepository
 import dev.recally.domain.repository.Result
 import dev.recally.domain.repository.ReviewRepository
 import dev.recally.domain.repository.SettingsRepository
+import dev.recally.domain.repository.StatsRepository
+import dev.recally.ui.formatNextDueIn
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -46,6 +48,7 @@ class ReviewViewModel
         private val reviewRepository: ReviewRepository,
         private val ratingOutbox: RatingOutbox,
         private val settings: SettingsRepository,
+        private val statsRepository: StatsRepository,
         private val clock: Clock,
     ) : ViewModel() {
         private val _uiState = MutableStateFlow(ReviewUiState())
@@ -281,6 +284,28 @@ class ReviewViewModel
                             lapseCount = lapseCount,
                         ),
                 )
+            }
+            loadNextDueLabel()
+        }
+
+        /**
+         * The sheet's "Next card due in 4 hours" line (issue #134): the
+         * timestamp comes from `GET /stats`'s `next_due_at` — served, never
+         * computed client-side (hard rule 5). A failure or a null value just
+         * omits the line; the summary is complete without it.
+         */
+        private fun loadNextDueLabel() {
+            viewModelScope.launch {
+                val result = statsRepository.stats()
+                if (result is Result.Success) {
+                    val label =
+                        result.data.nextDueAt?.let { nextDueAt ->
+                            "Next card due ${formatNextDueIn(clock.instant(), nextDueAt)}"
+                        }
+                    _uiState.update { state ->
+                        state.copy(summary = state.summary?.copy(nextDueLabel = label))
+                    }
+                }
             }
         }
 
