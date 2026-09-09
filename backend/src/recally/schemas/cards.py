@@ -1,10 +1,9 @@
 """Approval-queue payloads (docs/api-spec.md, "Approval queue")."""
 
-from datetime import datetime
-
 from pydantic import BaseModel, field_validator
 
 from recally.models import Card
+from recally.schemas.types import UtcDatetime
 from recally.services.cards import PendingCard
 
 
@@ -89,7 +88,7 @@ class PatchCardRequest(BaseModel):
 class SuspensionResponse(BaseModel):
     """The new `suspended_until` after a bury, suspend or unsuspend (null = in rotation)."""
 
-    suspended_until: datetime | None
+    suspended_until: UtcDatetime | None
 
 
 class CardResponse(BaseModel):
@@ -103,9 +102,9 @@ class CardResponse(BaseModel):
     original_front: str
     original_back: str
     status_reason: str | None
-    approved_at: datetime | None
+    approved_at: UtcDatetime | None
     # Set by a post-approval edit (ADR-008); the Learner segments these cards.
-    edited_at: datetime | None
+    edited_at: UtcDatetime | None
 
     @classmethod
     def from_card(cls, card: Card) -> "CardResponse":

@@ -291,3 +291,28 @@ def _card(unit_id: int, *, status: str, suspended_until: datetime | None = None)
         model="claude-sonnet-5",
         user_id=1,
     )
+
+
+def test_health_is_unauthenticated(client: TestClient) -> None:
+    """`GET /health` is the load-balancer probe, so it must not need the key."""
+    response = client.get("/health")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+
+def test_health_auth_requires_the_api_key(client: TestClient) -> None:
+    """The Settings connection test tells a wrong key apart from an unreachable
+    server, so `/health/auth` must 401 rather than 200 without the key."""
+    missing = client.get("/health/auth")
+    wrong = client.get("/health/auth", headers={"X-API-Key": "wrong-key"})
+
+    assert missing.status_code == 401
+    assert wrong.status_code == 401
+
+
+def test_health_auth_accepts_the_configured_key(client: TestClient) -> None:
+    response = client.get("/health/auth", headers={"X-API-Key": TEST_API_KEY})
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}

@@ -122,7 +122,7 @@ FSRS state is **untouched** — stability, difficulty, `due` and `step` all surv
 
 ### POST /cards/{id}/bury
 Hide the card for the rest of the day. Sets `suspended_until` to the next day boundary in `RECALLY_TIMEZONE`, so it clears itself with no action from the user. Use for "not right now" instead of a dishonest rating, which would corrupt `review_logs`.
-**Response**: `{ "suspended_until": "2026-09-07T00:00:00+12:00" }`
+**Response**: `{ "suspended_until": "2026-09-06T12:00:00Z" }` — the next day boundary in `RECALLY_TIMEZONE`, rendered as UTC like every other timestamp here.
 
 ### POST /cards/{id}/suspend
 Take the card out of rotation indefinitely. Sets `suspended_until` to a far-future sentinel; only `unsuspend` clears it.
