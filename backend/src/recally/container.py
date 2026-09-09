@@ -77,6 +77,16 @@ class Container:
         return self._agent_registry.resolve(role, self.settings)
 
     @property
+    def agent_registry(self) -> AgentRegistry:
+        """The registry the container resolves agents through (ADR-007).
+
+        Exposed so pipeline entry points (`run_pipeline`, the Learner job's leech
+        rewrites) bind the same registry — test-local stubs included — rather than
+        falling back to the process-wide default.
+        """
+        return self._agent_registry
+
+    @property
     def engine(self) -> Engine:
         return self._engine
 

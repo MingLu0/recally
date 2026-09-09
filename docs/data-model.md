@@ -70,6 +70,7 @@ PK (`unit_id`, `highlight_id`). Gives every card full provenance back to each so
 | tags | json | inherited + card-specific |
 | status | text | `pending_review` / `needs_human` / `approved` / `rejected` |
 | status_reason | text, nullable | critic critique, human rejection reason, or `superseded by <id>` (feeds the Learner) |
+| supersedes_card_id | int, nullable FK cards | set only on a Learner-driven leech rewrite: the approved card it replaces. Approving the rewrite sets that card `rejected` with `status_reason="superseded by <id>"`; a column rather than the string alone because approve receives only the rewrite's id and needs the lookup. NULL for every ordinary card (docs/agents.md §7) |
 | approved_at | datetime, nullable | when the human approved; `card_state` is created at the same time |
 | edited_at | datetime, nullable | last post-approval `PATCH` of `front`/`back`/`tags`. FSRS state is untouched by an edit; the timestamp lets the Learner segment hand-fixed cards so they do not flatter the `guidance_version` that wrote the flawed original (ADR-008) |
 | suspended_until | datetime, nullable | NULL = in rotation. Bury sets the next day boundary in `RECALLY_TIMEZONE`; suspend sets a far-future sentinel. `GET /reviews/due` excludes any card whose value is in the future; FSRS state is never recomputed (ADR-008) |

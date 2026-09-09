@@ -135,9 +135,10 @@ def _agent_context(
     registry: AgentRegistry,
     settings: Settings,
     llm_caller: LlmCaller,
-    ingest_run_id: int,
+    ingest_run_id: int | None,
     *,
     unit_id: int | None = None,
+    card_id: int | None = None,
     round: int | None = None,
 ) -> tuple[Curator, AgentContext]: ...
 
@@ -148,9 +149,10 @@ def _agent_context(
     registry: AgentRegistry,
     settings: Settings,
     llm_caller: LlmCaller,
-    ingest_run_id: int,
+    ingest_run_id: int | None,
     *,
     unit_id: int | None = None,
+    card_id: int | None = None,
     round: int | None = None,
 ) -> tuple[Writer, AgentContext]: ...
 
@@ -161,9 +163,10 @@ def _agent_context(
     registry: AgentRegistry,
     settings: Settings,
     llm_caller: LlmCaller,
-    ingest_run_id: int,
+    ingest_run_id: int | None,
     *,
     unit_id: int | None = None,
+    card_id: int | None = None,
     round: int | None = None,
 ) -> tuple[Critic, AgentContext]: ...
 
@@ -173,9 +176,10 @@ def _agent_context(
     registry: AgentRegistry,
     settings: Settings,
     llm_caller: LlmCaller,
-    ingest_run_id: int,
+    ingest_run_id: int | None,
     *,
     unit_id: int | None = None,
+    card_id: int | None = None,
     round: int | None = None,
 ) -> tuple[Any, AgentContext]:
     """Resolve `role` through the registry and build the context for one invocation."""
@@ -183,7 +187,7 @@ def _agent_context(
     context = AgentContext(
         ingest_run_id=ingest_run_id,
         settings=settings,
-        llm=_CorrelatedLlm(llm_caller, unit_id=unit_id, round=round),
+        llm=_CorrelatedLlm(llm_caller, unit_id=unit_id, card_id=card_id, round=round),
     )
     return implementation, context
 
@@ -217,6 +221,97 @@ def run(
             return
         _record_outcome(session, ingest_run, stats, error=None)
         session.commit()
+
+
+def rewrite_leech_card(
+    *,
+    settings: Settings,
+    session_factory: sessionmaker[Session],
+    llm_caller: LlmCaller,
+    leech_card_id: int,
+    agent_registry: AgentRegistry | None = None,
+) -> int | None:
+    """One leech → one rewrite card, through the normal Writer ⇄ Critic loop.
+
+    Spec: docs/agents.md §7 — "Rewrites go through the normal Writer ⇄ Critic →
+    human approval path as new cards." This is the same `_run_card_loop` initial
+    generation uses (the 3-round cap and the queue statuses included); what
+    differs is correlation, not the path:
+
+    - the rewrite is a new `cards` row on the leech's `unit_id`, stamped with
+      `supersedes_card_id` so approval knows what it replaces;
+    - every `llm_calls` row names the leech's `card_id` — these calls serve an
+      existing card (docs/data-model.md), unlike the null of initial generation;
+    - `ingest_run_id` is null, like the Learner call that prompted the rewrite.
+
+    The pipeline never writes `approved` (hard rule 1): the rewrite enters the
+    queue and a human decides. Returns the new card's id, or None when the named
+    card is gone (the job validates ids first, so this is a race guard only).
+    """
+    registry = agent_registry or default_registry
+    with session_factory() as session:
+        leech = session.get(Card, leech_card_id)
+        if leech is None:
+            return None
+        unit = leech.unit
+        highlights = _unit_highlights(session, leech.unit_id)
+        guidance_version, guidance = _latest_guidance(session)
+        source_truncated = any(highlight.truncated for highlight in highlights)
+        session.commit()  # no open transaction while an agent runs (module docstring)
+
+        writer, writer_context = _agent_context(
+            "writer",
+            registry,
+            settings,
+            llm_caller,
+            None,
+            unit_id=unit.id,
+            card_id=leech.id,
+            round=1,
+        )
+        result = writer(
+            WriterRequest(
+                curated_text=unit.curated_text,
+                tags=unit.tags,
+                guidance_version=guidance_version,
+                guidance=guidance,
+                critique=_leech_rewrite_critique(leech),
+            ),
+            writer_context,
+        )
+        # One leech, one rewrite: the first draft is the rewrite; any further
+        # drafts are discarded, exactly as a revision keeps only its first card.
+        rewrite = _run_card_loop(
+            session,
+            registry,
+            settings,
+            llm_caller,
+            None,
+            unit,
+            result.cards[0],
+            source_truncated=source_truncated,
+            guidance_version=guidance_version,
+            guidance=guidance,
+            card_id=leech.id,
+        )
+        rewrite.supersedes_card_id = leech.id
+        session.commit()
+        return rewrite.id
+
+
+def _leech_rewrite_critique(leech: Card) -> str:
+    """The leech instruction, sent through the Writer's existing critique channel.
+
+    The protocol has no rewrite-specific field, and a second generation path is
+    exactly what docs/agents.md §7 forbids — so the instruction rides the same
+    channel a Critic's feedback does.
+    """
+    return (
+        "This card is a leech: it has failed review 3 or more times.\n"
+        f"Front: {leech.front}\nBack: {leech.back}\n\n"
+        "Rewrite it as an alternative explanation or analogy of the same idea; "
+        "the original phrasing is not sticking."
+    )
 
 
 def _run_phases(
@@ -401,7 +496,7 @@ def _generate_cards(
             registry,
             settings,
             llm_caller,
-            ingest_run,
+            ingest_run.id,
             unit,
             draft,
             source_truncated=source_truncated,
@@ -417,13 +512,14 @@ def _run_card_loop(
     registry: AgentRegistry,
     settings: Settings,
     llm_caller: LlmCaller,
-    ingest_run: IngestRun,
+    ingest_run_id: int | None,
     unit: CuratedUnit,
     draft: CardDraft,
     *,
     source_truncated: bool,
     guidance_version: int | None,
     guidance: str | None,
+    card_id: int | None = None,
 ) -> Card:
     """One card's Critic ⇄ Writer rounds, bounded by LLM_MAX_ROUNDS (hard rule 9).
 
@@ -439,8 +535,9 @@ def _run_card_loop(
             registry,
             settings,
             llm_caller,
-            ingest_run.id,
+            ingest_run_id,
             unit_id=unit.id,
+            card_id=card_id,
             round=round_number,
         )
         verdict = critic(
@@ -497,8 +594,9 @@ def _run_card_loop(
             registry,
             settings,
             llm_caller,
-            ingest_run.id,
+            ingest_run_id,
             unit_id=unit.id,
+            card_id=card_id,
             round=round_number,
         )
         revised = writer(
