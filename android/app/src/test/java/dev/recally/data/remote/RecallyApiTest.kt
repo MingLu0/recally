@@ -99,7 +99,7 @@ class RecallyApiTest {
                             ),
                         )
                     },
-                    """{"cards":[]}""" to { it.pendingCards(status = "pending_review") },
+                    """{"cards":[],"counts":{"pending_review":0,"needs_human":0}}""" to { it.pendingCards(status = "pending_review") },
                     CARD_JSON to { it.approveCard(55, ApproveCardRequest(front = "Q2")) },
                     CARD_JSON to { it.rejectCard(55, RejectCardRequest(reason = "trivia")) },
                     CARD_JSON to { it.editCard(55, EditCardRequest(front = "Q3")) },
@@ -239,7 +239,7 @@ class RecallyApiTest {
     @Test
     fun test_unknown_json_fields_are_ignored() =
         runTest {
-            // A server-side G1–G6 addition must not break the client: fields
+            // A server-side G2–G6 addition must not break the client: fields
             // the DTO does not declare are ignored at every nesting level.
             enqueueJson(
                 """

@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.recally.di.IoDispatcher
+import dev.recally.domain.repository.ApprovalRepository
 import dev.recally.domain.repository.CardRepository
 import dev.recally.domain.repository.Result
 import dev.recally.domain.repository.StatsRepository
@@ -24,8 +25,11 @@ import javax.inject.Inject
  * [TodayUiState]. Due and new counts come from `GET /reviews/due` via
  * [CardRepository] (Room-backed, so Today renders offline and never depends on
  * a push having arrived — docs/android.md, "Push notifications"); the streak
- * figures come from `GET /stats` via [StatsRepository]. Instantiated at the
- * Today `NavHost` route entry.
+ * figures come from `GET /stats` via [StatsRepository]; the pending-queue
+ * buckets come from the collection-wide `counts` on `GET /cards/pending` via
+ * [ApprovalRepository] (G1, issue #132) — a failure there is silent, because
+ * the queue requires connectivity and Today must render without it.
+ * Instantiated at the Today `NavHost` route entry.
  */
 @HiltViewModel
 class TodayViewModel
@@ -33,6 +37,7 @@ class TodayViewModel
     constructor(
         private val cardRepository: CardRepository,
         private val statsRepository: StatsRepository,
+        private val approvalRepository: ApprovalRepository,
         @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
         private val clock: Clock,
     ) : ViewModel() {
@@ -55,6 +60,7 @@ class TodayViewModel
                 mutableUiState.update { it.copy(isLoading = true, errorMessage = null) }
                 loadDueCounts()
                 loadStats()
+                loadPendingCounts()
             }
         }
 
@@ -117,6 +123,28 @@ class TodayViewModel
                     }
                 Result.Unauthorized ->
                     mutableUiState.update { it.copy(showCheckSettingsBanner = true) }
+                is Result.HttpError,
+                is Result.NetworkError,
+                -> Unit
+            }
+        }
+
+        /**
+         * The queue buckets ride the response's collection-wide `counts`,
+         * never the list length (issue #132). The queue requires connectivity,
+         * so any failure keeps the last-known values and shows nothing rather
+         * than an error — Today works offline, Approve does not.
+         */
+        private suspend fun loadPendingCounts() {
+            when (val result = withContext(ioDispatcher) { approvalRepository.pendingCards() }) {
+                is Result.Success ->
+                    mutableUiState.update {
+                        it.copy(
+                            pendingReviewCount = result.data.counts.pendingReview,
+                            needsHumanCount = result.data.counts.needsHuman,
+                        )
+                    }
+                Result.Unauthorized,
                 is Result.HttpError,
                 is Result.NetworkError,
                 -> Unit

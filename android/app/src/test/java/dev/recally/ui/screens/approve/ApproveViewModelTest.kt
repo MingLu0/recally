@@ -1,6 +1,8 @@
 package dev.recally.ui.screens.approve
 
 import dev.recally.domain.model.PendingCard
+import dev.recally.domain.model.PendingCounts
+import dev.recally.domain.model.PendingQueue
 import dev.recally.domain.repository.ApprovalRepository
 import dev.recally.domain.repository.Result
 import kotlinx.coroutines.Dispatchers
@@ -43,7 +45,7 @@ class ApproveViewModelTest {
 
     /** Records every mutation; a call that must not happen is a call recorded. */
     private class FakeApprovalRepository(
-        var pendingResult: Result<List<PendingCard>>,
+        var pendingResult: Result<PendingQueue>,
     ) : ApprovalRepository {
         var pendingCalls = 0
         val approveCalls = mutableListOf<Long>()
@@ -56,7 +58,7 @@ class ApproveViewModelTest {
 
         val rejectCalls = mutableListOf<RejectCall>()
 
-        override suspend fun pendingCards(): Result<List<PendingCard>> {
+        override suspend fun pendingCards(): Result<PendingQueue> {
             pendingCalls++
             return pendingResult
         }
@@ -89,8 +91,15 @@ class ApproveViewModelTest {
             ioDispatcher = testDispatcher,
         )
 
-    private fun loadedViewModel(cards: List<PendingCard>): Pair<ApproveViewModel, FakeApprovalRepository> {
-        val repository = FakeApprovalRepository(Result.Success(cards))
+    private fun loadedViewModel(
+        cards: List<PendingCard>,
+        counts: PendingCounts =
+            PendingCounts(
+                pendingReview = cards.count { !it.isNeedsHuman },
+                needsHuman = cards.count { it.isNeedsHuman },
+            ),
+    ): Pair<ApproveViewModel, FakeApprovalRepository> {
+        val repository = FakeApprovalRepository(Result.Success(PendingQueue(cards, counts)))
         return viewModelWith(repository) to repository
     }
 
@@ -187,21 +196,30 @@ class ApproveViewModelTest {
     }
 
     @Test
-    fun test_ui_state_has_no_pending_count() {
-        // G1 is scoped out: GET /cards/pending returns no counts, so the
-        // header count is not built and the UiState carries no Int count
-        // field. (Synthetic fields — e.g. the Compose compiler's `$stable` —
-        // are excluded.)
-        val fields = ApproveUiState::class.java.declaredFields.filter { !it.isSynthetic && !it.name.startsWith("$") }
-        assertTrue(
-            "ApproveUiState must have no Int field: $fields",
-            fields.none { it.type == Int::class.javaPrimitiveType },
-        )
-        assertTrue(
-            "ApproveUiState must have no count/pending-named field: $fields",
-            fields.none { Regex("count|pending", RegexOption.IGNORE_CASE).containsMatchIn(it.name) },
-        )
-    }
+    fun test_ui_state_carries_the_header_count_and_no_bulk_field() =
+        runTest {
+            // G1 (issue #132): the header count is a named field fed by the
+            // response `counts` (both buckets — "8 pending" is the whole
+            // queue), and G4 stays scoped out: no bulk-approve field may join
+            // it. (Synthetic fields — e.g. the Compose compiler's `$stable` —
+            // are excluded.)
+            val fields =
+                ApproveUiState::class.java.declaredFields.filter { !it.isSynthetic && !it.name.startsWith("$") }
+            val headerCount = fields.singleOrNull { it.name == "pendingCount" }
+            assertTrue("ApproveUiState carries the header count as `pendingCount`: $fields", headerCount != null)
+            assertTrue(
+                "no bulk/batch approve field: $fields",
+                fields.none { Regex("bulk|batch|approveall", RegexOption.IGNORE_CASE).containsMatchIn(it.name) },
+            )
+
+            val (viewModel, _) =
+                loadedViewModel(
+                    cards = listOf(pendingCard(id = 1)),
+                    counts = PendingCounts(pendingReview = 5, needsHuman = 3),
+                )
+            advanceUntilIdle()
+            assertEquals("the header count is the whole queue, not the list length", 8, viewModel.uiState.value.pendingCount)
+        }
 
     @Test
     fun test_truncated_is_flagged_never_repaired() =

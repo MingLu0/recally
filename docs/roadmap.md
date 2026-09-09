@@ -41,7 +41,7 @@ Use the backend through the CLI for ~14 days. Before starting, write down the nu
 - Settings (base URL + API key + connection test), Today, Review, Approval Queue screens; Retrofit client; Room cache; LAN cleartext network security config.
 - Card controls in the UI: bury and edit from the review session, edit/suspend/unsuspend from Decks (ADR-008).
 - Tooling per android.md: Gradle Kotlin DSL + `gradle/libs.versions.toml` version catalog; JDK 17; ktlint via `ktlint-gradle`; the ktlint hook in the repo-root `.pre-commit-config.yaml`; the `android` job in `.github/workflows/ci.yml` running ktlint, Android Lint, `:app:testDebugUnitTest` and `:app:assembleDebug` on every PR. The `continue-on-error` on the two lint steps comes off once the module is clean.
-- Build to [design-system.md](design/design-system.md) — colour tokens (light and dark), type scale, component specs and the required states are settled there. Resolve **G1–G6** in *Feature gaps* below first, or drop the elements that depend on them.
+- Build to [design-system.md](design/design-system.md) — colour tokens (light and dark), type scale, component specs and the required states are settled there. Resolve **G4–G6** in *Feature gaps* below first, or drop the elements that depend on them.
 - **Tests**: unit tests for the sync queue (ratings stored with the client `rated_at` and `device_id`, flushed via `rate-batch`, a retried flush sends the same payload, results matched by position, items returning `ok: true` or a 4xx `status` dequeued while 5xx items are kept) and for same-session re-queueing from `learning_steps_minutes` (a card at `step` 1 waits the step-1 interval, not step 0; offline, the local step counter advances without a rate response and stops re-queueing past the last step).
 - **You verify**: enter the Mac's LAN URL and key in Settings; the connection test passes. Put the phone in aeroplane mode, review five cards, reconnect. `review_logs` has five rows with the phone's `device_id` and the offline `rated_at` values, and the app's next due matches `GET /reviews/due`.
 
@@ -62,15 +62,9 @@ Use the backend through the CLI for ~14 days. Before starting, write down the nu
 
 ## Feature gaps — API fields the Android design needs
 
-The Android design ([design-system.md](design/design-system.md)) displays four things no documented endpoint returns. They were found by auditing the mockups against [api-spec.md](api-spec.md) on 2026-09-07 and are **kept in the design deliberately** — the screens are built as intended and these endpoints catch up. Each must be resolved before the step 4 gate passes, either by extending the endpoint or by removing the element. (The next-due timestamp was resolved as `next_due_at` on `GET /stats` in #134.)
+The Android design ([design-system.md](design/design-system.md)) displays three things no documented endpoint returns. They were found by auditing the mockups against [api-spec.md](api-spec.md) on 2026-09-07 and are **kept in the design deliberately** — the screens are built as intended and these endpoints catch up. Each must be resolved before the step 4 gate passes, either by extending the endpoint or by removing the element. Pending counts were resolved as `counts` on `GET /cards/pending` in #132, per-book progress as `progress` on `GET /decks` in #133, and the next-due timestamp as `next_due_at` on `GET /stats` in #134.
 
 Ordered by how much depends on it.
-
-### G1. Pending counts
-Today's "8 to approve" / "3 need you" tiles, the Approve header's "8 pending", and the summary sheet's "Review 8 pending cards" all need a count without fetching the list. `GET /cards/pending` returns `cards[]` and no counts; calling `.size` on two full lists is wrong on a home screen that must render before the queue is reachable — the approval queue requires connectivity ([android.md](android.md), *Offline-first sync*).
-
-**Add** `counts: { "pending_review": 5, "needs_human": 3 }` to `GET /cards/pending`, or a separate `GET /cards/pending/count`. One gap, three screens.
-- **Tests**: with 5 `pending_review` and 3 `needs_human` rows, the counts field matches; approving one card decrements the right bucket.
 
 ### G4. Bulk approve
 The Approve screen's "Approve 5 ready" acts on several cards at once. `POST /cards/{id}/approve` is single-card; no batch endpoint exists.

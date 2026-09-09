@@ -2,7 +2,11 @@ package dev.recally.ui.screens.today
 
 import dev.recally.domain.model.DueSummary
 import dev.recally.domain.model.ForecastDay
+import dev.recally.domain.model.PendingCard
+import dev.recally.domain.model.PendingCounts
+import dev.recally.domain.model.PendingQueue
 import dev.recally.domain.model.Stats
+import dev.recally.domain.repository.ApprovalRepository
 import dev.recally.domain.repository.CardRepository
 import dev.recally.domain.repository.Result
 import dev.recally.domain.repository.StatsRepository
@@ -71,13 +75,37 @@ class TodayViewModelTest {
         override suspend fun stats(): Result<Stats> = result
     }
 
+    /**
+     * The approval queue requires connectivity (docs/android.md,
+     * "Offline-first sync"), so the default fake answers with a network
+     * failure: Today must render anyway, with the count tiles absent.
+     */
+    private class FakeApprovalRepository(
+        var pendingResult: Result<PendingQueue> = Result.NetworkError(IOException("no route to host")),
+    ) : ApprovalRepository {
+        override suspend fun pendingCards(): Result<PendingQueue> = pendingResult
+
+        override suspend fun approveCard(
+            cardId: Long,
+            front: String?,
+            back: String?,
+        ): Result<Unit> = throw UnsupportedOperationException("Today never approves cards")
+
+        override suspend fun rejectCard(
+            cardId: Long,
+            reason: String?,
+        ): Result<Unit> = throw UnsupportedOperationException("Today never rejects cards")
+    }
+
     private fun viewModelWith(
         dueResult: Result<DueSummary>,
         statsResult: Result<Stats> = Result.Success(sampleStats()),
+        pendingResult: Result<PendingQueue> = Result.NetworkError(IOException("no route to host")),
     ): TodayViewModel =
         TodayViewModel(
             cardRepository = FakeCardRepository(dueResult),
             statsRepository = FakeStatsRepository(statsResult),
+            approvalRepository = FakeApprovalRepository(pendingResult),
             ioDispatcher = testDispatcher,
             clock = FIXED_CLOCK,
         )
@@ -195,21 +223,61 @@ class TodayViewModelTest {
         }
 
     @Test
-    fun test_ui_state_has_no_pending_counts() {
-        // G1 is scoped out (issue #57): `GET /cards/pending` returns no counts,
-        // so no approve/needs-you count field may exist on the state.
-        val pendingFields =
-            TodayUiState::class.java.declaredFields.filter { isPendingCountField(it.name) }
-        assertTrue(
-            "TodayUiState exposes no approve/needs-you count field: $pendingFields",
-            pendingFields.isEmpty(),
-        )
+    fun test_ui_state_carries_the_pending_counts() =
+        runTest {
+            // G1 (issue #132): `GET /cards/pending` returns counts, and both
+            // buckets reach the state so the tiles render without the list.
+            val viewModel =
+                viewModelWith(
+                    dueResult = Result.Success(emptyDueSummary()),
+                    pendingResult =
+                        Result.Success(
+                            PendingQueue(
+                                cards = emptyList(),
+                                counts = PendingCounts(pendingReview = 5, needsHuman = 3),
+                            ),
+                        ),
+                )
+            advanceUntilIdle()
 
-        // Meta-assertion: the check has teeth.
-        assertTrue(isPendingCountField("pendingApproveCount"))
-        assertTrue(isPendingCountField("needsYouCount"))
-        assertTrue(isPendingCountField("needsHumanCount"))
-    }
+            val state = viewModel.uiState.value
+            assertEquals("the pending_review bucket reaches the state", 5, state.pendingReviewCount)
+            assertEquals("the needs_human bucket reaches the state", 3, state.needsHumanCount)
+
+            // The guard keeps its teeth: the named fields must exist for the
+            // assertions above to compile, and this predicate must still
+            // recognise a count field by name.
+            assertTrue(isPendingCountField("pendingReviewCount"))
+            assertTrue(isPendingCountField("needsHumanCount"))
+        }
+
+    @Test
+    fun test_pending_counts_are_not_derived_from_a_list_length() =
+        runTest {
+            // Negative: the tiles must show `counts`, never `cards.size` — a
+            // filtered or partial response whose list is shorter than the
+            // queue must not shrink the tiles.
+            val viewModel =
+                viewModelWith(
+                    dueResult = Result.Success(emptyDueSummary()),
+                    pendingResult =
+                        Result.Success(
+                            PendingQueue(
+                                cards = listOf(pendingCard(id = 1), pendingCard(id = 2)),
+                                counts = PendingCounts(pendingReview = 5, needsHuman = 3),
+                            ),
+                        ),
+                )
+            advanceUntilIdle()
+
+            val state = viewModel.uiState.value
+            assertEquals(5, state.pendingReviewCount)
+            assertEquals(3, state.needsHumanCount)
+            assertTrue(
+                "the response list was shorter than the counts, so a .size shortcut would fail this test",
+                state.pendingReviewCount != 2 && state.needsHumanCount != 2,
+            )
+        }
 
     private companion object {
         val FIXED_INSTANT: Instant = Instant.parse("2026-09-09T01:00:00Z")
@@ -222,6 +290,29 @@ class TodayViewModelTest {
                 lower.contains("needsyou") ||
                 lower.contains("needshuman")
         }
+
+        fun emptyDueSummary(): DueSummary =
+            DueSummary(
+                dueCount = 0,
+                newCount = 0,
+                learningStepsMinutes = listOf(1, 10),
+                cards = emptyList(),
+            )
+
+        fun pendingCard(id: Long): PendingCard =
+            PendingCard(
+                id = id,
+                status = PendingCard.STATUS_PENDING_REVIEW,
+                type = PendingCard.TYPE_QA,
+                front = "Front of card $id",
+                back = "Back of card $id",
+                statusReason = null,
+                sourceHighlights = listOf("A source highlight."),
+                truncated = false,
+                bookId = 1,
+                book = "Evals for AI Engineers",
+                chapter = "1. Introduction",
+            )
 
         fun sampleStats(nextDueAt: Instant? = null): Stats =
             Stats(

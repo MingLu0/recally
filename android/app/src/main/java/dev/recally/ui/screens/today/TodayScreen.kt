@@ -37,10 +37,11 @@ import dev.recally.ui.theme.recallyColors
  * docs/android.md, "Screens → 1. Today"). Pure composable: UiState in,
  * callbacks out — the ViewModel lives at the route entry.
  *
- * G1 (pending counts) and G2 (per-book progress) are scoped out per issue #57,
- * so the "Waiting for you" tiles and the book rail from the artboard are not
- * built. Today works having never received a push: everything it renders comes
- * from `GET /reviews/due` and `GET /stats` (docs/android.md, "Push
+ * The "N to approve" / "N need you" tiles read the collection-wide `counts`
+ * of `GET /cards/pending` (G1, issue #132). G2 (per-book progress) stays
+ * scoped out, so the book rail from the artboard is not built. Today works
+ * having never received a push: everything else it renders comes from
+ * `GET /reviews/due` and `GET /stats` (docs/android.md, "Push
  * notifications").
  */
 @Composable
@@ -87,7 +88,11 @@ fun TodayScreen(
                         nextDueLabel = uiState.nextDueLabel,
                     )
             }
-            ApprovalQueueRow(onOpenApprove = onOpenApprove)
+            ApprovalQueueRow(
+                pendingReviewCount = uiState.pendingReviewCount,
+                needsHumanCount = uiState.needsHumanCount,
+                onOpenApprove = onOpenApprove,
+            )
             if (uiState.errorMessage != null && uiState.dueCount == null && !uiState.isLoading) {
                 ErrorRow(message = uiState.errorMessage, onRetry = onRetry)
             }
@@ -131,11 +136,17 @@ private fun WordmarkHeader() {
 /**
  * Entrance to the approval queue. Approve is entered from Today rather than
  * from the bottom bar (docs/android.md, "Navigation") — it is a modal task you
- * finish and leave. It carries no count: `GET /cards/pending` returns none, and
- * G1 is scoped out of step 4 rather than approximated from a list length.
+ * finish and leave. The tiles carry the collection-wide `counts` of
+ * `GET /cards/pending` (G1, issue #132) — never a list length, since the
+ * queue requires connectivity and Today must render before it is reachable;
+ * while the counts are unknown the row shows its bare label.
  */
 @Composable
-private fun ApprovalQueueRow(onOpenApprove: () -> Unit) {
+private fun ApprovalQueueRow(
+    pendingReviewCount: Int?,
+    needsHumanCount: Int?,
+    onOpenApprove: () -> Unit,
+) {
     val colors = MaterialTheme.recallyColors
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -155,8 +166,45 @@ private fun ApprovalQueueRow(onOpenApprove: () -> Unit) {
             style = MaterialTheme.typography.labelLarge,
             color = colors.ink,
         )
-        Text(text = "›", style = MaterialTheme.typography.labelLarge, color = colors.inkFaint)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(RecallySpacing.sm),
+        ) {
+            if (pendingReviewCount != null) {
+                CountTile(
+                    text = "$pendingReviewCount to approve",
+                    textColor = colors.primary,
+                    fill = colors.primaryWash,
+                )
+            }
+            if (needsHumanCount != null && needsHumanCount > 0) {
+                CountTile(
+                    text = "$needsHumanCount need you",
+                    textColor = colors.danger,
+                    fill = colors.dangerWash,
+                )
+            }
+            Text(text = "›", style = MaterialTheme.typography.labelLarge, color = colors.inkFaint)
+        }
     }
+}
+
+/** One queue-bucket tile on the approval-queue row (design-system.md, Today). */
+@Composable
+private fun CountTile(
+    text: String,
+    textColor: Color,
+    fill: Color,
+) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelSmall,
+        color = textColor,
+        modifier =
+            Modifier
+                .background(fill, RoundedCornerShape(RecallyRadius.sm))
+                .padding(horizontal = RecallySpacing.sm, vertical = RecallySpacing.xs),
+    )
 }
 
 /** Persistent bar below the app bar (design-system.md, "States"). */
@@ -263,6 +311,8 @@ private fun TodayScreenLoadedPreview() {
                     streakDays = 9,
                     reviewsToday = 23,
                     retention30d = 0.87,
+                    pendingReviewCount = 8,
+                    needsHumanCount = 3,
                 ),
             onStartReview = {},
             onOpenApprove = {},

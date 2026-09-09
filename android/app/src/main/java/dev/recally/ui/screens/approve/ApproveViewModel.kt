@@ -54,7 +54,8 @@ class ApproveViewModel
                     is Result.Success ->
                         mutableUiState.update {
                             it.copy(
-                                groups = groupIntoChapters(result.data),
+                                groups = groupIntoChapters(result.data.cards),
+                                pendingCount = result.data.counts.total,
                                 isLoading = false,
                                 isOffline = false,
                                 isUnauthorized = false,
@@ -135,6 +136,7 @@ class ApproveViewModel
                         is Result.Success ->
                             it.copy(
                                 groups = removeCard(it.groups, cardId),
+                                pendingCount = it.pendingCount?.let { count -> (count - 1).coerceAtLeast(0) },
                                 busyCardId = null,
                                 editingCardId = null,
                                 expandedHighlightCardIds = it.expandedHighlightCardIds - cardId,

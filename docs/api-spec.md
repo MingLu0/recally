@@ -73,8 +73,11 @@ Items are validated individually, not by the request schema, so one malformed it
 
 ### GET /cards/pending
 `?status=pending_review|needs_human&book_id=&chapter=`. Returns a flat list ordered by book, chapter, then `export_position`; the client renders the chapter grouping. Includes critic critique and all source highlights (a grouped unit has several) for context. `truncated` is true if any source highlight is clipped. Every card carries `book_id` and `chapter` so the client can build filter chips that round-trip back into the query params; `book` is the display title.
+
+`counts` reports **collection-wide totals and ignores the route's filters** — Today's "N to approve" / "N need you" tiles and the Approve header must be right before any filter exists, and the approval queue requires connectivity, so a home screen cannot derive them from the list (docs/android.md, *Offline-first sync*).
 ```json
 {
+  "counts": { "pending_review": 5, "needs_human": 3 },
   "cards": [
     {
       "id": 55, "status": "needs_human", "type": "cloze",

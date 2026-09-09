@@ -8,7 +8,9 @@ import androidx.navigation.testing.TestNavHostController
 import androidx.test.core.app.ApplicationProvider
 import dev.recally.domain.model.DueSummary
 import dev.recally.domain.model.ForecastDay
+import dev.recally.domain.model.PendingQueue
 import dev.recally.domain.model.Stats
+import dev.recally.domain.repository.ApprovalRepository
 import dev.recally.domain.repository.CardRepository
 import dev.recally.domain.repository.Result
 import dev.recally.domain.repository.StatsRepository
@@ -100,6 +102,7 @@ class PushDeepLinkTest {
                 TodayViewModel(
                     cardRepository = FakeCardRepository(Result.Success(dueSummary(dueCount = 12))),
                     statsRepository = FakeStatsRepository(Result.Success(sampleStats())),
+                    approvalRepository = FakeApprovalRepository(),
                     ioDispatcher = testDispatcher,
                     clock = Clock.fixed(Instant.parse("2026-09-09T01:00:00Z"), ZoneOffset.UTC),
                 )
@@ -134,6 +137,22 @@ class PushDeepLinkTest {
         private val result: Result<Stats> = Result.NetworkError(IOException("unused")),
     ) : StatsRepository {
         override suspend fun stats(): Result<Stats> = result
+    }
+
+    /** The queue is unreachable in this test; Today must render anyway. */
+    private class FakeApprovalRepository : ApprovalRepository {
+        override suspend fun pendingCards(): Result<PendingQueue> = Result.NetworkError(IOException("no route to host"))
+
+        override suspend fun approveCard(
+            cardId: Long,
+            front: String?,
+            back: String?,
+        ): Result<Unit> = throw UnsupportedOperationException("Today never approves cards")
+
+        override suspend fun rejectCard(
+            cardId: Long,
+            reason: String?,
+        ): Result<Unit> = throw UnsupportedOperationException("Today never rejects cards")
     }
 
     private companion object {

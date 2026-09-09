@@ -39,8 +39,20 @@ class PendingCardResponse(BaseModel):
         )
 
 
+class PendingCounts(BaseModel):
+    """Collection-wide queue totals for the home-screen tiles (docs/api-spec.md).
+
+    They deliberately ignore the route's `status`/`book_id`/`chapter` filters:
+    Today must render the right numbers before any filter exists (issue #132).
+    """
+
+    pending_review: int
+    needs_human: int
+
+
 class PendingCardsResponse(BaseModel):
     cards: list[PendingCardResponse]
+    counts: PendingCounts
 
 
 class ApproveCardRequest(BaseModel):
