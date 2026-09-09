@@ -7,15 +7,16 @@ an HTTP request, so this module must not import FastAPI (docs/backend.md,
 "Layering" rule 1; enforced by tests/scheduling/test_jobs_layering.py).
 
 `notify` is wired to the notifier seam step 5b fills. `optimizer` runs the step
-6a-a fit (`scheduling/optimizer.py`). `learner` is registered as a known job name
-whose implementation belongs to step 6b: it raises `JobNotImplementedError` so a
-caller gets a loud 501, never a silent success for a job that does not exist yet.
+6a-a fit (`scheduling/optimizer.py`). `learner` runs the step 6b-a guidance job
+(`scheduling/learner.py`). `JobNotImplementedError` remains for the next known
+job name that lands before its implementation does: a caller gets a loud 501,
+never a silent success for a job that does not exist yet.
 """
 
 from typing import Literal
 
 from recally.container import Container
-from recally.scheduling import notifier, optimizer
+from recally.scheduling import learner, notifier, optimizer
 
 JobName = Literal["notify", "learner", "optimizer"]
 
@@ -30,11 +31,14 @@ class JobNotImplementedError(Exception):
 
 def run_job(job: JobName, container: Container) -> None:
     """Run one scheduled job on demand. Unknown names are rejected upstream by
-    request validation (422); known-but-unbuilt names raise here (501)."""
+    request validation (422)."""
     if job == "notify":
         notifier.send_due_push(container)
         return
     if job == "optimizer":
         optimizer.fit_parameters(container)
+        return
+    if job == "learner":
+        learner.generate_guidance(container)
         return
     raise JobNotImplementedError(job)

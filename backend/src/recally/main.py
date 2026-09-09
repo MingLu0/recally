@@ -2,8 +2,9 @@
 
 The lifespan resolves settings so a missing `RECALLY_API_KEY` fails startup rather
 than the first request; it also owns the in-process APScheduler — the nightly
-optimizer on `LEARNER_CRON` below, the notifier tick with step 5b — which is why
-startup work lives there and not at module import time.
+optimizer (stage A) and learner guidance job (stage B) on `LEARNER_CRON` below,
+the notifier tick with step 5b — which is why startup work lives there and not at
+module import time.
 """
 
 from collections.abc import AsyncIterator
@@ -31,16 +32,29 @@ def _run_nightly_optimizer() -> None:
     run_job("optimizer", get_container())
 
 
+def _run_nightly_learner() -> None:
+    """The APScheduler entry point for `{"job": "learner"}` (stage B). Same
+    late-container rule as the optimizer above; both ride `LEARNER_CRON`."""
+    run_job("learner", get_container())
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     timezone = ZoneInfo(settings.timezone)
     scheduler = BackgroundScheduler(timezone=timezone)
+    trigger = CronTrigger.from_crontab(settings.learner_cron, timezone=timezone)
     scheduler.add_job(
         _run_nightly_optimizer,
-        CronTrigger.from_crontab(settings.learner_cron, timezone=timezone),
+        trigger,
         id="optimizer",
         name="nightly FSRS optimizer (Learner stage A)",
+    )
+    scheduler.add_job(
+        _run_nightly_learner,
+        trigger,
+        id="learner",
+        name="nightly Learner stage B (writer_guidance)",
     )
     scheduler.start()
     try:
