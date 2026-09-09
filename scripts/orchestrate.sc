@@ -588,7 +588,7 @@ object Orchestrator:
     val header = s"╭─ 🍊 recally orch ─ $now " + "─" * 20
     val graphLines = if graph.isEmpty then Nil else Vector("│") ++ graph.map(g => s"│  $g") ++ Vector("│")
     val trackedLines = tracked.filter(t => ActivePhases(t.phase)).map(t =>
-      s"│  ${phaseGlyph(t.phase)} #${t.issue} ${phaseWord(t.phase)} (${t.agent})")
+      s"│  ${phaseGlyph(t.phase)} #${t.issue} ${shortTitle(t.title)} — ${phaseWord(t.phase)} (${t.agent})")
     val slotsLine = s"│  ⚡ $freeSlots slots free"
     val actionLines = actions.map(a => yellow(s"│  ⚠️  $a"))
     val footer = if actions.isEmpty then "╰─ ✨ nothing needs you" else "╰─ ⚠️  items above need you"
@@ -658,6 +658,14 @@ object Orchestrator:
   def stepLabelOf(issue: GIssue): String =
     issue.labels.find(_.startsWith("step-")).map(_.replace("step-", "step ")).getOrElse("")
 
+  // "#136" means nothing without memory; the title is the context. Strips the
+  // redundant "Step X:"-style prefix (the section header already says it) and
+  // truncates to a budget tuned for an 80-col terminal with tree prefixes.
+  val MaxTitleLen = 42
+  def shortTitle(title: String): String =
+    val stripped = title.replaceFirst("^(Step \\S+|[A-Z][\\w-]*):\\s+", "")
+    if stripped.length <= MaxTitleLen then stripped else stripped.take(MaxTitleLen - 1) + "…"
+
   // Section name: the step label, else a non-track role label (e.g. "mvp"),
   // else "group".
   def sectionNameOf(issue: GIssue): String =
@@ -705,7 +713,7 @@ object Orchestrator:
     def line(i: GIssue, prefix: String): String =
       val (glyph, annotation) = nodeRender(i, byNumber, edges, tracked)
       val suffix = if annotation.isEmpty then "" else s" $annotation"
-      s"$prefix$glyph #${i.number}$suffix"
+      s"$prefix$glyph #${i.number} ${shortTitle(i.title)}$suffix"
 
     // children with an open same-level blocker nest under the lowest-numbered
     // one; mid-level parents render their own children one level deeper
@@ -736,14 +744,14 @@ object Orchestrator:
       val step = stepLabelOf(parent)
       val name = sectionNameOf(parent)
       if parent.state == "CLOSED" && subs.forall(_.state == "CLOSED") then
-        List(s"✅ $name #${parent.number}")
+        List(s"✅ $name #${parent.number} ${shortTitle(parent.title)}")
       else
         val allSubsClosed = subs.nonEmpty && subs.forall(_.state == "CLOSED")
         // only step parents carry the You verify gate; the inbox/MVP groups don't
         val header =
-          if allSubsClosed && step.nonEmpty then s"🔑 $name #${parent.number} — ready for You verify"
-          else if parent.state == "CLOSED" then s"✅ $name #${parent.number}"
-          else s"○ $name #${parent.number}"
+          if allSubsClosed && step.nonEmpty then s"🔑 $name #${parent.number} ${shortTitle(parent.title)} — ready for You verify"
+          else if parent.state == "CLOSED" then s"✅ $name #${parent.number} ${shortTitle(parent.title)}"
+          else s"○ $name #${parent.number} ${shortTitle(parent.title)}"
         header +: renderChildren(subs, "")
     }
 
