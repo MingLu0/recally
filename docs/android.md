@@ -205,7 +205,7 @@ Every screen and the endpoints behind it. Kept here so a gap between this doc an
 
 ## Push notifications (FCM)
 
-- Server sends a high-priority data message (FCM HTTP v1 via `firebase-admin`; the legacy API is shut down) when due cards exist: "12 cards due from Evals for AI Engineers". At most one per day, inside the configured window.
+- Server sends a high-priority data message (FCM HTTP v1 via `firebase-admin`; the legacy API is shut down) when due cards exist: "12 cards due from Evals for AI Engineers". At most one per day, inside the configured window. The data payload carries `due_count` and `book_title` and nothing else — no `notification` key (the system would render one itself, ignoring the channel and the deep link), and no card ids (stale by tap time; Today refetches). The app formats the copy itself.
 - When due cards span several books, the copy names the book contributing the most due cards (a tie breaks to the book whose card is due earliest) while the count stays the total across all books — the specs never said which book to name, and naming the largest contributor keeps the copy truthful without a per-book breakdown.
 - Data messages reach `onMessageReceived` in the background but not after the user force-stops the app, and some OEM battery managers (MIUI, ColorOS, One UI) drop them; the Today screen must work without ever having received a push.
 - Deep link opens **Today**, not a review session directly. The notification names a count ("12 cards due from Evals for AI Engineers") and Today is where that count is actionable — it also stays correct when some of those cards were already reviewed before the tap.

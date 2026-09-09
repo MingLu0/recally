@@ -3,11 +3,14 @@ package dev.recally.fcm
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import androidx.core.app.NotificationCompat
 import dev.recally.MainActivity
 import dev.recally.R
+import dev.recally.ui.navigation.EXTRA_DEEP_LINK_ROUTE
+import dev.recally.ui.navigation.Screen
 
 /**
  * Builds the due-cards notification from the server's **data** payload
@@ -32,8 +35,15 @@ object DueCardsNotification {
         return "$dueCount $noun due from $bookTitle"
     }
 
-    /** The intent posted with the notification — opens MainActivity. */
-    fun tapIntent(context: Context): Intent = Intent(context, MainActivity::class.java)
+    /**
+     * The intent posted with the notification. It opens MainActivity with the
+     * Today route as its only payload — no card ids, because anything the
+     * notification carried would be stale by the time it is tapped; Today
+     * refetches (docs/android.md, "Push notifications").
+     */
+    fun tapIntent(context: Context): Intent =
+        Intent(context, MainActivity::class.java)
+            .putExtra(EXTRA_DEEP_LINK_ROUTE, Screen.Today.route)
 
     /** Builds the notification, or null when the payload is not a due-cards message. */
     fun build(
@@ -42,10 +52,19 @@ object DueCardsNotification {
     ): Notification? {
         val dueCount = data[KEY_DUE_COUNT]?.toIntOrNull() ?: return null
         val bookTitle = data[KEY_BOOK_TITLE]?.takeIf { it.isNotBlank() } ?: return null
+        val tap =
+            PendingIntent.getActivity(
+                context,
+                0,
+                tapIntent(context),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            )
         return NotificationCompat
             .Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentText(formatBody(dueCount, bookTitle))
+            .setContentIntent(tap)
+            .setAutoCancel(true)
             .build()
     }
 

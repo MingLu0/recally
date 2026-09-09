@@ -1,6 +1,7 @@
 package dev.recally.ui.navigation
 
 import android.content.Intent
+import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 
 /**
@@ -15,7 +16,17 @@ const val EXTRA_DEEP_LINK_ROUTE = "dev.recally.extra.DEEP_LINK_ROUTE"
 /** The route a notification tap asks for, or null when the intent is not one. */
 fun Intent.deepLinkRoute(): String? = getStringExtra(EXTRA_DEEP_LINK_ROUTE)
 
-/** Route a notification tap to Today. */
+/**
+ * Route a notification tap to Today. Today is the start destination, so this
+ * pops whatever was pushed on top of it (a session, a detail screen) and —
+ * `launchSingleTop` with the activity `singleTop` — a tap while Today is
+ * already on top never stacks a second entry. No saveState/restoreState:
+ * landing on Today is "go home", not a tab switch, so there is no per-tab
+ * state to preserve.
+ */
 fun NavHostController.navigateToTodayDeepLink() {
-    navigate(Screen.Today.route)
+    navigate(Screen.Today.route) {
+        popUpTo(graph.findStartDestination().id)
+        launchSingleTop = true
+    }
 }
