@@ -73,6 +73,9 @@ object Orchestrator:
     lastActionNeeded: List[String] = Nil,
     lastStatus: String = "",
     parentNotified: List[Int] = Nil,
+    // blocked_by edge cache (string keys for upickle); edges change only by
+    // human edit, so they refresh every 10th tick and on dispatch, not per tick.
+    graphEdges: Map[String, List[Int]] = Map.empty,
   )
   object State:
     given upickle.default.ReadWriter[State] = upickle.default.macroRW
@@ -565,28 +568,30 @@ object Orchestrator:
   // --dry-run (meta + dispatchable line). In TUI mode the lines go to the
   // pinned dashboard region; otherwise they print flat.
   def panelContent(meta: Option[String], tracked: List[TrackedIssue], freeSlots: Int,
-                   actions: List[String], extra: List[String]): Vector[String] =
+                   actions: List[String], extra: List[String], graph: List[String]): Vector[String] =
     val header = s"╭─ 🍊 recally orch ─ $now " + "─" * 20
+    val graphLines = if graph.isEmpty then Nil else Vector("│") ++ graph.map(g => s"│  $g") ++ Vector("│")
     val trackedLines = tracked.filter(t => ActivePhases(t.phase)).map(t =>
       s"│  ${phaseGlyph(t.phase)} #${t.issue} ${phaseWord(t.phase)} (${t.agent})")
     val slotsLine = s"│  ⚡ $freeSlots slots free"
     val actionLines = actions.map(a => yellow(s"│  ⚠️  $a"))
     val footer = if actions.isEmpty then "╰─ ✨ nothing needs you" else "╰─ ⚠️  items above need you"
-    Vector(header) ++ meta.toList.map(m => s"│  $m") ++ trackedLines ++
+    Vector(header) ++ meta.toList.map(m => s"│  $m") ++ graphLines ++ trackedLines ++
       Vector(slotsLine) ++ extra.map(e => s"│  $e") ++ actionLines ++ Vector(footer)
 
   def showPanel(meta: Option[String], tracked: List[TrackedIssue], freeSlots: Int,
-                actions: List[String], extra: List[String]): IO[Unit] =
-    val lines = panelContent(meta, tracked, freeSlots, actions, extra)
+                actions: List[String], extra: List[String], graph: List[String] = Nil): IO[Unit] =
+    val lines = panelContent(meta, tracked, freeSlots, actions, extra, graph)
     if Tui.active then IO.blocking(Tui.setPanel(lines)) else lines.traverse(IO.println).void
 
   def printPanel(runId: String, stepScope: Option[String], tracked: List[TrackedIssue],
-                 freeSlots: Int, actions: List[String], extra: List[String]): IO[Unit] =
+                 freeSlots: Int, actions: List[String], extra: List[String], graph: List[String] = Nil): IO[Unit] =
     showPanel(Some(s"scope ${stepScope.getOrElse("all")} · cap $WorktreeCap · pool ${AgentPool.mkString("→")} · run $runId"),
-      tracked, freeSlots, actions, extra)
+      tracked, freeSlots, actions, extra, graph)
 
-  def printChange(tracked: List[TrackedIssue], freeSlots: Int, actions: List[String], extra: List[String]): IO[Unit] =
-    showPanel(None, tracked, freeSlots, actions, extra)
+  def printChange(tracked: List[TrackedIssue], freeSlots: Int, actions: List[String], extra: List[String],
+                  graph: List[String] = Nil): IO[Unit] =
+    showPanel(None, tracked, freeSlots, actions, extra, graph)
 
   def heartbeat(tracked: List[TrackedIssue], actions: List[String]): IO[Unit] =
     val working = tracked.count(t => ActivePhases(t.phase))
@@ -598,7 +603,114 @@ object Orchestrator:
     shOpt(List("osascript", "-e",
       s"""display notification "$summary" with title "Recally orchestrator 🍊" sound name "Glass"""")).void
 
+  // --- project graph in the dashboard (ADR-014; tree layout) ---
+
+  case class GIssue(number: Int, title: String, state: String, labels: List[String],
+                    parent: Option[Int], children: List[Int])
+
+  // All graph-relevant issues: anything that is a parent or has one.
+  def projectIssues: IO[List[GIssue]] =
+    val Array(owner, name) = GithubRepo.split("/")
+    val query = """query($owner:String!,$name:String!){repository(owner:$owner,name:$name){issues(first:100,states:[OPEN,CLOSED],orderBy:{field:CREATED_AT,direction:ASC}){nodes{number title state labels(first:10){nodes{name}} parent{number} subIssues(first:30){nodes{number}}}}}}"""
+    gh(List("api", "graphql", "-f", s"owner=$owner", "-f", s"name=$name", "-f", s"query=$query"))
+      .map(ujson.read(_))
+      .map { json =>
+        json("data")("repository")("issues")("nodes").arr.toList
+          .map { n =>
+            GIssue(
+              n("number").num.toInt, n("title").str, n("state").str,
+              n("labels")("nodes").arr.map(_("name").str).toList,
+              if n("parent") != ujson.Null then Some(n("parent")("number").num.toInt) else None,
+              n("subIssues")("nodes").arr.map(_("number").num.toInt).toList,
+            )
+          }
+          .filter(i => i.parent.nonEmpty || i.children.nonEmpty)
+      }
+
+  // Refresh the edge cache for issues not yet cached. Edges change only by
+  // human edit, so missing-only refresh plus a periodic re-fetch is enough.
+  def refreshEdges(issues: List[GIssue], cache: Map[String, List[Int]], force: Boolean): IO[Map[String, List[Int]]] =
+    val targets = issues.filter(i => force || !cache.contains(i.number.toString))
+    targets.traverse { i =>
+      gh(List("api", s"repos/$GithubRepo/issues/${i.number}/dependencies/blocked_by",
+          "-q", "[.[].number] | @json"))
+        .map(out => ujson.read(out).arr.map(_.num.toInt).toList)
+        .handleError(_ => Nil) // fail closed: unknown edges render as '?', never block a tick
+        .map(edges => i.number.toString -> edges)
+    }.map(cache ++ _)
+
+  def stepLabelOf(issue: GIssue): String =
+    issue.labels.find(_.startsWith("step-")).map(_.replace("step-", "step ")).getOrElse("")
+
+  // glyph + inline annotation for one node
+  def nodeRender(issue: GIssue, issuesByNumber: Map[Int, GIssue], edges: Map[String, List[Int]],
+                 tracked: List[TrackedIssue]): (String, String) =
+    def quickGlyph(bi: GIssue): String =
+      tracked.find(_.issue == bi.number) match
+        case Some(t) if t.phase == Phase.Dispatched => "🌱"
+        case Some(t) if t.phase == Phase.PrOpen => "👀"
+        case Some(t) if t.phase == Phase.NeedsHuman => "🆘"
+        case _ =>
+          if bi.state == "CLOSED" then "✅" else if bi.labels.contains("manual") then "✋" else "○"
+    tracked.find(_.issue == issue.number) match
+      case Some(t) if t.phase == Phase.Dispatched => ("🌱", s"dispatched (${t.agent})")
+      case Some(t) if t.phase == Phase.PrOpen => ("👀", "PR open")
+      case Some(t) if t.phase == Phase.NeedsHuman => ("🆘", "needs you")
+      case _ =>
+        if issue.state == "CLOSED" then ("✅", "")
+        else if issue.labels.contains("manual") then ("✋", "manual")
+        else if !edges.contains(issue.number.toString) then ("?", "")
+        else
+          val openBlockers = edges(issue.number.toString)
+            .filter(b => issuesByNumber.get(b).exists(_.state != "CLOSED"))
+          if openBlockers.nonEmpty then
+            val refs = openBlockers.map(b => s"#$b${issuesByNumber.get(b).map(quickGlyph).getOrElse("?")}")
+            ("⏸", s"← ${refs.mkString(" ")}")
+          else ("○", "")
+
+  // Tree layout (ADR-014): one section per step; done steps collapse to one
+  // line; a sub-issue with an open same-step blocker nests under it; cross-step
+  // blockers stay inline annotations.
+  def graphRows(issues: List[GIssue], edges: Map[String, List[Int]],
+                tracked: List[TrackedIssue]): List[String] =
+    val byNumber = issues.map(i => i.number -> i).toMap
+    val parents = issues.filter(_.children.nonEmpty).sortBy(stepLabelOf)
+    def line(i: GIssue, prefix: String): String =
+      val (glyph, annotation) = nodeRender(i, byNumber, edges, tracked)
+      val suffix = if annotation.isEmpty then "" else s" $annotation"
+      s"$prefix$glyph #${i.number}$suffix"
+    parents.flatMap { parent =>
+      val subs = parent.children.flatMap(byNumber.get).sortBy(_.number)
+      val step = stepLabelOf(parent)
+      if parent.state == "CLOSED" && subs.forall(_.state == "CLOSED") then
+        List(s"✅ $step #${parent.number}")
+      else
+        val allSubsClosed = subs.nonEmpty && subs.forall(_.state == "CLOSED")
+        val parentGlyph = if allSubsClosed then s"🔑 $step #${parent.number} — ready for You verify"
+          else if parent.state == "CLOSED" then s"✅ $step #${parent.number}"
+          else s"○ $step #${parent.number}"
+        // nesting: open same-step blocker with the lowest number
+        val nestUnder: Map[Int, Int] = subs.flatMap { sub =>
+          edges.get(sub.number.toString).toList.flatten
+            .filter(b => subs.exists(_.number == b) && byNumber.get(b).exists(_.state != "CLOSED"))
+            .sorted.headOption.map(sub.number -> _)
+        }.toMap
+        val (nested, top) = subs.partition(s => nestUnder.contains(s.number))
+        val childrenOf = nested.groupBy(s => nestUnder(s.number))
+        val rows = scala.collection.mutable.ListBuffer(parentGlyph)
+        top.zipWithIndex.foreach { case (sub, idx) =>
+          val last = idx == top.size - 1
+          val branch = if last then "└─" else "├─"
+          rows += line(sub, s"$branch ")
+          childrenOf.getOrElse(sub.number, Nil).sortBy(_.number).foreach { child =>
+            rows += line(child, (if last then "    " else "│   ") + "└─→ ")
+          }
+        }
+        rows.toList
+    }
+
   // --- parent You verify gate (ADR-014) ---
+
 
   // parent is 0 for entries that predate the field; -1 marks "no parent" so we
   // do not refetch every tick.
@@ -696,13 +808,22 @@ object Orchestrator:
       rows <- parentRows(dispatched)
       rowTexts = rows.map(_._2)
       newlyComplete = rows.map(_._1).filterNot(state.parentNotified.contains)
-      signature = statusSignature(dispatched, freeAfter, actions, rowTexts)
+      // graph: issues query is fresh every tick; the edge cache refreshes on a
+      // slow cadence plus whenever we just dispatched (edges change only by
+      // human edit, so staleness is cosmetic)
+      graphIssues <- projectIssues.handleError(_ => Nil)
+      edges <-
+        if dryRun then refreshEdges(graphIssues, state.graphEdges, force = false)
+        else refreshEdges(graphIssues, state.graphEdges, force = tickNum % 10 == 0 || fresh.nonEmpty)
+      graph = if graphIssues.isEmpty then Nil else graphRows(graphIssues, edges, dispatched)
+      signature = statusSignature(dispatched, freeAfter, actions, rowTexts) + "|" + graph.mkString(";")
       changed = signature != state.lastStatus
       _ <-
         if dryRun then
           printPanel("(dry-run)", stepScope, dispatched, freeAfter, actions,
-            rowTexts ++ List(s"dispatchable now: ${if fresh.isEmpty then "none" else fresh.map(_.number).mkString(", ")}"))
-        else if forcePrint || changed then printChange(dispatched, freeAfter, actions, rowTexts)
+            rowTexts ++ List(s"dispatchable now: ${if fresh.isEmpty then "none" else fresh.map(_.number).mkString(", ")}"),
+            graph)
+        else if forcePrint || changed then printChange(dispatched, freeAfter, actions, rowTexts, graph)
         else if tickNum % HeartbeatEvery == 0 then heartbeat(dispatched, actions)
         else IO.unit
       _ <-
@@ -713,8 +834,8 @@ object Orchestrator:
             newlyComplete.traverse(p =>
               event(s"🔑 parent #$p — all sub-issues done, ready for You verify") >>
                 notifyMac(List(s"parent #$p ready for You verify"))) >>
-            saveState(State(dispatched, actions, signature, state.parentNotified ++ newlyComplete))
-    yield State(dispatched, actions, signature, state.parentNotified ++ newlyComplete)
+            saveState(State(dispatched, actions, signature, state.parentNotified ++ newlyComplete, edges))
+    yield State(dispatched, actions, signature, state.parentNotified ++ newlyComplete, edges)
 
   def loop(stepScope: Option[String], runId: String, tickNum: Int): IO[Unit] =
     tick(dryRun = false, stepScope, runId, tickNum, forcePrint = false) >>

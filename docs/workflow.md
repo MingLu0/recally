@@ -159,8 +159,11 @@ never lock — they are safe alongside a running loop.
 Logging is change-only (ADR-014): on a TTY the dashboard runs in the alternate screen, pinned at
 the top with the event log scrolling beneath (flat print-on-change when piped); events (dispatches,
 merges, conflicts, escalations) always print, a dim heartbeat every ten ticks proves the loop is
-alive, and every event is appended to `.orca/orchestrator.log`. A panel with the run meta renders at
-startup and for `--dry-run`, which doubles as the "state of the step" command. Needs-human issues are
+alive, and every event is appended to `.orca/orchestrator.log`. The panel's top section is the
+project graph — a per-step tree of sub-issues with live glyphs (dispatched, PR open, blocked-with-
+blocker, manual), so the dependency structure and the implementation progress are the same picture.
+A panel with the run meta renders at startup and for `--dry-run`, which doubles as the "state of the
+project" command. Needs-human issues are
 reconciled against reality each tick — a closed issue flips to merged, an unassigned one drops back
 into the dispatchable pool — so stale action-needed lines cannot outlive the situation that caused
 them. A macOS notification (banner + sound) fires when the needs-you set changes.
