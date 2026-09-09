@@ -2,9 +2,9 @@
 
 The lifespan resolves settings so a missing `RECALLY_API_KEY` fails startup rather
 than the first request; it also owns the in-process APScheduler — the nightly
-optimizer (stage A) and learner guidance job (stage B) on `LEARNER_CRON` below,
-the notifier tick with step 5b — which is why startup work lives there and not at
-module import time.
+optimizer (stage A) and learner guidance job (stage B) on `LEARNER_CRON`, and the
+notifier tick on `PUSH_CHECK_INTERVAL_MIN` — which is why startup work lives there
+and not at module import time.
 """
 
 from collections.abc import AsyncIterator
@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 from fastapi import FastAPI
 
 from recally.api.errors import register_error_handlers
@@ -38,6 +39,13 @@ def _run_nightly_learner() -> None:
     run_job("learner", get_container())
 
 
+def _run_notifier_tick() -> None:
+    """The APScheduler entry point for `{"job": "notify"}`. Same late-container rule
+    as the optimizer above: the tick is far more frequent than the nightly jobs, and
+    the notifier's own policy gates decide whether this tick sends anything."""
+    run_job("notify", get_container())
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
@@ -55,6 +63,12 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         trigger,
         id="learner",
         name="nightly Learner stage B (writer_guidance)",
+    )
+    scheduler.add_job(
+        _run_notifier_tick,
+        IntervalTrigger(minutes=settings.push_check_interval_min),
+        id="notify",
+        name="one-push-per-day notifier (hard rule 8)",
     )
     scheduler.start()
     try:

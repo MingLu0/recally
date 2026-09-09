@@ -9,7 +9,7 @@ documented names are a mix of `RECALLY_*` and bare ones (`LLM_MODEL_WRITER`,
 `AGENT_CRITIC`, `NEW_CARDS_PER_DAY`), so a blanket prefix would rename half of them.
 """
 
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 from functools import lru_cache
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -17,6 +17,21 @@ from zoneinfo import ZoneInfo
 from apscheduler.triggers.cron import CronTrigger
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _parse_push_window(value: str) -> tuple[time, time]:
+    """Parse "HH:MM-HH:MM" into (start, end). `strptime` rather than
+    `time.fromisoformat` so "08:00" parses on every supported Python."""
+    start, separator, end = value.partition("-")
+    if not separator:
+        raise ValueError("must be a local-time range, e.g. '08:00-21:00'")
+    try:
+        return (
+            datetime.strptime(start.strip(), "%H:%M").time(),
+            datetime.strptime(end.strip(), "%H:%M").time(),
+        )
+    except ValueError:
+        raise ValueError("must be a local-time range, e.g. '08:00-21:00'") from None
 
 
 class Settings(BaseSettings):
@@ -93,6 +108,22 @@ class Settings(BaseSettings):
         default="1,10", validation_alias="FSRS_LEARNING_STEPS_MINUTES"
     )
 
+    # Push policy (docs/config.md, "Scheduling and push"; hard rule 8). The window
+    # is a single local-time range string, "HH:MM-HH:MM" in RECALLY_TIMEZONE — a
+    # range, not two variables. Validated at startup so a typo fails boot rather
+    # than the first tick.
+    push_window: str = Field(default="08:00-21:00", validation_alias="PUSH_WINDOW")
+    # The APScheduler tick for the notify job.
+    push_check_interval_min: int = Field(
+        default=60, gt=0, validation_alias="PUSH_CHECK_INTERVAL_MIN"
+    )
+    # Service-account JSON for FCM HTTP v1. No default (docs/config.md marks it
+    # "required for push"): unset, the notifier logs and skips rather than failing
+    # startup for an install that never registered a device.
+    firebase_credentials_file: Path | None = Field(
+        default=None, validation_alias="FIREBASE_CREDENTIALS_FILE"
+    )
+
     # Learner stage A (docs/agents.md, "7. Learner"; docs/config.md, "Scheduling and
     # push"). Below this many review_logs the nightly fit writes nothing, so library
     # defaults stay active (docs/data-model.md, `fsrs_params`).
@@ -125,6 +156,21 @@ class Settings(BaseSettings):
         """Fail startup on a typo rather than the first missed nightly run."""
         CronTrigger.from_crontab(value)  # raises ValueError on a malformed expression
         return value
+
+    @field_validator("push_window")
+    @classmethod
+    def _push_window_is_a_local_time_range(cls, value: str) -> str:
+        """Fail startup on a typo rather than the first tick reading a broken window."""
+        start, end = _parse_push_window(value)
+        if not start < end:
+            raise ValueError("must be a local-time range with start before end, e.g. '08:00-21:00'")
+        return value
+
+    @property
+    def push_window_bounds(self) -> tuple[time, time]:
+        """The parsed window, e.g. "08:00-21:00" -> (08:00, 21:00). Start inclusive,
+        end exclusive."""
+        return _parse_push_window(self.push_window)
 
     @property
     def fsrs_learning_steps(self) -> tuple[timedelta, ...]:

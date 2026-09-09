@@ -16,6 +16,7 @@ dependencies = [
     # APScheduler 4.x is a pre-release with a different API; stay on 3.x (roadmap step 0).
     "apscheduler>=3.10,<4",
     "watchdog>=6",
+    "firebase-admin>=7.5.0",
 ]
 
 # The nightly FSRS fit (scheduling/optimizer.py) needs torch + pandas via the
@@ -56,6 +57,11 @@ select = ["E", "F", "I", "UP", "B"]
 python_version = "3.12"
 files = ["src/recally"]
 strict = true
+
+# firebase-admin ships no py.typed marker.
+[[tool.mypy.overrides]]
+module = "firebase_admin.*"
+ignore_missing_imports = true
 
 # APScheduler 3.x ships no stubs and no py.typed marker.
 [[tool.mypy.overrides]]
