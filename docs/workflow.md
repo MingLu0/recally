@@ -102,6 +102,10 @@ act (`scripts/orca-autostart-prompt.md`), so the next hourly tick skips an issue
 worked but has no PR yet. The script fails closed: any error prints nothing and exits 1, so a
 broken query can never cause a dispatch.
 
+Condition 2 has a filing consequence: a standalone bug found outside a step (e.g. during a You
+verify run) has no parent and **never dispatches**. File such bugs as sub-issues of the "Bug inbox"
+issue — it exists to give them a parent; the inbox itself is never dispatched and never closes.
+
 ### Auto-merge policy
 
 The dispatched agent may merge its own PR **only** when all five hold (ADR-012, ADR-013):
