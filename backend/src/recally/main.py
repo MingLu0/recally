@@ -12,7 +12,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from recally.api.errors import register_error_handlers
-from recally.api.routers import cards, decks, health, ingest, reviews, stats
+from recally.api.routers import cards, decks, devices, health, ingest, jobs, reviews, stats
 from recally.config import get_settings
 
 
@@ -38,6 +38,8 @@ def create_app() -> FastAPI:
     app.include_router(cards.router)
     app.include_router(reviews.router)
     app.include_router(stats.router)
+    app.include_router(devices.router)
+    app.include_router(jobs.router)
     return app
 
 

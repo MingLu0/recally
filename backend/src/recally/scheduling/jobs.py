@@ -1,0 +1,37 @@
+"""The `notify` / `learner` / `optimizer` entry points (docs/backend.md, "Package
+layout" and "Wiring and entry points").
+
+Every scheduler driver converges here — `POST /jobs/run`, an external cron, and
+the in-process APScheduler (phase 1) all call `run_job`. None of the last two is
+an HTTP request, so this module must not import FastAPI (docs/backend.md,
+"Layering" rule 1; enforced by tests/scheduling/test_jobs_layering.py).
+
+`notify` is wired to the notifier seam step 5b fills. `learner` and `optimizer`
+are registered as known job names whose implementations belong to step 6a/6b:
+they raise `JobNotImplementedError` so a caller gets a loud 501, never a silent
+success for a job that does not exist yet.
+"""
+
+from typing import Literal
+
+from recally.container import Container
+from recally.scheduling import notifier
+
+JobName = Literal["notify", "learner", "optimizer"]
+
+
+class JobNotImplementedError(Exception):
+    """A known job name whose implementation has not landed yet."""
+
+    def __init__(self, job: str) -> None:
+        super().__init__(f"Job {job!r} is not implemented yet.")
+        self.job = job
+
+
+def run_job(job: JobName, container: Container) -> None:
+    """Run one scheduled job on demand. Unknown names are rejected upstream by
+    request validation (422); known-but-unbuilt names raise here (501)."""
+    if job == "notify":
+        notifier.send_due_push(container)
+        return
+    raise JobNotImplementedError(job)
