@@ -230,6 +230,17 @@ object Orchestrator:
          shOpt(List("orca", "worktree", "rm", "--worktree", s"issue:$issue", "--json")).void
        else IO.unit)
 
+  // Reuse an existing issue-linked worktree instead of minting a `-2` suffix
+  // (the #95 duplicate-orphan case: a crash between worktree create and state
+  // save left an untracked worktree, and the next dispatch created another).
+  def worktreeExists(issue: Int): IO[Boolean] =
+    orca(List("worktree", "list")).map { result =>
+      findKey(result, "worktrees").map(_.arr.toList).getOrElse(Nil).exists { w =>
+        findKey(w, "linkedIssue").exists(li =>
+          li != ujson.Null && findKey(li, "number").exists(_.num.toInt == issue))
+      }
+    }.handleError(_ => false) // on listing failure, create as before
+
   def dispatchIssue(candidate: ReadyIssue, agent: String, repoId: String, runId: String): IO[TrackedIssue] =
     val assignment = s"\n\n---\nOrchestrator assignment: your issue is #${candidate.number}. " +
       s"Skip the 'Pick the issue' step; claim #${candidate.number} and implement it."
@@ -238,9 +249,12 @@ object Orchestrator:
       parent = candidate.parent)
     for
       _ <- event(s"🌱 #${candidate.number} dispatched → $agent — ${candidate.title}")
-      _ <- orca(List("worktree", "create", "--repo", s"id:$repoId",
-        "--name", s"issue-${candidate.number}-${slugify(candidate.title)}",
-        "--issue", candidate.number.toString, "--base-branch", "main"))
+      exists <- worktreeExists(candidate.number)
+      _ <-
+        if exists then event(dim(s"   ↳ reusing existing worktree for #${candidate.number}"))
+        else orca(List("worktree", "create", "--repo", s"id:$repoId",
+          "--name", s"issue-${candidate.number}-${slugify(candidate.title)}",
+          "--issue", candidate.number.toString, "--base-branch", "main")).void
       taskId <- createTask(promptText + assignment, s"Issue #${candidate.number}: ${candidate.title}", runId)
       tracked <- startWorker(taskId, candidate.number, agent, retryOf = None, runId)
         .map(dispatchId => blank.copy(taskId = taskId, dispatchId = dispatchId))
@@ -709,29 +723,57 @@ object Orchestrator:
       (if completed.isEmpty then IO.unit
        else event(s"😴 swept ${completed.size} completed worktree${if completed.size == 1 then "" else "s"} to sleep"))
 
+  // --- single-instance lock (loop mode only) ---
+  // An OS-level FileChannel lock: the kernel releases it on exit, kill or
+  // crash, so there is no stale-lock state to clean up. The file holds the
+  // PID so "what is running" is answerable. --once/--dry-run never lock —
+  // they are single-shot and safe alongside a running loop.
+  val LockPath = os.pwd / ".orca" / "orchestrator.lock"
+
+  def acquireLock: IO[Option[(java.nio.channels.FileChannel, java.nio.channels.FileLock)]] = IO.blocking {
+    if !os.exists(LockPath / os.up) then os.makeDir(LockPath / os.up)
+    val channel = new java.io.RandomAccessFile(LockPath.toString, "rw").getChannel
+    Option(channel.tryLock()) match
+      case Some(lock) =>
+        channel.truncate(0)
+        channel.write(java.nio.ByteBuffer.wrap(ProcessHandle.current().pid().toString.getBytes("UTF-8")))
+        Some((channel, lock)) // both returned so GC cannot release the lock early
+      case None =>
+        channel.close()
+        None
+  }
+
   def program(args: List[String]): IO[ExitCode] =
     val dryRun = args.contains("--dry-run")
     val once = args.contains("--once")
     val stepScope = args.find(_.startsWith("--step=")).map(_.stripPrefix("--step="))
     val useTui = !dryRun && !once && System.console() != null && UseColor
     if dryRun then tick(dryRun = true, stepScope, runId = "", tickNum = 0, forcePrint = true).void.as(ExitCode.Success)
-    else
+    else if once then
       loadState.flatMap { state0 =>
-        // One Run per PROJECT (persisted in state) so the mailbox survives
-        // restarts; every orca mutation passes --run explicitly because each
-        // CLI call is a fresh process with no binding.
         (if state0.runId.nonEmpty then IO.pure(state0.runId) else createRun).flatMap { runId =>
-          val body =
-            if once then tick(dryRun = false, stepScope, runId, tickNum = 1, forcePrint = true).void
-            else
-              (if useTui then IO.blocking(Tui.start()) else IO.unit) >>
+          tick(dryRun = false, stepScope, runId, tickNum = 1, forcePrint = true).void
+        }
+      }.as(ExitCode.Success)
+    else
+      acquireLock.flatMap {
+        case None =>
+          IO.println("🍊 orchestrator already running — see .orca/orchestrator.log (stop it with: kill $(cat .orca/orchestrator.lock))").as(ExitCode.Success)
+        case Some((channel, lock)) =>
+          loadState.flatMap { state0 =>
+            // One Run per PROJECT (persisted in state) so the mailbox survives
+            // restarts; every orca mutation passes --run explicitly because each
+            // CLI call is a fresh process with no binding.
+            (if state0.runId.nonEmpty then IO.pure(state0.runId) else createRun).flatMap { runId =>
+              ((if useTui then IO.blocking(Tui.start()) else IO.unit) >>
                 loadState.flatMap { state =>
                   val active = state.tracked.filter(t => ActivePhases(t.phase))
                   printPanel(runId, stepScope, state.tracked, WorktreeCap - active.size, state.lastActionNeeded, Nil) >>
                     sweepCompletedWorktrees(state)
-                } >> loop(stepScope, runId, tickNum = 1)
-          body.guarantee(IO.blocking(Tui.stop()))
-        }
+                } >> loop(stepScope, runId, tickNum = 1))
+                .guarantee(IO.blocking { lock.release(); channel.close(); Tui.stop() })
+            }
+          }
       }.as(ExitCode.Success)
 
 // .sc entry point: the script wrapper main runs top-level statements, so the

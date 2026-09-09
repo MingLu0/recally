@@ -25,6 +25,9 @@ Meanwhile the needs-human phase was write-once: `reconcile` skipped non-active p
 
 ## Consequences
 - **Accepted risk:** waves fan out fully automatically (cap 10). When a blocking issue merges, every newly unblocked sub-issue dispatches on the next tick. A systematically wrong interpretation (e.g. misreading a screen artboard) can land across several PRs before a human sees one; the bound is ticket test-list quality, CI, and the parent You verify gate.
+- **Cross-step dependencies must be recorded as dependency edges** — the precheck reads only the graph, so the roadmap's prose build order is not enforced unless wired. The #95 incident (a step-6 sub-issue dispatched while step 4 was open) is the canonical example; the `roadmap-issues` skill now wires sequential steps' sub-issues `blocked_by` the prior step's parent.
+- `dispatchIssue` reuses an existing issue-linked worktree instead of minting a `-2` suffix — the orphan case from a crash between worktree creation and state save.
+- Loop mode is single-instance via an OS-level lock on `.orca/orchestrator.lock` (kernel-released on exit or crash, so no stale-lock state). Two hand-started loops were a real failure mode — a forgotten second instance double-dispatches. `--once`/`--dry-run` never lock.
 - The hourly ADR-010 automation inherits the wider dispatchability set (any unblocked, non-manual sub-issue repo-wide). Scope control for it is deliberate enablement, and for the orchestrator `--step=<label>`.
 - `docs/workflow.md` loses the "`ready` vs. a blocker" section and the picker paragraph; the dispatchable-conditions table drops the label row and gains the `manual` exclusion.
 - State schema: `readyPrompted` is gone, `lastStatus` added (old state files read fine via defaults).
