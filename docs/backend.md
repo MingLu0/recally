@@ -45,6 +45,7 @@ backend/
     llm.py                        # sole LiteLLM wrapper; logs every call to llm_calls
     scheduling/
       fsrs.py                     # py-fsrs wrapper; server-authoritative review_card
+      optimizer.py                # Learner stage A: nightly fsrs.Optimizer fit -> fsrs_params
       notifier.py                 # one-push-per-day policy
       jobs.py                     # notify / learner / optimizer entry points for POST /jobs/run
     cli.py                        # recally CLI (roadmap step 3)
@@ -120,6 +121,7 @@ Every entry point converges on the same functions:
 
 - **Environment: `uv`.** A `.python-version` file at the repo root pins the interpreter (`3.12` — satisfies `py-fsrs` ≥ 3.10 without bleeding edge) so uv uses it everywhere, including the future Docker image. `uv.lock` is committed (this is an app, not a library) so dev, CI and Docker install bit-identical dependencies; upgrades are deliberate (`uv lock --upgrade`), never accidental.
 - **Dependency names.** `py-fsrs` is the project's name (and its GitHub repo); it publishes to PyPI as `fsrs`, so that is what `pyproject.toml` declares.
+- **The optimizer is an optional extra.** `fsrs.Optimizer` (Learner stage A, the nightly fit) needs torch + pandas via `fsrs[optimizer]` — declared as `[project.optional-dependencies]` → `optimizer`, never a main dependency: ~800MB of torch in every PR's `uv sync` for a job that runs nightly on one machine is a bad trade. Install it with `uv sync --extra optimizer`. Without it the optimizer job logs the install command and no-ops, and the fit tests (`@pytest.mark.optimizer`) skip, so CI stays green and fast.
 - **Ruff** (lint + format; replaces Flake8/isort/Autoflake/Black): config in `pyproject.toml` under `[tool.ruff]`, rule sets `E, F, I, UP, B`. Run: `uv run ruff check . && uv run ruff format --check .`.
 - **Mypy, strict on `src/recally/`**: config under `[tool.mypy]` in `pyproject.toml`. Strictness is load-bearing, not taste: ADR-007's protocol boundary only protects the pipeline if mypy rejects a variant that doesn't satisfy its role `Protocol`.
 - **pre-commit, ruff only**: `.pre-commit-config.yaml` runs `ruff check --fix` and `ruff format` on commit. Milliseconds fast; catches "forgot to lint" before CI. Nothing else runs in hooks.
