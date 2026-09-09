@@ -93,6 +93,7 @@ class ForecastChartTest {
                 lapseRateByType = emptyMap(),
                 lapseRateByGuidanceVersion = emptyMap(),
                 curationYield = 0.0,
+                nextDueAt = null,
                 forecast = forecast,
             )
     }
