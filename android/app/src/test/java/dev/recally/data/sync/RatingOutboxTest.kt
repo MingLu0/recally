@@ -15,6 +15,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
+import okhttp3.mockwebserver.SocketPolicy
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
@@ -67,7 +68,7 @@ class RatingOutboxTest {
         val dispatcher = UnconfinedTestDispatcher()
         flusher = RatingOutboxFlusher(api, dao, dispatcher)
         flushScheduler = FakeFlushScheduler()
-        outbox = RatingOutbox(dao, flushScheduler, dispatcher)
+        outbox = RoomRatingOutbox(dao, flushScheduler, dispatcher)
     }
 
     @After
@@ -98,6 +99,28 @@ class RatingOutboxTest {
             val result = flusherAfterDeath.flush()
             assertTrue("expected Completed, was $result", result is FlushResult.Completed)
             assertEquals(1, server.requestCount)
+            assertTrue(dao.getAll().isEmpty())
+        }
+
+    @Test
+    fun test_recorded_rating_survives_a_flush_failure() =
+        runTest {
+            outbox.record(reviewRating(cardId = 101, ratedAt = "2026-09-04T08:12:30Z"))
+
+            // The connection drops before any response: nothing is acknowledged.
+            server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AT_START))
+            val first = flusher.flush()
+            assertTrue("expected Retry, was $first", first is FlushResult.Retry)
+            assertEquals(
+                "a failed flush leaves the row in the DAO for the next attempt",
+                listOf(101L),
+                dao.getAll().map { it.cardId },
+            )
+
+            // The next attempt delivers the same rating and dequeues it.
+            server.enqueue(batchResponse(okResultJson(cardId = 101, ratedAt = "2026-09-04T08:12:30Z")))
+            val second = flusher.flush()
+            assertTrue("expected Completed, was $second", second is FlushResult.Completed)
             assertTrue(dao.getAll().isEmpty())
         }
 

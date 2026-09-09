@@ -3,12 +3,14 @@ package dev.recally.ui.screens.review
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dev.recally.data.sync.RatingOutbox
 import dev.recally.domain.model.Card
 import dev.recally.domain.model.DueSummary
 import dev.recally.domain.model.ReviewRating
 import dev.recally.domain.repository.CardRepository
 import dev.recally.domain.repository.Result
 import dev.recally.domain.repository.ReviewRepository
+import dev.recally.domain.repository.SettingsRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -38,6 +40,8 @@ class ReviewViewModel
     constructor(
         private val cardRepository: CardRepository,
         private val reviewRepository: ReviewRepository,
+        private val ratingOutbox: RatingOutbox,
+        private val settings: SettingsRepository,
         private val clock: Clock,
     ) : ViewModel() {
         private val _uiState = MutableStateFlow(ReviewUiState())
