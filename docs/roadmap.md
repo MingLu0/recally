@@ -62,7 +62,7 @@ Use the backend through the CLI for ~14 days. Before starting, write down the nu
 
 ## Feature gaps — API fields the Android design needs
 
-The Android design ([design-system.md](design/design-system.md)) displays six things no documented endpoint returns. They were found by auditing the mockups against [api-spec.md](api-spec.md) on 2026-09-07 and are **kept in the design deliberately** — the screens are built as intended and these endpoints catch up. Each must be resolved before the step 4 gate passes, either by extending the endpoint or by removing the element.
+The Android design ([design-system.md](design/design-system.md)) displays four things no documented endpoint returns. They were found by auditing the mockups against [api-spec.md](api-spec.md) on 2026-09-07 and are **kept in the design deliberately** — the screens are built as intended and these endpoints catch up. Each must be resolved before the step 4 gate passes, either by extending the endpoint or by removing the element. (The next-due timestamp was resolved as `next_due_at` on `GET /stats` in #134.)
 
 Ordered by how much depends on it.
 
@@ -71,12 +71,6 @@ Today's "8 to approve" / "3 need you" tiles, the Approve header's "8 pending", a
 
 **Add** `counts: { "pending_review": 5, "needs_human": 3 }` to `GET /cards/pending`, or a separate `GET /cards/pending/count`. One gap, three screens.
 - **Tests**: with 5 `pending_review` and 3 `needs_human` rows, the counts field matches; approving one card decrements the right bucket.
-
-### G3. Next due timestamp
-The session-summary sheet says "Next card due in 4 hours". `POST /reviews/{id}/rate` returns `next_due` for one card, and `stats.forecast` is day-granularity — neither yields an hours-away figure across the collection.
-
-**Add** `next_due_at` (ISO timestamp, nullable when nothing is scheduled) to `GET /stats` or `GET /reviews/due`.
-- **Tests**: with cards due at two future times, the field is the earlier; with none due, it is null and the UI shows its empty state rather than "in 0 hours".
 
 ### G4. Bulk approve
 The Approve screen's "Approve 5 ready" acts on several cards at once. `POST /cards/{id}/approve` is single-card; no batch endpoint exists.

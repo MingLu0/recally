@@ -40,8 +40,11 @@ import dev.recally.ui.theme.recallyColors
  * Again is a lapse depends on state the server owns (docs/android.md,
  * *Screens → 2*).
  *
- * Scoped out (step 4g, G3/G1): the "next card due" row (no endpoint returns a
- * next-due timestamp), the pending-approvals action, and the streak band.
+ * The "Next card due in 4 hours" line renders when `GET /stats` serves a
+ * `next_due_at` (issue #134); the timestamp is the server's, only the hours
+ * figure is formatted here (design-system.md, "Constraints").
+ *
+ * Scoped out (step 4g, G1): the pending-approvals action and the streak band.
  */
 @Composable
 fun SessionSummarySheet(
@@ -82,6 +85,15 @@ fun SessionSummarySheet(
                 style = MaterialTheme.typography.bodySmall,
                 color = colors.inkSoft,
             )
+            // Null when nothing is scheduled — the line is omitted, never
+            // "in 0 hours" (issue #134).
+            if (summary.nextDueLabel != null) {
+                Text(
+                    text = summary.nextDueLabel,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.inkSoft,
+                )
+            }
         }
 
         Column(
@@ -201,6 +213,7 @@ private fun SessionSummarySheetPreview() {
                         hardCount = 2,
                         againCount = 1,
                         lapseCount = 1,
+                        nextDueLabel = "Next card due in 4 hours",
                     ),
                 onDone = {},
             )

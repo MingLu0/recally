@@ -21,7 +21,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import java.io.IOException
+import java.time.Clock
 import java.time.Instant
+import java.time.ZoneOffset
 
 /**
  * ViewModel gate for roadmap step 4f (issue #57). Fake repositories on a
@@ -77,6 +79,7 @@ class TodayViewModelTest {
             cardRepository = FakeCardRepository(dueResult),
             statsRepository = FakeStatsRepository(statsResult),
             ioDispatcher = testDispatcher,
+            clock = FIXED_CLOCK,
         )
 
     @Test
@@ -143,7 +146,7 @@ class TodayViewModelTest {
         }
 
     @Test
-    fun test_nothing_due_state_has_no_hours_figure() =
+    fun test_nothing_due_state_shows_next_due_in_hours_when_served() =
         runTest {
             val nothingDue =
                 DueSummary(
@@ -152,26 +155,43 @@ class TodayViewModelTest {
                     learningStepsMinutes = listOf(1, 10),
                     cards = emptyList(),
                 )
-            val viewModel = viewModelWith(dueResult = Result.Success(nothingDue))
+            // `GET /stats` serves the hours-away figure (issue #134): four
+            // hours from the fixed clock.
+            val statsResult =
+                Result.Success(sampleStats(nextDueAt = FIXED_INSTANT.plusSeconds(4 * 3600)))
+            val viewModel =
+                viewModelWith(dueResult = Result.Success(nothingDue), statsResult = statsResult)
             advanceUntilIdle()
 
             val state = viewModel.uiState.value
             assertTrue("zero due and zero new renders the nothing-due state", state.nothingDue)
             assertFalse(state.isLoading)
+            assertEquals("next card in 4 hours", state.nextDueLabel)
+        }
 
-            // G3 is scoped out (issue #57): `stats.forecast` is day-granularity
-            // and yields no hours-away number, so no such figure may exist.
-            val hoursFields =
-                TodayUiState::class.java.declaredFields.filter { isNextDueHoursField(it.name) }
-            assertTrue(
-                "TodayUiState carries no next-due-in-hours value: $hoursFields",
-                hoursFields.isEmpty(),
-            )
+    @Test
+    fun test_nothing_due_shows_no_hours_figure_when_next_due_at_is_null() =
+        runTest {
+            // Negative: a null `next_due_at` keeps the bare nothing-due
+            // treatment — never an "in 0 hours" figure (issue #134).
+            val nothingDue =
+                DueSummary(
+                    dueCount = 0,
+                    newCount = 0,
+                    learningStepsMinutes = listOf(1, 10),
+                    cards = emptyList(),
+                )
+            val viewModel =
+                viewModelWith(
+                    dueResult = Result.Success(nothingDue),
+                    statsResult = Result.Success(sampleStats(nextDueAt = null)),
+                )
+            advanceUntilIdle()
 
-            // Meta-assertion: the check has teeth. A state that did carry the
-            // figure must be flagged by the predicate above.
-            assertTrue(isNextDueHoursField("nextDueInHours"))
-            assertTrue(isNextDueHoursField("hoursUntilNextCard"))
+            val state = viewModel.uiState.value
+            assertTrue("zero due and zero new renders the nothing-due state", state.nothingDue)
+            assertFalse(state.isLoading)
+            assertNull("no next_due_at means no hours figure", state.nextDueLabel)
         }
 
     @Test
@@ -192,10 +212,8 @@ class TodayViewModelTest {
     }
 
     private companion object {
-        fun isNextDueHoursField(name: String): Boolean {
-            val lower = name.lowercase()
-            return lower.contains("nextdue") || lower.contains("hours")
-        }
+        val FIXED_INSTANT: Instant = Instant.parse("2026-09-09T01:00:00Z")
+        val FIXED_CLOCK: Clock = Clock.fixed(FIXED_INSTANT, ZoneOffset.UTC)
 
         fun isPendingCountField(name: String): Boolean {
             val lower = name.lowercase()
@@ -205,7 +223,7 @@ class TodayViewModelTest {
                 lower.contains("needshuman")
         }
 
-        fun sampleStats(): Stats =
+        fun sampleStats(nextDueAt: Instant? = null): Stats =
             Stats(
                 streakDays = 9,
                 reviewsToday = 23,
@@ -213,6 +231,7 @@ class TodayViewModelTest {
                 lapseRateByType = mapOf("qa" to 0.11),
                 lapseRateByGuidanceVersion = mapOf("1" to 0.19),
                 curationYield = 0.83,
+                nextDueAt = nextDueAt,
                 forecast = listOf(ForecastDay(date = "2026-09-05", due = 14)),
             )
     }

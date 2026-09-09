@@ -30,7 +30,9 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.io.IOException
+import java.time.Clock
 import java.time.Instant
+import java.time.ZoneOffset
 
 /**
  * Push deep-link gate for roadmap step 5c (issue #91): a notification tap
@@ -99,6 +101,7 @@ class PushDeepLinkTest {
                     cardRepository = FakeCardRepository(Result.Success(dueSummary(dueCount = 12))),
                     statsRepository = FakeStatsRepository(Result.Success(sampleStats())),
                     ioDispatcher = testDispatcher,
+                    clock = Clock.fixed(Instant.parse("2026-09-09T01:00:00Z"), ZoneOffset.UTC),
                 )
             advanceUntilIdle()
 
@@ -150,6 +153,7 @@ class PushDeepLinkTest {
                 lapseRateByType = mapOf("qa" to 0.11),
                 lapseRateByGuidanceVersion = mapOf("1" to 0.19),
                 curationYield = 0.83,
+                nextDueAt = null,
                 forecast = listOf(ForecastDay(date = "2026-09-05", due = 14)),
             )
     }

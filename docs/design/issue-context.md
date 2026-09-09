@@ -45,12 +45,11 @@ All under `docs/design/`. Canvas: https://claude.ai/code/artifact/25472047-e5cc-
 
 ### Blockers — check before planning a screen
 
-Six API gaps, **G1–G6** in [`docs/roadmap.md`](docs/roadmap.md) under *Feature gaps*. The designs show data no documented endpoint returns; this was deliberate, and the endpoints are expected to catch up. Each has a proposed field shape and a test gate.
+Four API gaps remain in [`docs/roadmap.md`](docs/roadmap.md) under *Feature gaps*. The designs show data no documented endpoint returns; this was deliberate, and the endpoints are expected to catch up. Each has a proposed field shape and a test gate.
 
 | | Blocks | Needs |
 |---|---|---|
 | G1 | Today, Approve, Session summary | Pending counts on `GET /cards/pending` |
-| G3 | Session summary, Today empty state | A `next_due_at` timestamp |
 | G4 | Approve | A bulk-approve endpoint, or a recorded fan-out decision |
 | G5 | Book detail, Decks | `GET /decks/{book_id}/cards` has no documented response at all |
 | G6 | Decks | A truncated count per book |

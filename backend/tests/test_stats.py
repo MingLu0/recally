@@ -346,16 +346,58 @@ def test_stats_on_empty_database_returns_zeros_not_errors(client: TestClient) ->
         "lapse_rate_by_type": {},
         "lapse_rate_by_guidance_version": {},
         "curation_yield": 0.0,
+        "next_due_at": None,
         "forecast": [],
     }
 
 
-def test_stats_has_no_next_due_at_field(client: TestClient) -> None:
-    """Negative: `next_due_at` is gap G3, scoped out of step 3e (roadmap.md, "Feature gaps")."""
-    response = client.get("/stats", headers={"X-API-Key": TEST_API_KEY})
+def test_next_due_at_is_the_earliest_future_due(container: Container) -> None:
+    """Two approved cards due at two future times: the earlier one is the answer.
 
-    assert response.status_code == 200
-    assert "next_due_at" not in response.json()
+    A `pending_review` card due sooner still does not win — nothing is
+    scheduled before approval (hard rule 1) — and an overdue card is due now,
+    not next, so it is not the figure either.
+    """
+    with container.session() as session:
+        earlier_card = _card(session)
+        later_card = _card(session)
+        unapproved_card = _card(session, status="pending_review")
+        overdue_card = _card(session)
+        session.add_all(
+            [
+                CardState(card_id=earlier_card.id, state="review", due=_local(1, 8), user_id=1),
+                CardState(card_id=later_card.id, state="review", due=_local(2, 8), user_id=1),
+                CardState(card_id=unapproved_card.id, state="new", due=_local(0, 6), user_id=1),
+                CardState(card_id=overdue_card.id, state="review", due=_local(-1, 8), user_id=1),
+            ]
+        )
+        session.commit()
+        assert _stats(session).next_due_at == _local(1, 8)
+
+
+def test_next_due_at_is_null_when_nothing_is_scheduled(container: Container) -> None:
+    """Negative: an approved card with no `card_state` row is unscheduled, so
+    there is no next due — null, never a made-up instant."""
+    with container.session() as session:
+        _card(session)
+        session.commit()
+        assert _stats(session).next_due_at is None
+
+
+def test_next_due_at_ignores_suspended_cards(container: Container) -> None:
+    """Negative: the buried card is due sooner than every other card, but a
+    suspended card is out of rotation (ADR-008), so it does not become the answer."""
+    with container.session() as session:
+        buried_card = _card(session, suspended_until=NOW_UTC + timedelta(hours=6))
+        in_rotation_card = _card(session)
+        session.add_all(
+            [
+                CardState(card_id=buried_card.id, state="review", due=_local(0, 6), user_id=1),
+                CardState(card_id=in_rotation_card.id, state="review", due=_local(1, 8), user_id=1),
+            ]
+        )
+        session.commit()
+        assert _stats(session).next_due_at == _local(1, 8)
 
 
 def test_stats_requires_the_api_key(client: TestClient) -> None:

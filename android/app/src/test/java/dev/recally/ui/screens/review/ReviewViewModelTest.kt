@@ -5,10 +5,12 @@ import dev.recally.domain.model.Card
 import dev.recally.domain.model.DueSummary
 import dev.recally.domain.model.RateOutcome
 import dev.recally.domain.model.ReviewRating
+import dev.recally.domain.model.Stats
 import dev.recally.domain.repository.CardRepository
 import dev.recally.domain.repository.Result
 import dev.recally.domain.repository.ReviewRepository
 import dev.recally.domain.repository.SettingsRepository
+import dev.recally.domain.repository.StatsRepository
 import dev.recally.domain.repository.StoredConnection
 import dev.recally.ui.components.buildClozeAnnotatedString
 import dev.recally.ui.components.parseClozeSegments
@@ -520,8 +522,14 @@ class ReviewViewModelTest {
             reviewRepository = reviewRepository,
             ratingOutbox = ratingOutbox,
             settings = settings,
+            statsRepository = FakeStatsRepository(),
             clock = clock,
         )
+
+    /** The summary sheet's next-due fetch is not under test here; it stays unanswered. */
+    private class FakeStatsRepository : StatsRepository {
+        override suspend fun stats(): Result<Stats> = Result.NetworkError(IOException("no stats in review tests"))
+    }
 
     /**
      * In-memory [RatingOutbox]. [queuedCountFlow] stands in for the DAO's

@@ -1,14 +1,15 @@
 """`GET /stats` payload (docs/api-spec.md, "Stats").
 
-Every key of the documented example response is here, and nothing else: the
-hours-away next-due figure is gap G3 and per-book completion is gap G2, both scoped
-out of step 3e (docs/roadmap.md, "Feature gaps").
+Every key of the documented example response is here, and nothing else:
+per-book completion is gap G2, scoped out of step 3e (docs/roadmap.md,
+"Feature gaps").
 """
 
 from datetime import date
 
 from pydantic import BaseModel
 
+from recally.schemas.types import UtcDatetime
 from recally.services.stats import StatsSummary
 
 
@@ -27,6 +28,10 @@ class StatsResponse(BaseModel):
     # Keyed on `cards.guidance_version` as strings; null guidance is omitted.
     lapse_rate_by_guidance_version: dict[str, float]
     curation_yield: float
+    # Earliest future due across approved, unsuspended cards; null when
+    # nothing is scheduled. `UtcDatetime` so it renders with the Z suffix
+    # like every other timestamp in the API.
+    next_due_at: UtcDatetime | None
     forecast: list[ForecastEntry]
 
     @classmethod
@@ -38,5 +43,6 @@ class StatsResponse(BaseModel):
             lapse_rate_by_type=summary.lapse_rate_by_type,
             lapse_rate_by_guidance_version=summary.lapse_rate_by_guidance_version,
             curation_yield=summary.curation_yield,
+            next_due_at=summary.next_due_at,
             forecast=[ForecastEntry(date=entry.date, due=entry.due) for entry in summary.forecast],
         )
