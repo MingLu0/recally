@@ -19,6 +19,7 @@ class DeckSummary:
     title: str
     total: int
     due: int
+    progress: float
 
 
 @dataclass(frozen=True)
@@ -47,6 +48,11 @@ def list_decks(
     A card reaches its book through `curated_unit_highlights`, and a grouped unit can
     cover several highlights of the same book, so cards are counted over DISTINCT ids.
     Only `approved` cards count: nothing else has entered scheduling (hard rule 1).
+
+    `progress` is the share of those approved cards whose FSRS state is `review`
+    (docs/data-model.md, `card_state`) — one more conditional count over the join this
+    query already makes. A book with no approved cards reports 0.0, never a divide by
+    zero.
     """
     as_of = now or utc_now()
 
@@ -55,12 +61,15 @@ def list_decks(
     # `GET /reviews/due` cannot drift apart.
     is_due = due_cards_predicate(as_of)
 
-    statement: Select[tuple[int, str, int, int]] = (
+    statement: Select[tuple[int, str, int, int, int]] = (
         select(
             Book.id,
             Book.title,
             func.count(func.distinct(Card.id)).label("total"),
             func.count(func.distinct(case((is_due, Card.id)))).label("due"),
+            func.count(func.distinct(case((CardState.state == "review", Card.id)))).label(
+                "in_review"
+            ),
         )
         .select_from(Book)
         .outerjoin(Highlight, Highlight.book_id == Book.id)
@@ -74,8 +83,14 @@ def list_decks(
     )
 
     return [
-        DeckSummary(book_id=book_id, title=title, total=total, due=due)
-        for book_id, title, total, due in session.execute(statement).all()
+        DeckSummary(
+            book_id=book_id,
+            title=title,
+            total=total,
+            due=due,
+            progress=in_review / total if total else 0.0,
+        )
+        for book_id, title, total, due, in_review in session.execute(statement).all()
     ]
 
 

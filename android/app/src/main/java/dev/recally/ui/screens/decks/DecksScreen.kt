@@ -33,15 +33,16 @@ import dev.recally.ui.theme.RecallySpacing
 import dev.recally.ui.theme.RecallyTheme
 import dev.recally.ui.theme.bookCoverColor
 import dev.recally.ui.theme.recallyColors
+import kotlin.math.roundToInt
 
 /**
  * The deck list (docs/design/RcDecks.dc.html): one row per book from
  * `GET /decks`. Pure composable — UiState in, callbacks out
  * (docs/android.md, "Pure screen composables").
  *
- * Rows show only what the endpoint documents: title, `total`, `due`. The
- * artboard's progress bar (G2) and TRUNCATED badge (G6) are scoped out until
- * the endpoints catch up.
+ * Rows show only what the endpoint documents: title, `total`, `due`, and the
+ * G2 `progress` bar. The artboard's TRUNCATED badge (G6) stays scoped out —
+ * the endpoint documents no truncated count.
  */
 @Composable
 fun DecksScreen(
@@ -134,10 +135,52 @@ private fun DeckRow(
                 style = MaterialTheme.typography.labelMedium,
                 color = colors.inkFaint,
             )
+            Spacer(Modifier.height(7.dp))
+            ProgressBar(progress = deck.progress)
         }
         if (deck.due > 0) {
             Badge(text = "${deck.due} DUE", fill = colors.primaryWash, textColor = colors.primary)
         }
+    }
+}
+
+/**
+ * The deck-row progress bar (docs/design/RcDecks.dc.html): a 5dp `pill` track
+ * with a proportional fill, plus the percentage in `labelMedium`/700. The
+ * artboard draws high progress in `success` and low in `accent`; half learned
+ * is where the fill flips.
+ */
+@Composable
+private fun ProgressBar(progress: Float) {
+    val colors = MaterialTheme.recallyColors
+    val fillColor = if (progress >= 0.5f) colors.success else colors.accent
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier =
+                Modifier
+                    .weight(1f)
+                    .height(5.dp)
+                    .clip(RoundedCornerShape(RecallyRadius.pill))
+                    .background(colors.track),
+        ) {
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxWidth(progress.coerceIn(0f, 1f))
+                        .height(5.dp)
+                        .background(fillColor, RoundedCornerShape(RecallyRadius.pill)),
+            )
+        }
+        Spacer(Modifier.width(RecallySpacing.sm))
+        Text(
+            "${(progress * 100).roundToInt()}%",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+            color = fillColor,
+        )
     }
 }
 
@@ -150,8 +193,8 @@ private fun DecksScreenPreview() {
                 DecksUiState(
                     decks =
                         listOf(
-                            Deck(bookId = 1, title = "Evals for AI Engineers", total = 48, due = 6),
-                            Deck(bookId = 2, title = "30 Agents in 30 Days", total = 83, due = 0),
+                            Deck(bookId = 1, title = "Evals for AI Engineers", total = 48, due = 6, progress = 0.62f),
+                            Deck(bookId = 2, title = "30 Agents in 30 Days", total = 83, due = 0, progress = 0.24f),
                         ),
                 ),
             onDeckClick = {},
@@ -182,7 +225,7 @@ private fun DecksScreenOfflinePreview() {
             uiState =
                 DecksUiState(
                     isOffline = true,
-                    decks = listOf(Deck(bookId = 1, title = "Evals for AI Engineers", total = 48, due = 6)),
+                    decks = listOf(Deck(bookId = 1, title = "Evals for AI Engineers", total = 48, due = 6, progress = 0.62f)),
                 ),
             onDeckClick = {},
             onRetry = {},

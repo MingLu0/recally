@@ -73,6 +73,7 @@ fun DeckDto.toDomain(): Deck =
         title = title,
         total = total,
         due = due,
+        progress = progress,
     )
 
 fun StatsResponse.toDomain(): Stats =

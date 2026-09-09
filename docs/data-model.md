@@ -93,6 +93,8 @@ Mirrors the `py-fsrs` 6.x `Card` object exactly so it round-trips through `Card.
 | due | datetime | next review (UTC) |
 | last_review | datetime, nullable | |
 
+Per-book **progress** (the `progress` field on `GET /decks`, docs/api-spec.md) is derived from this table: approved cards in the book whose `state` is `review`, divided by approved cards in the book; a book with no approved cards reports `0`. A card in `review` has graduated out of learning, so this is the most defensible reading of "how much of this book have I learned" — and the cheapest to compute, since the deck query already joins `card_state`.
+
 ### review_logs
 Full-fidelity from day one. This is the Learner's and the FSRS optimizer's training data, and the replay source for offline ratings.
 | col | type | notes |

@@ -50,7 +50,6 @@ Six API gaps, **G1–G6** in [`docs/roadmap.md`](docs/roadmap.md) under *Feature
 | | Blocks | Needs |
 |---|---|---|
 | G1 | Today, Approve, Session summary | Pending counts on `GET /cards/pending` |
-| G2 | Today, Decks | Per-book progress on `GET /decks` **and a definition** — "62% of a book" is undefined today |
 | G3 | Session summary, Today empty state | A `next_due_at` timestamp |
 | G4 | Approve | A bulk-approve endpoint, or a recorded fan-out decision |
 | G5 | Book detail, Decks | `GET /decks/{book_id}/cards` has no documented response at all |

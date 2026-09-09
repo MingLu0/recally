@@ -188,11 +188,14 @@ class DecksViewModelTest {
         }
 
     @Test
-    fun test_ui_state_has_no_progress_or_truncated_count() {
-        val gapField = Regex("progress|truncated", RegexOption.IGNORE_CASE)
-        // Meta-assertions: the check bites on both G2 and G6 shapes.
-        assertTrue(gapField.containsMatchIn("progressPercent"))
-        assertTrue(gapField.containsMatchIn("truncatedCount"))
+    fun test_ui_state_carries_progress_but_no_truncated_count() {
+        val truncatedField = Regex("truncated", RegexOption.IGNORE_CASE)
+        // Meta-assertions: the check bites on both the G2 and the G6 shape.
+        assertTrue(truncatedField.containsMatchIn("truncatedCount"))
+        assertTrue(
+            "Deck must carry the G2 progress field",
+            Deck::class.java.declaredFields.any { it.name == "progress" },
+        )
 
         val checkedTypes =
             listOf(DecksUiState::class, DeckCard::class, Deck::class, ChapterSummary::class)
@@ -200,13 +203,13 @@ class DecksViewModelTest {
             val offending =
                 type.java.declaredFields
                     .map { it.name }
-                    .filter { gapField.containsMatchIn(it) }
-            assertTrue("${type.simpleName} carries a G2/G6 field: $offending", offending.isEmpty())
+                    .filter { truncatedField.containsMatchIn(it) }
+            assertTrue("${type.simpleName} carries a G6 truncated field: $offending", offending.isEmpty())
         }
     }
 
     private fun detailViewModel(): DecksViewModel {
-        deckRepository.decksResult = Result.Success(listOf(Deck(BOOK_ID, "Evals for AI Engineers", 48, 6)))
+        deckRepository.decksResult = Result.Success(listOf(Deck(BOOK_ID, "Evals for AI Engineers", 48, 6, 0.625f)))
         return DecksViewModel(deckRepository, cardRepository, SavedStateHandle(mapOf("bookId" to BOOK_ID)))
     }
 
