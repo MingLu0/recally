@@ -143,7 +143,7 @@ Package root `dev.recally.ui` — layout in `docs/android.md`, *Project structur
 | Today | `ui/screens/today` | `GET /reviews/due`, `GET /stats`, `GET /decks` |
 | Review — front | `ui/screens/review` | `GET /reviews/due` |
 | Review — flipped | `ui/screens/review` | `POST /reviews/{id}/rate`, queued to `POST /reviews/rate-batch` |
-| Session summary | `ui/screens/review` | local session state + `GET /reviews/due` for next-due |
+| Session summary | `ui/screens/review` | local session state + `GET /stats` for next-due |
 | Approval queue | `ui/screens/approve` | `GET /cards/pending`, `POST /cards/{id}/approve`, `POST /cards/{id}/reject` |
 | Decks | `ui/screens/decks` | `GET /decks` |
 | Book — chapters | `ui/screens/decks` | `GET /decks/{book_id}/cards`, grouped client-side by chapter |
@@ -191,7 +191,6 @@ Tracked as **G1–G4** in [`docs/roadmap.md`](../roadmap.md) → *Feature gaps*,
 | # | Design element | Needs | Where |
 |---|---|---|---|
 | G1 | "8 to approve" / "3 need you" tiles; "8 pending"; "Approve 5 ready" | Counts on `GET /cards/pending`. | Today, Approve, Sheet |
-| G3 | "Next card due in 4 hours" | A `next_due_at` timestamp. `stats.forecast` is day-granularity. | Sheet |
 | G4 | "Approve 5 ready" bulk action | A batch endpoint, or a recorded decision that the client fans out. `needs_human` cards excluded either way. | Approve |
 | G5 | Per-card due dates and state; chapter counts | `GET /decks/{book_id}/cards` has no documented response at all. Needs `state` + `due` per card, and a `chapters` count on `GET /decks`. | Book, Decks |
 | G6 | "2 TRUNCATED" per book | A truncated count on `GET /decks`, or drop the badge. | Decks |
