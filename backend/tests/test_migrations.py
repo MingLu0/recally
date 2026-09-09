@@ -64,6 +64,30 @@ def test_migration_matches_the_models(migration_target: tuple[Config, Engine]) -
                 )
 
 
+def test_supersedes_card_id_migration_round_trips(
+    migration_target: tuple[Config, Engine],
+) -> None:
+    """Step 6b-b: `cards.supersedes_card_id` (the leech-rewrite self-FK,
+    docs/data-model.md) applies and rolls back cleanly under
+    `render_as_batch=True` (ADR-004) — upgrade, downgrade one step, upgrade again."""
+    config, engine = migration_target
+
+    command.upgrade(config, "head")
+    with engine.connect() as connection:
+        columns = {column["name"] for column in inspect(connection).get_columns("cards")}
+    assert "supersedes_card_id" in columns
+
+    command.downgrade(config, "-1")
+    with engine.connect() as connection:
+        columns = {column["name"] for column in inspect(connection).get_columns("cards")}
+    assert "supersedes_card_id" not in columns
+
+    command.upgrade(config, "head")
+    with engine.connect() as connection:
+        columns = {column["name"] for column in inspect(connection).get_columns("cards")}
+    assert "supersedes_card_id" in columns
+
+
 def test_every_table_carries_user_id() -> None:
     """ADR-004: every table has `user_id`, not null, defaulting to 1, ready for multi-user."""
     for table_name, table in Base.metadata.tables.items():
