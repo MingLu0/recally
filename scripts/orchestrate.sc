@@ -65,13 +65,13 @@ object Orchestrator:
   // notification fires only when the action-needed set changes.
   // lastStatus is the dedup signature for the terminal dashboard: it renders
   // only when the tracked picture changes (ADR-014, quiet logs).
-  // runId is the orchestration Run id, persisted so the mailbox survives
-  // restarts. parentNotified dedups the You verify announcement per parent.
+  // parentNotified dedups the You verify announcement per parent.
+  // NOTE: no runId — a Run dies with its coordinator terminal, so persisting
+  // it across restarts never works; one Run is created per process (ADR-014).
   case class State(
     tracked: List[TrackedIssue],
     lastActionNeeded: List[String] = Nil,
     lastStatus: String = "",
-    runId: String = "",
     parentNotified: List[Int] = Nil,
   )
   object State:
@@ -224,20 +224,27 @@ object Orchestrator:
   // After a failed worker-start: close any residual agent terminals, and
   // remove the worktree only when there is no dispatch to retry through (a
   // present dispatchId means reconcile's Failed branch will retry into it).
-  def cleanupAfterStartFailure(issue: Int, e: OrcaException): IO[Unit] =
+  // After a failed worker-start: close any residual agent terminals, and
+  // remove the worktree only when THIS dispatch created it (createdHere) and
+  // there is no dispatch to retry through. Never remove a reused worktree —
+  // it may hold work from an earlier run.
+  def cleanupAfterStartFailure(issue: Int, e: OrcaException, createdHere: Boolean): IO[Unit] =
     e.residualTerminals.traverse(t => shOpt(List("orca", "terminal", "close", "--terminal", t, "--json"))).void *>
-      (if e.dispatchId.isEmpty then
+      (if e.dispatchId.isEmpty && createdHere then
          shOpt(List("orca", "worktree", "rm", "--worktree", s"issue:$issue", "--json")).void
        else IO.unit)
 
   // Reuse an existing issue-linked worktree instead of minting a `-2` suffix
-  // (the #95 duplicate-orphan case: a crash between worktree create and state
-  // save left an untracked worktree, and the next dispatch created another).
+  // (the #95/#89 duplicate-orphan case: a crash between worktree create and
+  // state save leaves an untracked worktree, and the next dispatch creates
+  // another). linkedIssue is a bare issue number in the JSON, not an object.
   def worktreeExists(issue: Int): IO[Boolean] =
     orca(List("worktree", "list")).map { result =>
       findKey(result, "worktrees").map(_.arr.toList).getOrElse(Nil).exists { w =>
-        findKey(w, "linkedIssue").exists(li =>
-          li != ujson.Null && findKey(li, "number").exists(_.num.toInt == issue))
+        findKey(w, "linkedIssue").exists {
+          case num: ujson.Num => num.num.toInt == issue
+          case li => findKey(li, "number").exists(_.num.toInt == issue)
+        }
       }
     }.handleError(_ => false) // on listing failure, create as before
 
@@ -260,7 +267,7 @@ object Orchestrator:
         .map(dispatchId => blank.copy(taskId = taskId, dispatchId = dispatchId))
         .handleErrorWith {
           case e: OrcaException =>
-            cleanupAfterStartFailure(candidate.number, e) *> (e.dispatchId match
+            cleanupAfterStartFailure(candidate.number, e, createdHere = !exists) *> (e.dispatchId match
               case Some(dispatchId) =>
                 // the dispatch exists and is already marked failed; the normal
                 // reconcile Failed branch will retry/failover/escalate it
@@ -706,8 +713,8 @@ object Orchestrator:
             newlyComplete.traverse(p =>
               event(s"🔑 parent #$p — all sub-issues done, ready for You verify") >>
                 notifyMac(List(s"parent #$p ready for You verify"))) >>
-            saveState(State(dispatched, actions, signature, runId, state.parentNotified ++ newlyComplete))
-    yield State(dispatched, actions, signature, runId, state.parentNotified ++ newlyComplete)
+            saveState(State(dispatched, actions, signature, state.parentNotified ++ newlyComplete))
+    yield State(dispatched, actions, signature, state.parentNotified ++ newlyComplete)
 
   def loop(stepScope: Option[String], runId: String, tickNum: Int): IO[Unit] =
     tick(dryRun = false, stepScope, runId, tickNum, forcePrint = false) >>
@@ -750,29 +757,24 @@ object Orchestrator:
     val useTui = !dryRun && !once && System.console() != null && UseColor
     if dryRun then tick(dryRun = true, stepScope, runId = "", tickNum = 0, forcePrint = true).void.as(ExitCode.Success)
     else if once then
-      loadState.flatMap { state0 =>
-        (if state0.runId.nonEmpty then IO.pure(state0.runId) else createRun).flatMap { runId =>
-          tick(dryRun = false, stepScope, runId, tickNum = 1, forcePrint = true).void
-        }
+      // One Run per PROCESS: a Run dies with its coordinator terminal, so a
+      // persisted id is always stale after a restart (the #89 error storm).
+      createRun.flatMap { runId =>
+        tick(dryRun = false, stepScope, runId, tickNum = 1, forcePrint = true).void
       }.as(ExitCode.Success)
     else
       acquireLock.flatMap {
         case None =>
           IO.println("🍊 orchestrator already running — see .orca/orchestrator.log (stop it with: kill $(cat .orca/orchestrator.lock))").as(ExitCode.Success)
         case Some((channel, lock)) =>
-          loadState.flatMap { state0 =>
-            // One Run per PROJECT (persisted in state) so the mailbox survives
-            // restarts; every orca mutation passes --run explicitly because each
-            // CLI call is a fresh process with no binding.
-            (if state0.runId.nonEmpty then IO.pure(state0.runId) else createRun).flatMap { runId =>
-              ((if useTui then IO.blocking(Tui.start()) else IO.unit) >>
-                loadState.flatMap { state =>
-                  val active = state.tracked.filter(t => ActivePhases(t.phase))
-                  printPanel(runId, stepScope, state.tracked, WorktreeCap - active.size, state.lastActionNeeded, Nil) >>
-                    sweepCompletedWorktrees(state)
-                } >> loop(stepScope, runId, tickNum = 1))
-                .guarantee(IO.blocking { lock.release(); channel.close(); Tui.stop() })
-            }
+          createRun.flatMap { runId =>
+            ((if useTui then IO.blocking(Tui.start()) else IO.unit) >>
+              loadState.flatMap { state =>
+                val active = state.tracked.filter(t => ActivePhases(t.phase))
+                printPanel(runId, stepScope, state.tracked, WorktreeCap - active.size, state.lastActionNeeded, Nil) >>
+                  sweepCompletedWorktrees(state)
+              } >> loop(stepScope, runId, tickNum = 1))
+              .guarantee(IO.blocking { lock.release(); channel.close(); Tui.stop() })
           }
       }.as(ExitCode.Success)
 
