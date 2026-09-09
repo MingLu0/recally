@@ -2,9 +2,9 @@
 
 The router is a thin adapter over `recally.scheduling.jobs` (docs/backend.md,
 "Wiring and entry points"): `notify` invokes the notifier seam step 5b fills,
-`optimizer` runs the step 6a-a fit, `learner` is a known-but-unbuilt name that
-must answer 501 — a silent success for an unbuilt job is the failure mode to
-avoid — and an unknown name is a plain 422.
+`optimizer` runs the step 6a-a fit, `learner` runs the step 6b-a guidance job —
+the 501 placeholder for `learner` was retired by 6b-a (its wiring test lives in
+tests/scheduling/test_learner_job.py) — and an unknown name is a plain 422.
 """
 
 from collections.abc import Iterator
@@ -84,21 +84,6 @@ def test_run_optimizer_no_longer_returns_501(
 
     assert response.status_code == 200
     assert len(calls) == 1, f"the optimizer ran {len(calls)} times, expected exactly 1"
-
-
-def test_unimplemented_jobs_return_501_not_success(client: TestClient) -> None:
-    """`learner` is a registered name whose job belongs to step 6b: it must fail
-    loudly (501 problem+json), never pretend to have run. (`optimizer` left this
-    list in step 6a-a — see test_run_optimizer_no_longer_returns_501.)"""
-    for job in ("learner",):
-        response = client.post("/jobs/run", headers={"X-API-Key": TEST_API_KEY}, json={"job": job})
-
-        assert response.status_code == 501, (
-            f"{job!r} returned {response.status_code}: an unimplemented job must not report success"
-        )
-        assert response.json()["status"] == 501
-        assert response.json()["detail"]
-        assert response.headers["content-type"].startswith("application/problem+json")
 
 
 def test_unknown_job_name_is_422(client: TestClient) -> None:
