@@ -75,7 +75,7 @@ class FcmDeviceRegistrationTest {
     ) : DeviceRegistrationRepository {
         val tokens = mutableListOf<String>()
 
-        override suspend fun registerDevice(fcmToken: String): Result<Long> {
+        override suspend fun register(fcmToken: String): Result<Long> {
             tokens += fcmToken
             return result
         }

@@ -8,6 +8,13 @@ plugins {
     alias(libs.plugins.ktlint)
 }
 
+// google-services.json is gitignored (it comes from the Firebase console).
+// A contributor without it must still build: skip the plugin, Firebase never
+// initialises, and push is inert (docs/android.md, "Push notifications").
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
 android {
     namespace = "dev.recally"
     compileSdk = 36
@@ -69,6 +76,12 @@ dependencies {
     implementation(libs.work.runtime.ktx)
     implementation(libs.androidx.hilt.work)
     ksp(libs.androidx.hilt.compiler)
+
+    // FCM push (docs/android.md, "Push notifications"); the BOM pins the
+    // firebase-* versions. Works without google-services.json — see above.
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.messaging)
+    implementation(libs.kotlinx.coroutines.play.services)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

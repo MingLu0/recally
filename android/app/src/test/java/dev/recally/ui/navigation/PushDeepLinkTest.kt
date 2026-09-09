@@ -82,7 +82,7 @@ class PushDeepLinkTest {
         navController.navigateToTodayDeepLink()
         navController.navigateToTodayDeepLink()
 
-        val todayEntries = navController.backQueue.count { it.destination.route == Screen.Today.route }
+        val todayEntries = navController.currentBackStack.value.count { it.destination.route == Screen.Today.route }
         assertEquals("exactly one Today entry in the back stack", 1, todayEntries)
         assertEquals(Screen.Today.route, navController.currentBackStackEntry?.destination?.route)
     }

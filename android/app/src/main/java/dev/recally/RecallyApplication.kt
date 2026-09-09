@@ -6,6 +6,7 @@ import androidx.work.Configuration
 import dagger.hilt.android.HiltAndroidApp
 import dev.recally.data.settings.SettingsStore
 import dev.recally.di.DefaultDispatcher
+import dev.recally.fcm.FcmDeviceRegistration
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
@@ -32,6 +33,9 @@ class RecallyApplication :
     lateinit var settingsStore: SettingsStore
 
     @Inject
+    lateinit var deviceRegistration: FcmDeviceRegistration
+
+    @Inject
     @DefaultDispatcher
     lateinit var defaultDispatcher: CoroutineDispatcher
 
@@ -50,6 +54,9 @@ class RecallyApplication :
         // load leaves the cache empty and Settings reports the failure.
         applicationScope.launch(CoroutineExceptionHandler { _, _ -> }) {
             settingsStore.load()
+            // POST /devices on app start (docs/android.md, "Push
+            // notifications"); a no-op while Settings is unconfigured.
+            deviceRegistration.registerOnAppStart()
         }
     }
 }
