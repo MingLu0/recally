@@ -33,6 +33,7 @@ from recally.schemas.cards import (
     PatchCardRequest,
     PendingCardResponse,
     PendingCardsResponse,
+    PendingCounts,
     RejectCardRequest,
     SuspensionResponse,
 )
@@ -40,6 +41,7 @@ from recally.services.cards import (
     QUEUE_STATUSES,
     bury,
     list_pending_cards,
+    pending_counts,
     record_approval,
     record_rejection,
     suspend,
@@ -56,10 +58,18 @@ def get_pending_cards(
     book_id: int | None = None,
     chapter: str | None = None,
 ) -> PendingCardsResponse:
-    """The flat review queue, ordered by book, chapter, then `export_position`."""
+    """The flat review queue, ordered by book, chapter, then `export_position`.
+
+    `counts` is collection-wide on purpose (issue #132): it ignores the
+    filters above, because the home-screen tiles must be right before any
+    filter exists.
+    """
     statuses = (status,) if status is not None else QUEUE_STATUSES
     pending = list_pending_cards(session, statuses=statuses, book_id=book_id, chapter=chapter)
-    return PendingCardsResponse(cards=[PendingCardResponse.from_pending(card) for card in pending])
+    return PendingCardsResponse(
+        cards=[PendingCardResponse.from_pending(card) for card in pending],
+        counts=PendingCounts(**pending_counts(session)),
+    )
 
 
 @router.post("/{card_id}/approve", response_model=CardResponse)

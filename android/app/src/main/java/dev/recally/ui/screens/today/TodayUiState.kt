@@ -3,11 +3,14 @@ package dev.recally.ui.screens.today
 /**
  * The one immutable UiState for Today (docs/android.md, "One UiState per
  * screen"). Counts come from `GET /reviews/due`, the streak figures and
- * [nextDueLabel] from `GET /stats` (screen → endpoint map).
+ * [nextDueLabel] from `GET /stats` (screen → endpoint map), and the
+ * pending-queue buckets from the collection-wide `counts` on
+ * `GET /cards/pending` (G1, issue #132) — never from a list length. They
+ * stay null when the queue is unreachable: Today renders offline and the
+ * queue requires connectivity.
  *
- * Scoped out per issue #57 — no field here may carry a pending/approve or
- * needs-you count (G1) or per-book progress (G2); `TodayViewModelTest`
- * enforces the pending-count rule reflectively.
+ * Scoped out per issue #57 — no field here may carry per-book progress
+ * (G2).
  */
 data class TodayUiState(
     val isLoading: Boolean = true,
@@ -18,6 +21,8 @@ data class TodayUiState(
     val retention30d: Double? = null,
     /** "next card in 4 hours" from `next_due_at`, or null when nothing is scheduled. */
     val nextDueLabel: String? = null,
+    val pendingReviewCount: Int? = null,
+    val needsHumanCount: Int? = null,
     val isOffline: Boolean = false,
     val showCheckSettingsBanner: Boolean = false,
     val errorMessage: String? = null,

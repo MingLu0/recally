@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from recally.models import Card, CuratedUnitHighlight, Highlight
@@ -110,6 +110,24 @@ def list_pending_cards(
 
     pending.sort(key=lambda card: (card.book, card.chapter or "", card.first_export_position))
     return pending
+
+
+def pending_counts(session: Session, *, user_id: int = 1) -> dict[str, int]:
+    """Collection-wide queue totals over `QUEUE_STATUSES` (issue #132, roadmap G1).
+
+    The home-screen tiles must be right before any filter exists, so this
+    deliberately takes none of the list route's `status`/`book_id`/`chapter`
+    params. Both buckets are always present — an empty queue reports zeros,
+    not missing keys.
+    """
+    rows = session.execute(
+        select(Card.status, func.count())
+        .where(Card.user_id == user_id, Card.status.in_(QUEUE_STATUSES))
+        .group_by(Card.status)
+    ).all()
+    counts = dict.fromkeys(QUEUE_STATUSES, 0)
+    counts.update({status: count for status, count in rows})
+    return counts
 
 
 def record_approval(session: Session, card: Card) -> datetime:
