@@ -171,9 +171,10 @@ diff browsing; disk cleanup is a manual sweep (`orca worktree rm --worktree issu
 
 The dashboard's two human-gate surfaces: needs-you items are listed in the panel (and notified on
 change), and when every sub-issue of a tracked parent closes, a `🔑 parent #N — ready for You verify`
-row appears with a one-time notification. The Run id is persisted, so worker mailbox messages
-survive restarts and are drained each tick — though workers are instructed never to *ask* there;
-human contact is a GitHub issue comment.
+row appears with a one-time notification. Worker mailbox messages are drained each tick — though a
+Run dies with its process, so messages from before a restart are orphaned (accepted: nothing blocks
+on the mailbox), and workers are instructed never to *ask* there; human contact is a GitHub issue
+comment.
 
 ### Turning it on
 
