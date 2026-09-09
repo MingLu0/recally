@@ -401,18 +401,34 @@ object Orchestrator:
       case _ => reconcileActive(t, repoId, runId).map(Some(_))
 
   // needs-human is not terminal (ADR-014): the state file follows reality.
+  // PR checks come before the assignee check — a worker that finished keeps
+  // its assignment until merge, so the assignee means nothing once a PR exists.
   def reconcileNeedsHuman(t: TrackedIssue): IO[Option[TrackedIssue]] =
     issueState(t.issue).flatMap {
       case "CLOSED" =>
         event(green(s"🎉 #${t.issue} merged — closed while marked needs-human, following reality")) *>
           sleepWorktree(t.issue, t.dispatchId, announce = true) *> IO.pure(Some(t.copy(phase = Phase.Merged)))
       case _ =>
-        assigneeCount(t.issue).flatMap { count =>
-          if count == 0 then
-            event(s"🧹 #${t.issue} reset (unassigned) — dropped from tracking, redispatchable") *>
-              IO.pure(None)
-          else IO.pure(Some(t))
-        }
+        for
+          merged <- prsForIssue("merged", t.issue)
+          open <- prsForIssue("open", t.issue)
+          result <-
+            if merged.nonEmpty then
+              event(green(s"🎉 #${t.issue} merged — PR #${merged.head("number").num.toInt} landed while marked needs-human")) *>
+                sleepWorktree(t.issue, t.dispatchId, announce = true) *> IO.pure(Some(t.copy(phase = Phase.Merged)))
+            else if open.nonEmpty then
+              // worker recovered from escalation and opened a PR; resume the
+              // normal lifecycle (merge policy, conflict fix, sleep on merge)
+              event(s"🩹 #${t.issue} recovered — PR #${open.head("number").num.toInt} open, back in the flow") *>
+                IO.pure(Some(t.copy(phase = Phase.PrOpen)))
+            else
+              assigneeCount(t.issue).flatMap { count =>
+                if count == 0 then
+                  event(s"🧹 #${t.issue} reset (unassigned) — dropped from tracking, redispatchable") *>
+                    IO.pure(None)
+                else IO.pure(Some(t))
+              }
+        yield result
     }
 
   def reconcileActive(t: TrackedIssue, repoId: String, runId: String): IO[TrackedIssue] =
@@ -642,6 +658,13 @@ object Orchestrator:
   def stepLabelOf(issue: GIssue): String =
     issue.labels.find(_.startsWith("step-")).map(_.replace("step-", "step ")).getOrElse("")
 
+  // Section name: the step label, else a non-track role label (e.g. "mvp"),
+  // else "group".
+  def sectionNameOf(issue: GIssue): String =
+    val step = stepLabelOf(issue)
+    if step.nonEmpty then step
+    else issue.labels.find(l => !Set("backend", "android", "manual", "blocking").contains(l)).getOrElse("group")
+
   // glyph + inline annotation for one node
   def nodeRender(issue: GIssue, issuesByNumber: Map[Int, GIssue], edges: Map[String, List[Int]],
                  tracked: List[TrackedIssue]): (String, String) =
@@ -668,45 +691,60 @@ object Orchestrator:
             ("⏸", s"← ${refs.mkString(" ")}")
           else ("○", "")
 
-  // Tree layout (ADR-014): one section per step; done steps collapse to one
-  // line; a sub-issue with an open same-step blocker nests under it; cross-step
-  // blockers stay inline annotations.
+  // Tree layout (ADR-014): top-level sections are parents with no parent of
+  // their own; mid-level parents (e.g. MVP workstreams) render as children
+  // with their own children one indent deeper. Step-labelled sections come
+  // first in step order; unlabelled ones (bug inbox, MVP) go last, by issue
+  // number — larger numbers below smaller ones.
   def graphRows(issues: List[GIssue], edges: Map[String, List[Int]],
                 tracked: List[TrackedIssue]): List[String] =
     val byNumber = issues.map(i => i.number -> i).toMap
-    val parents = issues.filter(_.children.nonEmpty).sortBy(stepLabelOf)
+    val topLevel = issues.filter(i => i.children.nonEmpty && i.parent.isEmpty)
+      .sortBy(i => (if stepLabelOf(i).isEmpty then 1 else 0, stepLabelOf(i), i.number))
+
     def line(i: GIssue, prefix: String): String =
       val (glyph, annotation) = nodeRender(i, byNumber, edges, tracked)
       val suffix = if annotation.isEmpty then "" else s" $annotation"
       s"$prefix$glyph #${i.number}$suffix"
-    parents.flatMap { parent =>
+
+    // children with an open same-level blocker nest under the lowest-numbered
+    // one; mid-level parents render their own children one level deeper
+    def renderChildren(children: List[GIssue], basePrefix: String): List[String] =
+      val numbers = children.map(_.number).toSet
+      val nestUnder: Map[Int, Int] = children.flatMap { sub =>
+        edges.get(sub.number.toString).toList.flatten
+          .filter(b => numbers.contains(b) && byNumber.get(b).exists(_.state != "CLOSED"))
+          .sorted.headOption.map(sub.number -> _)
+      }.toMap
+      val (nested, top) = children.partition(s => nestUnder.contains(s.number))
+      val childrenOf = nested.groupBy(s => nestUnder(s.number))
+      top.sortBy(_.number).zipWithIndex.flatMap { case (sub, idx) =>
+        val last = idx == top.size - 1
+        val branch = if last then "└─ " else "├─ "
+        val childPrefix = if last then "    " else "│   "
+        val ownLine = line(sub, basePrefix + branch)
+        val blockedNested = childrenOf.getOrElse(sub.number, Nil).sortBy(_.number)
+          .map(c => line(c, basePrefix + childPrefix + "└─→ "))
+        val ownChildren =
+          if sub.children.isEmpty then Nil
+          else renderChildren(sub.children.flatMap(byNumber.get), basePrefix + childPrefix)
+        List(ownLine) ++ blockedNested ++ ownChildren
+      }
+
+    topLevel.flatMap { parent =>
       val subs = parent.children.flatMap(byNumber.get).sortBy(_.number)
       val step = stepLabelOf(parent)
+      val name = sectionNameOf(parent)
       if parent.state == "CLOSED" && subs.forall(_.state == "CLOSED") then
-        List(s"✅ $step #${parent.number}")
+        List(s"✅ $name #${parent.number}")
       else
         val allSubsClosed = subs.nonEmpty && subs.forall(_.state == "CLOSED")
-        val parentGlyph = if allSubsClosed then s"🔑 $step #${parent.number} — ready for You verify"
-          else if parent.state == "CLOSED" then s"✅ $step #${parent.number}"
-          else s"○ $step #${parent.number}"
-        // nesting: open same-step blocker with the lowest number
-        val nestUnder: Map[Int, Int] = subs.flatMap { sub =>
-          edges.get(sub.number.toString).toList.flatten
-            .filter(b => subs.exists(_.number == b) && byNumber.get(b).exists(_.state != "CLOSED"))
-            .sorted.headOption.map(sub.number -> _)
-        }.toMap
-        val (nested, top) = subs.partition(s => nestUnder.contains(s.number))
-        val childrenOf = nested.groupBy(s => nestUnder(s.number))
-        val rows = scala.collection.mutable.ListBuffer(parentGlyph)
-        top.zipWithIndex.foreach { case (sub, idx) =>
-          val last = idx == top.size - 1
-          val branch = if last then "└─" else "├─"
-          rows += line(sub, s"$branch ")
-          childrenOf.getOrElse(sub.number, Nil).sortBy(_.number).foreach { child =>
-            rows += line(child, (if last then "    " else "│   ") + "└─→ ")
-          }
-        }
-        rows.toList
+        // only step parents carry the You verify gate; the inbox/MVP groups don't
+        val header =
+          if allSubsClosed && step.nonEmpty then s"🔑 $name #${parent.number} — ready for You verify"
+          else if parent.state == "CLOSED" then s"✅ $name #${parent.number}"
+          else s"○ $name #${parent.number}"
+        header +: renderChildren(subs, "")
     }
 
   // --- parent You verify gate (ADR-014) ---
@@ -723,22 +761,24 @@ object Orchestrator:
         case o => o("number").num.toInt
     }.handleError(_ => 0)
 
-  // (allSubIssuesClosed, parentItselfClosed); fails closed — on error, no row
-  // and no notification.
-  def parentCompletion(parent: Int): IO[(Boolean, Boolean)] =
+  // (allSubIssuesClosed, parentItselfClosed, isStepGate); fails closed — on
+  // error, no row and no notification. Only step-* parents carry the You
+  // verify gate; grouping issues like the bug inbox never do.
+  def parentCompletion(parent: Int): IO[(Boolean, Boolean, Boolean)] =
     val Array(owner, name) = GithubRepo.split("/")
-    val q = s"""query{repository(owner:"$owner",name:"$name"){issue(number:$parent){state subIssues(first:50){nodes{state}}}}}"""
+    val q = s"""query{repository(owner:"$owner",name:"$name"){issue(number:$parent){state labels(first:10){nodes{name}} subIssues(first:50){nodes{state}}}}}"""
     gh(List("api", "graphql", "-f", s"query=$q")).map { raw =>
       val issue = ujson.read(raw)("data")("repository")("issue")
       val subs = issue("subIssues")("nodes").arr.toList
       val allClosed = subs.nonEmpty && subs.forall(_("state").str == "CLOSED")
-      (allClosed, issue("state").str == "CLOSED")
-    }.handleError(_ => (false, true))
+      val isStepGate = issue("labels")("nodes").arr.exists(_("name").str.startsWith("step-"))
+      (allClosed, issue("state").str == "CLOSED", isStepGate)
+    }.handleError(_ => (false, true, false))
 
   def parentRows(tracked: List[TrackedIssue]): IO[List[(Int, String)]] =
     tracked.map(_.parent).filter(_ > 0).distinct.traverse { p =>
       parentCompletion(p).map {
-        case (true, false) => Some(p -> s"🔑 parent #$p — all sub-issues done, ready for You verify (the human gate)")
+        case (true, false, true) => Some(p -> s"🔑 parent #$p — all sub-issues done, ready for You verify (the human gate)")
         case _ => None
       }
     }.map(_.flatten)
@@ -838,7 +878,9 @@ object Orchestrator:
     yield State(dispatched, actions, signature, state.parentNotified ++ newlyComplete, edges)
 
   def loop(stepScope: Option[String], runId: String, tickNum: Int): IO[Unit] =
-    tick(dryRun = false, stepScope, runId, tickNum, forcePrint = false) >>
+    // first tick always prints: the startup panel carries no graph, so without
+    // a forced render the dashboard sits treeless until something changes
+    tick(dryRun = false, stepScope, runId, tickNum, forcePrint = tickNum == 1) >>
       IO.sleep(PollInterval) >> loop(stepScope, runId, tickNum + 1)
 
   // One-off sweep for worktrees that completed before the sleep lifecycle

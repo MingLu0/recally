@@ -7,6 +7,17 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class PendingCardsResponse(
     val cards: List<PendingCardDto>,
+    val counts: PendingCountsDto,
+)
+
+/**
+ * Collection-wide queue totals. They ignore the route's filters by design
+ * (docs/api-spec.md) — Today's tiles read them rather than `cards.size`.
+ */
+@Serializable
+data class PendingCountsDto(
+    @SerialName("pending_review") val pendingReview: Int,
+    @SerialName("needs_human") val needsHuman: Int,
 )
 
 /** One card in the approval queue. */

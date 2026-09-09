@@ -20,6 +20,7 @@ import org.junit.Before
 import org.junit.Test
 import java.io.IOException
 import java.time.Clock
+import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
 
@@ -30,8 +31,8 @@ import java.time.ZoneOffset
  * seven calendar days from today with absent days as zeros in position, the
  * guidance-version section hides below two versions and sorts numerically,
  * an empty database renders zeros rather than an error, offline surfaces no
- * stale numbers, a 401 surfaces the auth banner, and G3's `next_due_at` stays
- * out of the UiState.
+ * stale numbers, a 401 surfaces the auth banner, and `next_due_at` maps into
+ * the UiState (issue #134).
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class StatsViewModelTest {
@@ -202,6 +203,7 @@ class StatsViewModelTest {
                         lapseRateByType = emptyMap(),
                         lapseRateByGuidanceVersion = emptyMap(),
                         curationYield = 0.0,
+                        nextDueAt = null,
                         forecast = emptyList(),
                     ),
                 )
@@ -259,21 +261,30 @@ class StatsViewModelTest {
         }
 
     @Test
-    fun test_ui_state_carries_no_next_due_at() {
-        // G3 is scoped out of this screen (issue #95, "Scoped out"): no field
-        // may smuggle a next-due timestamp into the UiState.
-        val gapField = Regex("next_?due", RegexOption.IGNORE_CASE)
-        // Meta-assertions: the check bites on both documented shapes, so it
-        // cannot pass vacuously.
-        assertTrue(gapField.containsMatchIn("next_due_at"))
-        assertTrue(gapField.containsMatchIn("nextDueAt"))
+    fun test_ui_state_carries_next_due_at() =
+        runTest {
+            // Positive form of the G3 guard (issue #134): `next_due_at` is on
+            // `GET /stats` now, and the UiState carries it through unchanged.
+            val nextDueAt = Instant.parse("2026-09-07T04:00:00Z")
+            statsRepository.result = Result.Success(fullStats(nextDueAt = nextDueAt))
+            val viewModel = StatsViewModel(statsRepository, testDispatcher, FIXED_CLOCK)
+            advanceUntilIdle()
 
-        val offending =
-            StatsUiState::class.java.declaredFields
-                .map { it.name }
-                .filter { gapField.containsMatchIn(it) }
-        assertTrue("StatsUiState carries a G3 field: $offending", offending.isEmpty())
-    }
+            assertEquals(nextDueAt, viewModel.uiState.value.nextDueAt)
+
+            // Meta-assertions, kept from the negative form: the reflective
+            // check bites on both documented shapes, so it cannot pass
+            // vacuously.
+            val gapField = Regex("next_?due", RegexOption.IGNORE_CASE)
+            assertTrue(gapField.containsMatchIn("next_due_at"))
+            assertTrue(gapField.containsMatchIn("nextDueAt"))
+
+            val carried =
+                StatsUiState::class.java.declaredFields
+                    .map { it.name }
+                    .filter { gapField.containsMatchIn(it) }
+            assertEquals("StatsUiState carries exactly the next-due field", listOf("nextDueAt"), carried)
+        }
 
     private class FakeStatsRepository : StatsRepository {
         var result: Result<Stats> = Result.Success(statsWithForecast())
@@ -293,6 +304,7 @@ class StatsViewModelTest {
                 lapseRateByType = emptyMap(),
                 lapseRateByGuidanceVersion = emptyMap(),
                 curationYield = 0.0,
+                nextDueAt = null,
                 forecast = forecast.toList(),
             )
 
@@ -304,11 +316,12 @@ class StatsViewModelTest {
                 lapseRateByType = emptyMap(),
                 lapseRateByGuidanceVersion = versions,
                 curationYield = 0.0,
+                nextDueAt = null,
                 forecast = emptyList(),
             )
 
         /** The documented payload (docs/api-spec.md, "Stats"). */
-        fun fullStats(): Stats =
+        fun fullStats(nextDueAt: Instant? = null): Stats =
             Stats(
                 streakDays = 9,
                 reviewsToday = 23,
@@ -316,6 +329,7 @@ class StatsViewModelTest {
                 lapseRateByType = mapOf("qa" to 0.11, "cloze" to 0.18),
                 lapseRateByGuidanceVersion = mapOf("1" to 0.19, "2" to 0.12),
                 curationYield = 0.83,
+                nextDueAt = nextDueAt,
                 forecast = listOf(ForecastDay(date = TODAY.toString(), due = 14)),
             )
     }

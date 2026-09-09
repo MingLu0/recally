@@ -179,7 +179,7 @@ Every screen and the endpoints behind it. Kept here so a gap between this doc an
 
 | Screen | Endpoints |
 |---|---|
-| Today | `GET /reviews/due` (counts), `GET /stats` (streak) |
+| Today | `GET /reviews/due` (counts), `GET /stats` (streak), `GET /cards/pending` (collection-wide queue `counts` for the approval tiles; silent when unreachable) |
 | Review session | `GET /reviews/due`, `POST /reviews/{id}/rate`, `POST /reviews/rate-batch` (outbox flush), `PATCH /cards/{id}` (edit), `POST /cards/{id}/bury` |
 | Approval queue | `GET /cards/pending`, `POST /cards/{id}/approve`, `POST /cards/{id}/reject` |
 | Decks | `GET /decks`, `GET /decks/{book_id}/cards`, `PATCH /cards/{id}`, `POST /cards/{id}/suspend`, `POST /cards/{id}/unsuspend` |

@@ -73,8 +73,11 @@ Items are validated individually, not by the request schema, so one malformed it
 
 ### GET /cards/pending
 `?status=pending_review|needs_human&book_id=&chapter=`. Returns a flat list ordered by book, chapter, then `export_position`; the client renders the chapter grouping. Includes critic critique and all source highlights (a grouped unit has several) for context. `truncated` is true if any source highlight is clipped. Every card carries `book_id` and `chapter` so the client can build filter chips that round-trip back into the query params; `book` is the display title.
+
+`counts` reports **collection-wide totals and ignores the route's filters** — Today's "N to approve" / "N need you" tiles and the Approve header must be right before any filter exists, and the approval queue requires connectivity, so a home screen cannot derive them from the list (docs/android.md, *Offline-first sync*).
 ```json
 {
+  "counts": { "pending_review": 5, "needs_human": 3 },
   "cards": [
     {
       "id": 55, "status": "needs_human", "type": "cloze",
@@ -168,11 +171,12 @@ Books with card counts, due counts, and per-book progress.
   "lapse_rate_by_type": { "qa": 0.11, "cloze": 0.18 },
   "lapse_rate_by_guidance_version": { "1": 0.19, "2": 0.12 },
   "curation_yield": 0.83,
+  "next_due_at": "2026-09-05T13:00:00Z",
   "forecast": [ { "date": "2026-09-05", "due": 14 } ]
 }
 ```
 
-`lapse_rate_by_guidance_version` keys are `cards.guidance_version` as strings (`null` guidance is omitted); it is how the Learner's effect is judged, so it is the one number that has to exist before Stage B writes a v2 (PRD success metrics, roadmap step 6b). `curation_yield` is approved cards ÷ highlights ingested.
+`lapse_rate_by_guidance_version` keys are `cards.guidance_version` as strings (`null` guidance is omitted); it is how the Learner's effect is judged, so it is the one number that has to exist before Stage B writes a v2 (PRD success metrics, roadmap step 6b). `curation_yield` is approved cards ÷ highlights ingested. `next_due_at` is the earliest *future* `card_state.due` across approved, unsuspended cards — `null` when nothing is scheduled. It is the hours-away figure `forecast`'s day granularity cannot give, behind the session summary's "Next card due in 4 hours" and Today's nothing-due line.
 
 ## Ingestion
 

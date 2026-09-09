@@ -60,9 +60,10 @@ import dev.recally.ui.theme.recallyColors
  * docs/android.md, "Screens → 3"). Pure composable: UiState in, callbacks
  * out — the ViewModel lives at the route entry.
  *
- * Scoped out by issue #59: the header count (G1) and the bulk "Approve N
- * ready" bar (G4) — cards are approved individually, and `needs_human` cards
- * are opened individually regardless (hard rule 1).
+ * The header carries the collection-wide "N pending" from `GET
+ * /cards/pending`'s `counts` (G1, issue #132). Still scoped out: the bulk
+ * "Approve N ready" bar (G4) — cards are approved individually, and
+ * `needs_human` cards are opened individually regardless (hard rule 1).
  */
 @Composable
 fun ApproveScreen(
@@ -80,7 +81,7 @@ fun ApproveScreen(
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier.fillMaxSize()) {
-        ApproveHeader(onNavigateBack = onNavigateBack)
+        ApproveHeader(pendingCount = uiState.pendingCount, onNavigateBack = onNavigateBack)
         FilterRow(filter = uiState.filter, onFilterChange = onFilterChange)
         HorizontalDivider(color = MaterialTheme.recallyColors.lineSoft)
 
@@ -118,7 +119,10 @@ fun ApproveScreen(
 }
 
 @Composable
-private fun ApproveHeader(onNavigateBack: () -> Unit) {
+private fun ApproveHeader(
+    pendingCount: Int?,
+    onNavigateBack: () -> Unit,
+) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(RecallySpacing.md),
@@ -140,10 +144,17 @@ private fun ApproveHeader(onNavigateBack: () -> Unit) {
             style = MaterialTheme.typography.titleLarge,
             color = MaterialTheme.recallyColors.ink,
         )
+        if (pendingCount != null) {
+            Text(
+                text = "$pendingCount pending",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.recallyColors.inkMuted,
+            )
+        }
     }
 }
 
-/** All / Needs you (docs/android.md, "Screens → 3"). No counts — that is G1, scoped out. */
+/** All / Needs you (docs/android.md, "Screens → 3"). The count lives in the header, not on the chips. */
 @Composable
 private fun FilterRow(
     filter: QueueFilter,
@@ -717,6 +728,7 @@ private val sampleLoadedState =
                     sampleQaCard.copy(truncated = true),
                 ),
             ),
+        pendingCount = 2,
         isLoading = false,
     )
 

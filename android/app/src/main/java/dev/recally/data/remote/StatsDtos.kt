@@ -12,6 +12,8 @@ data class StatsResponse(
     @SerialName("lapse_rate_by_type") val lapseRateByType: Map<String, Double>,
     @SerialName("lapse_rate_by_guidance_version") val lapseRateByGuidanceVersion: Map<String, Double>,
     @SerialName("curation_yield") val curationYield: Double,
+    /** Earliest future due across approved, unsuspended cards; null when nothing is scheduled. */
+    @SerialName("next_due_at") val nextDueAt: String?,
     val forecast: List<ForecastDayDto>,
 )
 

@@ -36,7 +36,8 @@ RETENTION_WINDOW_DAYS = 30
 
 @dataclass(frozen=True)
 class ForecastDay:
-    """One day's due count; day granularity by design (gap G3 is scoped out)."""
+    """One day's due count; day granularity by design (the hours-away figure
+    is `next_due_at`)."""
 
     date: date
     due: int
@@ -52,6 +53,7 @@ class StatsSummary:
     lapse_rate_by_type: dict[str, float]
     lapse_rate_by_guidance_version: dict[str, float]
     curation_yield: float
+    next_due_at: datetime | None
     forecast: list[ForecastDay]
 
 
@@ -141,6 +143,23 @@ def get_stats(
         due_by_day[day] = due_by_day.get(day, 0) + 1
     forecast = [ForecastDay(date=day, due=due_by_day[day]) for day in sorted(due_by_day)]
 
+    # The hours-away figure the forecast's day granularity cannot give: the
+    # earliest *future* due across approved cards, with ADR-008's suspension
+    # exclusion. Unapproved cards are not scheduled (hard rule 1) and an
+    # overdue card is due now, not next; nothing scheduled means null.
+    next_due_at = session.scalars(
+        select(CardState.due)
+        .join(Card, Card.id == CardState.card_id)
+        .where(
+            CardState.user_id == user_id,
+            Card.status == "approved",
+            CardState.due > as_of,
+            or_(Card.suspended_until.is_(None), Card.suspended_until <= as_of),
+        )
+        .order_by(CardState.due)
+        .limit(1)
+    ).first()
+
     return StatsSummary(
         streak_days=_streak_days(set(review_days), today),
         reviews_today=sum(1 for day in review_days if day == today),
@@ -148,5 +167,6 @@ def get_stats(
         lapse_rate_by_type=lapse_rate_by_type,
         lapse_rate_by_guidance_version=lapse_rate_by_guidance_version,
         curation_yield=curation_yield,
+        next_due_at=next_due_at,
         forecast=forecast,
     )

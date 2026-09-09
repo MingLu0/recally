@@ -6,12 +6,13 @@ The container is overridden onto an in-memory SQLite database (docs/backend.md,
 """
 
 from collections.abc import Iterator
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 from recally.api.deps import container_dependency
@@ -353,6 +354,130 @@ def _book_with_cards(
 
 def _book(*, title: str, external_id: str) -> Book:
     return Book(title=title, source="oreilly", external_id=external_id, user_id=1)
+
+
+def _seed_queued_card(
+    session: Session,
+    *,
+    book: Book,
+    status: str,
+    dedupe_key: str,
+    chapter: str | None = "1. Introduction",
+    export_position: int = 0,
+) -> Card:
+    """A card awaiting the human, wired to one source highlight — the queue skips
+    sourceless cards, so a bare `_card` row would be invisible to `GET /cards/pending`."""
+    run = IngestRun(filename="seed-oreilly-annotations.csv", user_id=1)
+    session.add(run)
+    session.flush()
+    unit = CuratedUnit(ingest_run_id=run.id, curated_text="…", decision="keep", tags=[], user_id=1)
+    session.add(unit)
+    session.flush()
+    highlight = Highlight(
+        book_id=book.id,
+        chapter=chapter,
+        raw_text="The Gulf of Specification is this gap.",
+        dedupe_key=dedupe_key,
+        source="oreilly",
+        highlighted_at=date(2026, 6, 19),
+        export_position=export_position,
+        user_id=1,
+    )
+    session.add(highlight)
+    session.flush()
+    session.add(CuratedUnitHighlight(unit_id=unit.id, highlight_id=highlight.id, user_id=1))
+    card = _card(unit.id, status=status)
+    session.add(card)
+    session.flush()
+    return card
+
+
+def test_pending_counts_match_the_queue(client: TestClient, container: Container) -> None:
+    """The G1 gate (issue #132): `counts` reports the two queue buckets."""
+    with container.session() as session:
+        book = _book(title="Evals for AI Engineers", external_id="9781098188283")
+        session.add(book)
+        session.flush()
+        for index in range(5):
+            _seed_queued_card(session, book=book, status="pending_review", dedupe_key=f"pr-{index}")
+        for index in range(3):
+            _seed_queued_card(session, book=book, status="needs_human", dedupe_key=f"nh-{index}")
+        session.commit()
+
+    body = client.get("/cards/pending", headers={"X-API-Key": TEST_API_KEY}).json()
+
+    assert body["counts"] == {"pending_review": 5, "needs_human": 3}
+    assert len(body["cards"]) == 8
+
+
+def test_approving_a_card_decrements_the_right_bucket(
+    client: TestClient, container: Container
+) -> None:
+    """Approving one `pending_review` card leaves the `needs_human` bucket unchanged."""
+    with container.session() as session:
+        book = _book(title="Evals for AI Engineers", external_id="9781098188283")
+        session.add(book)
+        session.flush()
+        for index in range(5):
+            _seed_queued_card(session, book=book, status="pending_review", dedupe_key=f"pr-{index}")
+        for index in range(3):
+            _seed_queued_card(session, book=book, status="needs_human", dedupe_key=f"nh-{index}")
+        session.commit()
+
+    before = client.get("/cards/pending", headers={"X-API-Key": TEST_API_KEY}).json()
+    assert before["counts"] == {"pending_review": 5, "needs_human": 3}
+
+    approved_id = next(card["id"] for card in before["cards"] if card["status"] == "pending_review")
+    response = client.post(f"/cards/{approved_id}/approve", headers={"X-API-Key": TEST_API_KEY})
+    assert response.status_code == 200
+
+    after = client.get("/cards/pending", headers={"X-API-Key": TEST_API_KEY}).json()
+    assert after["counts"] == {"pending_review": 4, "needs_human": 3}
+
+
+def test_pending_counts_ignore_the_book_and_chapter_filters(
+    client: TestClient, container: Container
+) -> None:
+    """`counts` is collection-wide (issue #132): a filtered call returns a shorter
+    `cards[]` but the same counts — Today's tiles must be right before any filter
+    exists, so the counts must not follow the route's query params."""
+    with container.session() as session:
+        evals = _book(title="Evals for AI Engineers", external_id="9781098188283")
+        agents = _book(title="30 Agents Every AI Engineer Must Build", external_id="1")
+        session.add_all([evals, agents])
+        session.flush()
+        for index in range(2):
+            _seed_queued_card(
+                session, book=evals, status="pending_review", dedupe_key=f"e-pr-{index}"
+            )
+        _seed_queued_card(session, book=evals, status="needs_human", dedupe_key="e-nh-0")
+        for index in range(3):
+            _seed_queued_card(
+                session,
+                book=agents,
+                status="pending_review",
+                dedupe_key=f"a-pr-{index}",
+                chapter="2. Tools",
+            )
+        for index in range(2):
+            _seed_queued_card(
+                session,
+                book=agents,
+                status="needs_human",
+                dedupe_key=f"a-nh-{index}",
+                chapter="2. Tools",
+            )
+        session.commit()
+        evals_id = evals.id
+
+    unfiltered = client.get("/cards/pending", headers={"X-API-Key": TEST_API_KEY}).json()
+    filtered = client.get(
+        f"/cards/pending?book_id={evals_id}", headers={"X-API-Key": TEST_API_KEY}
+    ).json()
+
+    assert len(filtered["cards"]) == 3, "the list still honours the book filter"
+    assert len(unfiltered["cards"]) == 8
+    assert filtered["counts"] == unfiltered["counts"] == {"pending_review": 5, "needs_human": 3}
 
 
 def _card(unit_id: int, *, status: str, suspended_until: datetime | None = None) -> Card:

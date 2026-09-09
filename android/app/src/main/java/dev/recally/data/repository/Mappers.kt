@@ -8,6 +8,8 @@ import dev.recally.data.remote.DueCardDto
 import dev.recally.data.remote.DueCardsResponse
 import dev.recally.data.remote.ForecastDayDto
 import dev.recally.data.remote.PendingCardDto
+import dev.recally.data.remote.PendingCardsResponse
+import dev.recally.data.remote.PendingCountsDto
 import dev.recally.data.remote.RateResponse
 import dev.recally.data.remote.StatsResponse
 import dev.recally.domain.model.Card
@@ -16,6 +18,8 @@ import dev.recally.domain.model.DeckCard
 import dev.recally.domain.model.DueSummary
 import dev.recally.domain.model.ForecastDay
 import dev.recally.domain.model.PendingCard
+import dev.recally.domain.model.PendingCounts
+import dev.recally.domain.model.PendingQueue
 import dev.recally.domain.model.RateOutcome
 import dev.recally.domain.model.Stats
 import kotlinx.serialization.json.Json
@@ -67,6 +71,18 @@ fun PendingCardDto.toDomain(): PendingCard =
         chapter = chapter.orEmpty(),
     )
 
+fun PendingCardsResponse.toDomain(): PendingQueue =
+    PendingQueue(
+        cards = cards.map { it.toDomain() },
+        counts = counts.toDomain(),
+    )
+
+fun PendingCountsDto.toDomain(): PendingCounts =
+    PendingCounts(
+        pendingReview = pendingReview,
+        needsHuman = needsHuman,
+    )
+
 fun DeckDto.toDomain(): Deck =
     Deck(
         bookId = bookId,
@@ -84,6 +100,7 @@ fun StatsResponse.toDomain(): Stats =
         lapseRateByType = lapseRateByType,
         lapseRateByGuidanceVersion = lapseRateByGuidanceVersion,
         curationYield = curationYield,
+        nextDueAt = nextDueAt?.let(Instant::parse),
         forecast = forecast.map { it.toDomain() },
     )
 

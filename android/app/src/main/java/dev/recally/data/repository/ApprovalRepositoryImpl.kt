@@ -5,7 +5,7 @@ import dev.recally.data.remote.RecallyApi
 import dev.recally.data.remote.RejectCardRequest
 import dev.recally.data.remote.apiCall
 import dev.recally.di.IoDispatcher
-import dev.recally.domain.model.PendingCard
+import dev.recally.domain.model.PendingQueue
 import dev.recally.domain.repository.ApprovalRepository
 import dev.recally.domain.repository.Result
 import kotlinx.coroutines.CoroutineDispatcher
@@ -23,9 +23,9 @@ class ApprovalRepositoryImpl
         private val api: RecallyApi,
         @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     ) : ApprovalRepository {
-        override suspend fun pendingCards(): Result<List<PendingCard>> =
+        override suspend fun pendingCards(): Result<PendingQueue> =
             withContext(ioDispatcher) {
-                apiCall { api.pendingCards().cards.map { it.toDomain() } }
+                apiCall { api.pendingCards().toDomain() }
             }
 
         override suspend fun approveCard(

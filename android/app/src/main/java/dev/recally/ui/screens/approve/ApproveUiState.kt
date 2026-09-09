@@ -48,8 +48,9 @@ fun groupIntoChapters(cards: List<PendingCard>): List<ChapterGroup> {
  * Everything the approval queue renders (docs/android.md, "One UiState per
  * screen").
  *
- * Scoped out by issue #59, so deliberately absent: a header count (G1 —
- * `GET /cards/pending` returns no counts) and any multi-card approve
+ * [pendingCount] is the header's "N pending" — the whole queue, from the
+ * collection-wide `counts` on `GET /cards/pending` (G1, issue #132), never
+ * the loaded list's length. Still scoped out: any multi-card approve
  * affordance (G4 — no batch endpoint exists, and `needs_human` cards are
  * excluded from any future bulk path by hard rule 1).
  *
@@ -58,6 +59,7 @@ fun groupIntoChapters(cards: List<PendingCard>): List<ChapterGroup> {
  */
 data class ApproveUiState(
     val groups: List<ChapterGroup> = emptyList(),
+    val pendingCount: Int? = null,
     val filter: QueueFilter = QueueFilter.ALL,
     val isLoading: Boolean = true,
     val isOffline: Boolean = false,
