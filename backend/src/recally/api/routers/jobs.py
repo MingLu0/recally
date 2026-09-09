@@ -20,7 +20,7 @@ router = APIRouter(prefix="/jobs", tags=["jobs"], dependencies=[ApiKeyGuard])
 def run(request: JobRunRequest, container: ContainerDep) -> JobRunResponse:
     """Run a scheduled job on demand.
 
-    Known-but-unbuilt jobs (`learner`, `optimizer`, steps 6a/6b) are a 501 —
+    Known-but-unbuilt jobs (`learner`, step 6b) are a 501 —
     a silent success for an unbuilt job would look identical to a real run in
     cron logs. Unknown names never reach here: request validation answers 422.
     """

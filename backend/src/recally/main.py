@@ -1,25 +1,52 @@
 """The FastAPI app factory. Run with `uv run uvicorn recally.main:app --reload`.
 
 The lifespan resolves settings so a missing `RECALLY_API_KEY` fails startup rather
-than the first request; it also takes ownership of the watcher and the APScheduler
-jobs when those land (roadmap steps 1f and 5), which is why startup work lives there
-and not at module import time.
+than the first request; it also owns the in-process APScheduler — the nightly
+optimizer on `LEARNER_CRON` below, the notifier tick with step 5b — which is why
+startup work lives there and not at module import time.
 """
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from zoneinfo import ZoneInfo
 
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
 from fastapi import FastAPI
 
 from recally.api.errors import register_error_handlers
 from recally.api.routers import cards, decks, devices, health, ingest, jobs, reviews, stats
 from recally.config import get_settings
+from recally.container import get_container
+from recally.scheduling.jobs import run_job
+
+
+def _run_nightly_optimizer() -> None:
+    """The APScheduler entry point for `{"job": "optimizer"}`.
+
+    The container is resolved at fire time, not at registration: building it at
+    startup would open the configured database for every process that creates
+    the app — tests included — long before the 3am run needs it.
+    """
+    run_job("optimizer", get_container())
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-    get_settings()
-    yield
+    settings = get_settings()
+    timezone = ZoneInfo(settings.timezone)
+    scheduler = BackgroundScheduler(timezone=timezone)
+    scheduler.add_job(
+        _run_nightly_optimizer,
+        CronTrigger.from_crontab(settings.learner_cron, timezone=timezone),
+        id="optimizer",
+        name="nightly FSRS optimizer (Learner stage A)",
+    )
+    scheduler.start()
+    try:
+        yield
+    finally:
+        scheduler.shutdown(wait=False)
 
 
 def create_app() -> FastAPI:

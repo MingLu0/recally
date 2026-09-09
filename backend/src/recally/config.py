@@ -14,6 +14,7 @@ from functools import lru_cache
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from apscheduler.triggers.cron import CronTrigger
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -92,6 +93,13 @@ class Settings(BaseSettings):
         default="1,10", validation_alias="FSRS_LEARNING_STEPS_MINUTES"
     )
 
+    # Learner stage A (docs/agents.md, "7. Learner"; docs/config.md, "Scheduling and
+    # push"). Below this many review_logs the nightly fit writes nothing, so library
+    # defaults stay active (docs/data-model.md, `fsrs_params`).
+    optimizer_min_reviews: int = Field(default=400, ge=1, validation_alias="OPTIMIZER_MIN_REVIEWS")
+    # Nightly optimizer schedule: a 5-field cron in RECALLY_TIMEZONE.
+    learner_cron: str = Field(default="0 3 * * *", validation_alias="LEARNER_CRON")
+
     @field_validator("timezone")
     @classmethod
     def _timezone_is_an_iana_zone(cls, value: str) -> str:
@@ -105,6 +113,13 @@ class Settings(BaseSettings):
         steps = [part.strip() for part in value.split(",") if part.strip()]
         if not steps or any(float(step) <= 0 for step in steps):
             raise ValueError("must be comma-separated positive minutes, e.g. '1,10'")
+        return value
+
+    @field_validator("learner_cron")
+    @classmethod
+    def _learner_cron_is_a_crontab(cls, value: str) -> str:
+        """Fail startup on a typo rather than the first missed nightly run."""
+        CronTrigger.from_crontab(value)  # raises ValueError on a malformed expression
         return value
 
     @property
