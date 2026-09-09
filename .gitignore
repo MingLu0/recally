@@ -28,6 +28,15 @@ firebase-*.json
 local.properties
 **/build/
 .cxx/
+# A Gradle user home created inside the checkout (a worker ran Gradle with
+# GRADLE_USER_HOME=<repo>/android once); regenerable caches, never source.
+android/.tmp/
+android/android/
+android/caches/
+android/daemon/
+android/kotlin-profile/
+android/native/
+android/wrapper/
 
 # OS / editors
 .DS_Store
