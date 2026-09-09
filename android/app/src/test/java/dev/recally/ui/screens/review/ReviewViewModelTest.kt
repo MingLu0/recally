@@ -1,5 +1,6 @@
 package dev.recally.ui.screens.review
 
+import dev.recally.data.sync.RatingOutbox
 import dev.recally.domain.model.Card
 import dev.recally.domain.model.DueSummary
 import dev.recally.domain.model.RateOutcome
@@ -7,10 +8,14 @@ import dev.recally.domain.model.ReviewRating
 import dev.recally.domain.repository.CardRepository
 import dev.recally.domain.repository.Result
 import dev.recally.domain.repository.ReviewRepository
+import dev.recally.domain.repository.SettingsRepository
+import dev.recally.domain.repository.StoredConnection
 import dev.recally.ui.components.buildClozeAnnotatedString
 import dev.recally.ui.components.parseClozeSegments
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -386,6 +391,120 @@ class ReviewViewModelTest {
         assertTrue(rendered.contains("mitochondria"))
     }
 
+    @Test
+    fun test_a_failed_rating_is_written_to_the_outbox() =
+        runTest {
+            val clock = MutableClock(sessionStart)
+            val reviewRepository = FakeReviewRepository().apply { offline() }
+            val ratingOutbox = FakeRatingOutbox()
+            val viewModel =
+                newViewModel(
+                    cards = listOf(card(id = 1, step = null)),
+                    clock = clock,
+                    reviewRepository = reviewRepository,
+                    ratingOutbox = ratingOutbox,
+                )
+
+            viewModel.flip()
+            clock.advance(Duration.ofSeconds(5))
+            viewModel.rate(RATING_GOOD)
+
+            val recorded = ratingOutbox.recorded
+            assertEquals(
+                "a failed post must land in the Room outbox, not only in memory (#115)",
+                1,
+                recorded.size,
+            )
+            assertEquals(1L, recorded.single().cardId)
+            assertEquals(RATING_GOOD, recorded.single().rating)
+            assertEquals(
+                "the outbox row carries the same flip-to-rate timing the post attempted",
+                reviewRepository.ratings.single().responseMs,
+                recorded.single().responseMs,
+            )
+        }
+
+    @Test
+    fun test_a_successful_rating_is_not_written_to_the_outbox() =
+        runTest {
+            val ratingOutbox = FakeRatingOutbox()
+            val viewModel =
+                newViewModel(
+                    cards = listOf(card(id = 1, step = null)),
+                    ratingOutbox = ratingOutbox,
+                )
+
+            viewModel.flip()
+            viewModel.rate(RATING_GOOD)
+
+            assertTrue(
+                "the outbox is for failures only — a posted rating is never queued",
+                ratingOutbox.recorded.isEmpty(),
+            )
+        }
+
+    @Test
+    fun test_queued_count_reflects_persisted_rows_not_a_local_counter() =
+        runTest {
+            val reviewRepository = FakeReviewRepository().apply { offline() }
+            val ratingOutbox = FakeRatingOutbox()
+            val viewModel =
+                newViewModel(
+                    cards = listOf(card(id = 1, step = null), card(id = 2, step = null)),
+                    reviewRepository = reviewRepository,
+                    ratingOutbox = ratingOutbox,
+                )
+
+            viewModel.flip()
+            viewModel.rate(RATING_GOOD)
+            assertEquals(
+                "the persisted row drives the queued bar",
+                1,
+                viewModel.uiState.value.queuedRatingCount,
+            )
+
+            // The second rating cannot be persisted: the bar must not move.
+            ratingOutbox.persistFails = true
+            viewModel.flip()
+            viewModel.rate(RATING_GOOD)
+            assertEquals(
+                "a rating that failed to persist must not inflate the count",
+                1,
+                viewModel.uiState.value.queuedRatingCount,
+            )
+        }
+
+    @Test
+    fun test_rating_carries_the_device_id() =
+        runTest {
+            val reviewRepository = FakeReviewRepository().apply { offline() }
+            val ratingOutbox = FakeRatingOutbox()
+            val viewModel =
+                newViewModel(
+                    cards = listOf(card(id = 1, step = null), card(id = 2, step = null)),
+                    reviewRepository = reviewRepository,
+                    ratingOutbox = ratingOutbox,
+                )
+
+            // Offline: the rating lands in the outbox.
+            viewModel.flip()
+            viewModel.rate(RATING_GOOD)
+            assertEquals(
+                REGISTERED_DEVICE_ID,
+                ratingOutbox.recorded.single().deviceId,
+            )
+
+            // Back online: the rating lands on the post.
+            reviewRepository.online { rating -> outcome(rating, step = null) }
+            viewModel.flip()
+            viewModel.rate(RATING_GOOD)
+            assertEquals(
+                "review_logs.device_id identifies the phone — a literal null fails the step 4 gate",
+                REGISTERED_DEVICE_ID,
+                reviewRepository.ratings.last().deviceId,
+            )
+        }
+
     // --- fakes and fixtures ---
 
     private fun newViewModel(
@@ -393,12 +512,49 @@ class ReviewViewModelTest {
         learningStepsMinutes: List<Int> = listOf(1, 10),
         clock: Clock = MutableClock(sessionStart),
         reviewRepository: FakeReviewRepository = FakeReviewRepository(),
+        ratingOutbox: FakeRatingOutbox = FakeRatingOutbox(),
+        settings: FakeSettingsRepository = FakeSettingsRepository(),
     ): ReviewViewModel =
         ReviewViewModel(
             cardRepository = FakeCardRepository(cards, learningStepsMinutes),
             reviewRepository = reviewRepository,
+            ratingOutbox = ratingOutbox,
+            settings = settings,
             clock = clock,
         )
+
+    /**
+     * In-memory [RatingOutbox]. [queuedCountFlow] stands in for the DAO's
+     * live count: it moves only when [record] actually persists, so a failed
+     * persist can never inflate the queued bar.
+     */
+    private class FakeRatingOutbox : RatingOutbox {
+        val recorded = mutableListOf<ReviewRating>()
+        val queuedCountFlow = MutableStateFlow(0)
+        var persistFails = false
+
+        override suspend fun record(rating: ReviewRating) {
+            if (persistFails) throw IOException("simulated persist failure")
+            recorded += rating
+            queuedCountFlow.value = recorded.size
+        }
+
+        override fun queuedCount(): Flow<Int> = queuedCountFlow
+    }
+
+    /** Settings with a registered device, as after a successful `POST /devices`. */
+    private class FakeSettingsRepository(
+        private val deviceId: Long? = REGISTERED_DEVICE_ID,
+    ) : SettingsRepository {
+        override suspend fun load(): StoredConnection = StoredConnection(baseUrl = "http://test", hasApiKey = true, deviceId = deviceId)
+
+        override suspend fun saveConnection(
+            baseUrl: String,
+            apiKey: String?,
+        ) = Unit
+
+        override suspend fun saveDeviceId(deviceId: Long) = Unit
+    }
 
     private class FakeCardRepository(
         cards: List<Card>,
@@ -476,6 +632,7 @@ class ReviewViewModelTest {
     private companion object {
         const val RATING_AGAIN = 1
         const val RATING_GOOD = 3
+        const val REGISTERED_DEVICE_ID = 42L
 
         fun card(
             id: Long,
