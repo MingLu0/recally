@@ -13,8 +13,8 @@ The policy (hard rule 8) is four independent gates, all checked on every tick:
    this check (docs/data-model.md, `devices`).
 3. No push while the previous batch is unreviewed: the latest `push_runs` row is
    loaded and its `card_ids` looped over in Python, looking for a `review_logs`
-   entry after `sent_at` for each (docs/data-model.md — the `push_run_cards` join
-   table is deferred to the Postgres cutover, ADR-004).
+   entry after `sent_at` for each (docs/data-model.md — a join table for this is
+   deferred to the Postgres cutover, ADR-004).
 4. No due cards, no push — the trigger fires "when due cards exist"
    (docs/agents.md, Notifier).
 
@@ -123,7 +123,7 @@ def _local_date(moment: datetime, zone: ZoneInfo) -> date:
 def _previous_batch_unreviewed(session: Session) -> bool:
     """True when any card in the latest push_runs row has no review_logs entry after
     that row's sent_at. The loop runs in Python over one small batch per day
-    (docs/data-model.md, `push_runs`)."""
+    (docs/data-model.md, `push_runs`; the join table waits for Postgres, ADR-004)."""
     latest = session.scalar(
         select(PushRun).order_by(PushRun.sent_at.desc(), PushRun.id.desc()).limit(1)
     )
