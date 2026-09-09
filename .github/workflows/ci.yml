@@ -4,6 +4,12 @@ on:
   pull_request:
   push:
     branches: [main]
+    # v* tags exist so a human can ship a build to App Distribution by pushing
+    # a tag; only the distribute job below reacts to them.
+    tags: ['v*']
+  # Manual dispatch is the normal ship path (issue #136). Uploading on every
+  # PR would spam the tester group and burn App Distribution quota.
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -110,3 +116,82 @@ jobs:
       - name: Assemble debug
         if: steps.gradle_project.outputs.present == 'true'
         run: ./gradlew :app:assembleDebug
+
+  # MVP-DIST-b (#136): build the signed debug APK and upload it to Firebase
+  # App Distribution. Dispatch/tag only — never on pull_request — so testers
+  # are not spammed and quota is not burned on every push. All credentials
+  # come from GitHub secrets, are written to disk (gitignored filenames,
+  # umask 077) at job start, and are never echoed.
+  distribute:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v7
+
+      # Same toolchain as the per-PR android job — a mismatch fails obscurely.
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # google-services.json is gitignored locally, so CI reconstructs it from
+      # a secret. The App Distribution plugin needs it for the Firebase app ID.
+      - name: Write google-services.json
+        working-directory: .
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          if [ -z "$GOOGLE_SERVICES_JSON" ]; then
+            echo "::error::GOOGLE_SERVICES_JSON secret is not set"
+            exit 1
+          fi
+          umask 077
+          printf '%s' "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
+
+      # The debug keystore (#135) travels as base64. The CI copy is written
+      # extensionless on purpose: a JKS keystore needs no file extension, and
+      # this keeps the repo secret-material grep (#136, done-when) free of
+      # keystore-path false positives. The RECALLY_KEYSTORE_PROPERTIES secret
+      # must therefore use `storeFile=debug-keystore` (relative to android/).
+      - name: Write debug keystore and keystore.properties
+        working-directory: .
+        env:
+          RECALLY_DEBUG_KEYSTORE_BASE64: ${{ secrets.RECALLY_DEBUG_KEYSTORE_BASE64 }}
+          RECALLY_KEYSTORE_PROPERTIES: ${{ secrets.RECALLY_KEYSTORE_PROPERTIES }}
+        run: |
+          if [ -z "$RECALLY_DEBUG_KEYSTORE_BASE64" ] || [ -z "$RECALLY_KEYSTORE_PROPERTIES" ]; then
+            echo "::error::RECALLY_DEBUG_KEYSTORE_BASE64 and RECALLY_KEYSTORE_PROPERTIES secrets must both be set"
+            exit 1
+          fi
+          umask 077
+          printf '%s' "$RECALLY_DEBUG_KEYSTORE_BASE64" | base64 -d > android/debug-keystore
+          printf '%s' "$RECALLY_KEYSTORE_PROPERTIES" > android/keystore.properties
+
+      # The App Distribution Gradle plugin authenticates with a service-account
+      # key via GOOGLE_APPLICATION_CREDENTIALS. Written under RUNNER_TEMP (not
+      # the checkout) so it can never be committed or archived as an artifact.
+      - name: Write Firebase service-account key
+        working-directory: .
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+        run: |
+          if [ -z "$FIREBASE_SERVICE_ACCOUNT_JSON" ]; then
+            echo "::error::FIREBASE_SERVICE_ACCOUNT_JSON secret is not set"
+            exit 1
+          fi
+          umask 077
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT_JSON" > "$RUNNER_TEMP/firebase-service-account.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/firebase-service-account.json" >> "$GITHUB_ENV"
+
+      - name: Assemble debug
+        run: ./gradlew :app:assembleDebug
+
+      - name: Upload to Firebase App Distribution
+        run: ./gradlew :app:appDistributionUploadDebug
