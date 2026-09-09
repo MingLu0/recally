@@ -878,7 +878,9 @@ object Orchestrator:
     yield State(dispatched, actions, signature, state.parentNotified ++ newlyComplete, edges)
 
   def loop(stepScope: Option[String], runId: String, tickNum: Int): IO[Unit] =
-    tick(dryRun = false, stepScope, runId, tickNum, forcePrint = false) >>
+    // first tick always prints: the startup panel carries no graph, so without
+    // a forced render the dashboard sits treeless until something changes
+    tick(dryRun = false, stepScope, runId, tickNum, forcePrint = tickNum == 1) >>
       IO.sleep(PollInterval) >> loop(stepScope, runId, tickNum + 1)
 
   // One-off sweep for worktrees that completed before the sleep lifecycle
