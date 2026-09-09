@@ -6,16 +6,16 @@ the in-process APScheduler (phase 1) all call `run_job`. None of the last two is
 an HTTP request, so this module must not import FastAPI (docs/backend.md,
 "Layering" rule 1; enforced by tests/scheduling/test_jobs_layering.py).
 
-`notify` is wired to the notifier seam step 5b fills. `learner` and `optimizer`
-are registered as known job names whose implementations belong to step 6a/6b:
-they raise `JobNotImplementedError` so a caller gets a loud 501, never a silent
-success for a job that does not exist yet.
+`notify` is wired to the notifier seam step 5b fills. `optimizer` runs the step
+6a-a fit (`scheduling/optimizer.py`). `learner` is registered as a known job name
+whose implementation belongs to step 6b: it raises `JobNotImplementedError` so a
+caller gets a loud 501, never a silent success for a job that does not exist yet.
 """
 
 from typing import Literal
 
 from recally.container import Container
-from recally.scheduling import notifier
+from recally.scheduling import notifier, optimizer
 
 JobName = Literal["notify", "learner", "optimizer"]
 
@@ -33,5 +33,8 @@ def run_job(job: JobName, container: Container) -> None:
     request validation (422); known-but-unbuilt names raise here (501)."""
     if job == "notify":
         notifier.send_due_push(container)
+        return
+    if job == "optimizer":
+        optimizer.fit_parameters(container)
         return
     raise JobNotImplementedError(job)
