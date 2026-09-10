@@ -267,6 +267,59 @@ class ReviewViewModelTest {
         }
 
     @Test
+    fun test_cards_left_includes_the_card_on_screen() =
+        runTest {
+            val viewModel = newViewModel(cards = listOf(card(id = 1, step = null)))
+
+            val state = viewModel.uiState.value
+            assertNotNull(state.card)
+            assertEquals(
+                "the card in front of you has not been done yet — it is remaining work (#148)",
+                1,
+                state.cardsLeft,
+            )
+        }
+
+    @Test
+    fun test_cards_left_reaches_zero_only_at_session_end() =
+        runTest {
+            val viewModel = newViewModel(cards = listOf(card(id = 1, step = null)))
+
+            assertTrue(
+                "the count must not read zero while a card waits to be rated",
+                viewModel.uiState.value.cardsLeft > 0,
+            )
+
+            viewModel.flip()
+            viewModel.rate(RATING_GOOD)
+
+            val state = viewModel.uiState.value
+            assertNotNull("the session is finished", state.summary)
+            assertEquals("zero arrives with the summary sheet, not before", 0, state.cardsLeft)
+        }
+
+    @Test
+    fun test_a_card_queued_for_repeat_is_counted_once() =
+        runTest {
+            val viewModel =
+                newViewModel(
+                    cards = listOf(card(id = 1, step = 0), card(id = 2, step = null)),
+                )
+
+            viewModel.flip()
+            viewModel.rate(RATING_AGAIN) // card 1 re-queued; card 2 now on screen
+
+            val state = viewModel.uiState.value
+            assertEquals(2L, state.card?.id)
+            assertEquals(1, state.toRepeatCount)
+            assertEquals(
+                "doneCount + cardsLeft is the true outstanding count: card 2 on screen + card 1's repeat",
+                2,
+                state.doneCount + state.cardsLeft,
+            )
+        }
+
+    @Test
     fun test_progress_is_cards_left_not_a_fixed_total() =
         runTest {
             val clock = MutableClock(sessionStart)
@@ -278,12 +331,12 @@ class ReviewViewModelTest {
                     reviewRepository = reviewRepository,
                 )
 
-            assertEquals(2, viewModel.uiState.value.cardsLeft)
+            assertEquals(3, viewModel.uiState.value.cardsLeft)
             viewModel.flip()
             viewModel.rate(RATING_AGAIN)
             assertEquals(
                 "the re-queued repeat joins the remaining count — a fixed total could only shrink",
-                2,
+                3,
                 viewModel.uiState.value.cardsLeft,
             )
 

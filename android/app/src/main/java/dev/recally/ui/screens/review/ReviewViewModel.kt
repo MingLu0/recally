@@ -255,7 +255,11 @@ class ReviewViewModel
                     isEditing = false,
                     doneCount = doneCardIds.size,
                     toRepeatCount = repeats.size,
-                    cardsLeft = queue.size + repeats.size,
+                    // "N left" is remaining work, and the card on screen has
+                    // not been done yet — it counts (#148). Repeats are
+                    // counted here only; the bar's denominator is
+                    // doneCount + cardsLeft so each card enters it once.
+                    cardsLeft = queue.size + repeats.size + (if (currentCard != null) 1 else 0),
                 )
             }
         }
