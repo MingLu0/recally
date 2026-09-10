@@ -3,6 +3,7 @@ package dev.recally.ui.screens.settings
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performScrollTo
 import dev.recally.ui.theme.RecallyTheme
 import org.junit.Rule
 import org.junit.Test
@@ -44,8 +45,8 @@ class SettingsScreenTest {
             }
         }
 
-        composeTestRule.onNodeWithText("REVIEWS").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Queued ratings").assertIsDisplayed()
-        composeTestRule.onNodeWithText("All synced").assertIsDisplayed()
+        composeTestRule.onNodeWithText("REVIEWS").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("Queued ratings").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("All synced").performScrollTo().assertIsDisplayed()
     }
 }

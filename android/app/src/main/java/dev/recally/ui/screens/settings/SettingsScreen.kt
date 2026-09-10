@@ -21,6 +21,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
@@ -79,7 +80,7 @@ fun SettingsScreen(
                 onToggleApiKeyVisibility = onToggleApiKeyVisibility,
                 onTestConnection = onTestConnection,
             )
-            ReviewsSection(pushWindow = uiState.pushWindow)
+            ReviewsSection(uiState = uiState)
             AboutSection(appVersion = uiState.appVersion)
         }
     }
@@ -256,7 +257,7 @@ private fun ResultRow(
 }
 
 @Composable
-private fun ReviewsSection(pushWindow: String) {
+private fun ReviewsSection(uiState: SettingsUiState) {
     val colors = MaterialTheme.recallyColors
     Column(verticalArrangement = Arrangement.spacedBy(RecallySpacing.md)) {
         SectionLabel("REVIEWS")
@@ -284,7 +285,7 @@ private fun ReviewsSection(pushWindow: String) {
                             color = MaterialTheme.colorScheme.onSurface,
                         )
                         Text(
-                            text = "At most one push a day, $pushWindow",
+                            text = "At most one push a day, ${uiState.pushWindow}",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.outline,
                         )
@@ -316,6 +317,39 @@ private fun ReviewsSection(pushWindow: String) {
                             vertical = RecallySpacing.md,
                         ),
                 )
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                // The only at-rest readout of the offline rating outbox
+                // (issue #151): the DAO's live count, "All synced" at 0.
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(RecallySpacing.md),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(RecallySpacing.cardPadding),
+                ) {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(RecallySpacing.xs),
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text(
+                            text = "Queued ratings",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            text = uiState.queuedRatingsSummary,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.outline,
+                        )
+                    }
+                    Text(
+                        text = "${uiState.queuedRatingsCount}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = if (uiState.queuedRatingsCount == 0) colors.primary else colors.warn,
+                    )
+                }
             }
         }
     }
