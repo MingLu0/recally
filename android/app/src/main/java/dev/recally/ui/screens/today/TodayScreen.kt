@@ -311,7 +311,7 @@ private fun BookRailCard(deck: Deck) {
             )
         }
         Text(
-            text = "${deck.total} cards",
+            text = "${deck.total} card${if (deck.total == 1) "" else "s"}",
             style = MaterialTheme.typography.labelMedium,
             color = colors.inkFaint,
         )

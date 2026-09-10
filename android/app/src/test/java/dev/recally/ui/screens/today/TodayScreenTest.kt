@@ -162,6 +162,59 @@ class TodayScreenTest {
         composeTestRule.onAllNodesWithText("Waiting for you").assertCountEquals(0)
     }
 
+    @Test
+    fun test_single_card_book_reads_one_card() {
+        composeTestRule.setContent {
+            RecallyTheme {
+                TodayScreen(
+                    uiState = loadedState(books = listOf(sampleDeck().copy(total = 1))),
+                    onStartReview = {},
+                    onOpenApprove = {},
+                    onOpenSettings = {},
+                    onRetry = {},
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithText("1 card").assertIsDisplayed()
+        // Negative: the rail was added after #149 fixed the other five sites.
+        composeTestRule.onAllNodesWithText("1 cards").assertCountEquals(0)
+    }
+
+    @Test
+    fun test_multi_card_book_keeps_the_plural() {
+        composeTestRule.setContent {
+            RecallyTheme {
+                TodayScreen(
+                    uiState = loadedState(books = listOf(sampleDeck().copy(total = 8))),
+                    onStartReview = {},
+                    onOpenApprove = {},
+                    onOpenSettings = {},
+                    onRetry = {},
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithText("8 cards").assertIsDisplayed()
+    }
+
+    @Test
+    fun test_zero_card_book_uses_the_plural() {
+        composeTestRule.setContent {
+            RecallyTheme {
+                TodayScreen(
+                    uiState = loadedState(books = listOf(sampleDeck().copy(total = 0))),
+                    onStartReview = {},
+                    onOpenApprove = {},
+                    onOpenSettings = {},
+                    onRetry = {},
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithText("0 cards").assertIsDisplayed()
+    }
+
     private companion object {
         fun sampleDeck(): Deck = Deck(bookId = 2, title = "Evals for AI Engineers", total = 8, due = 1, progress = 0.875f)
 
