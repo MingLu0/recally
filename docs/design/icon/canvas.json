@@ -1,0 +1,144 @@
+{
+  "pages": [
+    {
+      "id": "page-3",
+      "name": "D4 — shipping asset"
+    },
+    {
+      "id": "page-4",
+      "name": "Gap width"
+    },
+    {
+      "id": "page-2",
+      "name": "Monogram — six executions"
+    },
+    {
+      "id": "page-1",
+      "name": "Four directions"
+    }
+  ],
+  "artboards": [
+    {
+      "file": "Final.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1400,
+      "h": 900,
+      "title": "D4 — the shipping asset",
+      "page": "page-3"
+    },
+    {
+      "file": "Gap.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1400,
+      "h": 660,
+      "title": "Choosing the gap width",
+      "page": "page-4"
+    },
+    {
+      "file": "Monogram.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1560,
+      "h": 1720,
+      "title": "Monogram — six executions",
+      "page": "page-2"
+    },
+    {
+      "file": "Main.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1240,
+      "h": 1080,
+      "title": "Launcher icon — four directions",
+      "page": "page-1"
+    }
+  ],
+  "annotations": [
+    {
+      "id": "shipped",
+      "x": -390,
+      "y": 0,
+      "w": 320,
+      "page": "page-3",
+      "text": "SHIPPED\n\nD4, built and installed. The app no longer runs on the stock Android robot.\n\nThe R is the real Inter Tight ExtraBold outline pulled from the vendored TTF — not live text, not traced by eye. Everything on this board renders from the committed XML."
+    },
+    {
+      "id": "solved",
+      "x": -390,
+      "y": 260,
+      "w": 320,
+      "page": "page-3",
+      "text": "ONE NUMBER WORTH KNOWING\n\nThe letter height (46 units) was solved, not chosen: it is the largest letter whose ink-box corner stays inside the mask with 4 units of parallax headroom.\n\nThe first attempt was 52 and its corners sat at 33.49 against a 36 limit — fine at rest, grazed under parallax. That would have shown up on a Pixel, not here."
+    },
+    {
+      "id": "twogroups",
+      "x": -390,
+      "y": 600,
+      "w": 320,
+      "page": "page-3",
+      "text": "THE ONE FRAGILE THING\n\nVectorDrawable has no mask element, so the gap is cut by drawing the letter TWICE — clipped above, clipped below.\n\nEdit one group without the other and the mark silently desyncs. build_icon.py regenerates both from one constant; use it rather than hand-editing."
+    },
+    {
+      "id": "gapnote",
+      "x": -390,
+      "y": 0,
+      "w": 320,
+      "page": "page-4",
+      "text": "WHY 6 → 5.3\n\nThe gap was picked at 24dp, where it renders ~1.2px — the smallest cut that still reads rather than looking like a rendering fault.\n\nThese tiles were drawn at the earlier 52-unit letter height. When the letter came down to 46 for parallax headroom, the gap scaled with it to keep the same optical proportion.\n\nOne drawing, all sizes — no optical-size variant to keep in sync."
+    },
+    {
+      "id": "picked",
+      "x": -390,
+      "y": 0,
+      "w": 320,
+      "page": "page-2",
+      "text": "YOU PICKED: MONOGRAM\n\n\"I like monogram better but it kind of looks ugly.\"\n\nAgreed — and the direction was not the problem. A default glyph dropped into a coloured square is the laziest form this idea takes, and that is what D was.\n\nSo the style is held fixed here. Only the letterform, the crop and the idea vary."
+    },
+    {
+      "id": "axes",
+      "x": -390,
+      "y": 310,
+      "w": 320,
+      "page": "page-2",
+      "text": "THE AXES\n\nD1 fixes the execution, nothing more — the control.\n\nD2 changes the TYPEFACE (serif, bookish).\nD3 changes the CROP (bleed off-edge).\nD4 changes the IDEA (the letter, partly forgotten).\nD5 changes the CONTAINER (the cloze blank).\nD6 changes the FIGURE/GROUND (knockout on dark).\n\nOne variable each, so a preference tells you something."
+    },
+    {
+      "id": "mypick",
+      "x": -390,
+      "y": 660,
+      "w": 320,
+      "page": "page-2",
+      "text": "IF YOU WANT A RECOMMENDATION\n\nD4. It is the only one that is still a monogram — simple, legible, yours — while also being about something. A letter your eye has to complete is the product in one image.\n\nIts one real problem is small sizes, and that is solvable: ship a wider gap below 32dp, the way icon families normally carry an optical-size variant.\n\nD2 is the safer pick if you want handsome over clever."
+    },
+    {
+      "id": "smalltest",
+      "x": 1640,
+      "y": 0,
+      "w": 300,
+      "page": "page-2",
+      "text": "STILL JUDGE IT AT 24dp\n\nSame as last time: the small row is where these separate. Squint at it, or step back from the screen.\n\nD1 and D2 hold. D4's gap narrows to a hairline. D5 goes busy. D3 depends entirely on the mask shape.\n\nA launcher icon is seen small and in a hurry far more often than it is seen like this."
+    },
+    {
+      "id": "nofakes",
+      "x": 1640,
+      "y": 380,
+      "w": 300,
+      "page": "page-2",
+      "text": "NOT DECIDED YET\n\nThese are drawn with live text so they were quick to iterate. The moment you pick one, the glyph gets converted to outlines and hand-corrected as a path — a shipped icon must never depend on a font being present or on a renderer's hinting.\n\nThat conversion is also where the optical corrections happen properly."
+    },
+    {
+      "id": "brief",
+      "x": -390,
+      "y": 0,
+      "w": 320,
+      "page": "page-1",
+      "text": "SUPERSEDED — kept for reference\n\nThe first pass: four directions across the whole space (Spine, Cloze blank, Recall curve, Monogram).\n\nMonogram was picked. The other three stay here in case a later look changes your mind."
+    }
+  ],
+  "launch": {
+    "view": "canvas",
+    "page": "page-3"
+  }
+}
