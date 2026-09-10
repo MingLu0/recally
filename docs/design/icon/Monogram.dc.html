@@ -1,0 +1,220 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=Fraunces:opsz,wght@9..144,700;9..144,900&family=Newsreader:wght@600;700&display=swap">
+  <style>
+    body { margin: 0; font-family: 'Inter Tight', system-ui, sans-serif; }
+    a { color: #1f6f5c; } a:hover { color: #175646; }
+    .tile { position: relative; width: 100%; max-width: 340px; aspect-ratio: 1; border-radius: 14px; overflow: hidden; }
+    .safe { position: absolute; inset: 0; width: 100%; height: 100%; }
+    .row { display: flex; gap: 9px; align-items: center; }
+    .sm { position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .cap { font-size: 12px; font-weight: 400; color: #94948d; }
+    .lbl { font-size: 11px; font-weight: 700; letter-spacing: 0.4px; color: #1f6f5c; }
+    .nm { font-size: 15px; font-weight: 800; color: #17181a; }
+    .dsc { font-size: 13px; font-weight: 400; color: #57574f; line-height: 19px; }
+    .meta { display: flex; gap: 6px; }
+    .mk { font-size: 11px; font-weight: 700; letter-spacing: 0.4px; flex-shrink: 0; }
+    .mv { font-size: 12px; font-weight: 400; color: #76766d; line-height: 17px; }
+    .col { display: flex; flex-direction: column; gap: 13px; }
+    .sep { border-top: 1px solid #f0f0ee; padding-top: 11px; display: flex; flex-direction: column; gap: 7px; }
+  </style>
+</helmet>
+
+<div style="width: 1560px; height: 1720px; background: #ffffff; box-sizing: border-box; padding: 44px 48px; display: flex; flex-direction: column; gap: 26px;">
+
+  <div style="display: flex; flex-direction: column; gap: 8px;">
+    <div style="font-size: 22px; font-weight: 800; color: #17181a; letter-spacing: -0.7px;">Monogram — six executions</div>
+    <div style="font-size: 14px; font-weight: 400; color: #57574f; line-height: 21px; max-width: 1000px;">The direction is settled: a letter on the primary fill. What was ugly about the first pass was the execution — a default Inter Tight R, optically low, filling the whole safe zone, its counter fighting the rule beneath it. These six vary the letterform, the crop and the idea. Same teal, same flat treatment, same 108dp canvas throughout.</div>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 30px 34px;">
+
+    <!-- ============ 1. CORRECTED ============ -->
+    <div class="col">
+      <div style="display: flex; flex-direction: column; gap: 4px;">
+        <div class="lbl">D1</div>
+        <div class="nm">Corrected</div>
+      </div>
+      <div class="tile" style="background: #1f6f5c;">
+        <svg viewBox="0 0 108 108" class="safe">
+          <text x="54" y="54" text-anchor="middle" dominant-baseline="central" style="font-family: 'Inter Tight', system-ui, sans-serif; font-size: 62px; font-weight: 800; letter-spacing: -3px; fill: #ffffff;">R</text>
+          <circle cx="54" cy="54" r="36" fill="none" stroke="#ffffff" stroke-width="0.6" stroke-dasharray="3 3" opacity="0.4"></circle>
+        </svg>
+      </div>
+      <div class="row">
+        <div class="sm" style="width: 44px; height: 44px; background: #1f6f5c; border-radius: 999px;"><svg viewBox="0 0 108 108" class="safe"><text x="54" y="54" text-anchor="middle" dominant-baseline="central" style="font-family: 'Inter Tight', system-ui, sans-serif; font-size: 62px; font-weight: 800; letter-spacing: -3px; fill: #ffffff;">R</text></svg></div>
+        <div class="sm" style="width: 44px; height: 44px; background: #1f6f5c; border-radius: 12px;"><svg viewBox="0 0 108 108" class="safe"><text x="54" y="54" text-anchor="middle" dominant-baseline="central" style="font-family: 'Inter Tight', system-ui, sans-serif; font-size: 62px; font-weight: 800; letter-spacing: -3px; fill: #ffffff;">R</text></svg></div>
+        <div class="sm" style="width: 24px; height: 24px; background: #1f6f5c; border-radius: 999px;"><svg viewBox="0 0 108 108" class="safe"><text x="54" y="54" text-anchor="middle" dominant-baseline="central" style="font-family: 'Inter Tight', system-ui, sans-serif; font-size: 62px; font-weight: 800; letter-spacing: -3px; fill: #ffffff;">R</text></svg></div>
+        <span class="cap">circle · squircle · 24dp</span>
+      </div>
+      <div class="sep">
+        <div class="dsc">The same idea, drawn properly: optically centred rather than nudged, and sized to <em>sit inside</em> the safe zone with air around it instead of filling it. No rule underneath.</div>
+        <div class="meta"><span class="mk" style="color: #2f9e6e;">COST</span><span class="mv">Nil — one glyph.</span></div>
+        <div class="meta"><span class="mk" style="color: #b85c2e;">RISK</span><span class="mv">Still the most common icon shape there is. Correct, not distinctive.</span></div>
+      </div>
+    </div>
+
+    <!-- ============ 2. SERIF ============ -->
+    <div class="col">
+      <div style="display: flex; flex-direction: column; gap: 4px;">
+        <div class="lbl">D2</div>
+        <div class="nm">Bookish serif</div>
+      </div>
+      <div class="tile" style="background: #1f6f5c;">
+        <svg viewBox="0 0 108 108" class="safe">
+          <text x="54" y="55" text-anchor="middle" dominant-baseline="central" style="font-family: 'Fraunces', Georgia, serif; font-size: 68px; font-weight: 900; fill: #ffffff;">R</text>
+          <circle cx="54" cy="54" r="36" fill="none" stroke="#ffffff" stroke-width="0.6" stroke-dasharray="3 3" opacity="0.4"></circle>
+        </svg>
+      </div>
+      <div class="row">
+        <div class="sm" style="width: 44px; height: 44px; background: #1f6f5c; border-radius: 999px;"><svg viewBox="0 0 108 108" class="safe"><text x="54" y="55" text-anchor="middle" dominant-baseline="central" style="font-family: 'Fraunces', Georgia, serif; font-size: 68px; font-weight: 900; fill: #ffffff;">R</text></svg></div>
+        <div class="sm" style="width: 44px; height: 44px; background: #1f6f5c; border-radius: 12px;"><svg viewBox="0 0 108 108" class="safe"><text x="54" y="55" text-anchor="middle" dominant-baseline="central" style="font-family: 'Fraunces', Georgia, serif; font-size: 68px; font-weight: 900; fill: #ffffff;">R</text></svg></div>
+        <div class="sm" style="width: 24px; height: 24px; background: #1f6f5c; border-radius: 999px;"><svg viewBox="0 0 108 108" class="safe"><text x="54" y="55" text-anchor="middle" dominant-baseline="central" style="font-family: 'Fraunces', Georgia, serif; font-size: 68px; font-weight: 900; fill: #ffffff;">R</text></svg></div>
+        <span class="cap">circle · squircle · 24dp</span>
+      </div>
+      <div class="sep">
+        <div class="dsc">A high-contrast serif with a real spur and bracket. This is a <em>reading</em> product; a bookish letterform says so where a UI sans cannot.</div>
+        <div class="meta"><span class="mk" style="color: #2f9e6e;">COST</span><span class="mv">One extra face — icon only, converted to a path. It never ships in the app.</span></div>
+        <div class="meta"><span class="mk" style="color: #b85c2e;">RISK</span><span class="mv">Deliberately breaks the one-family rule. Defensible for a mark, but it is a departure you should agree to.</span></div>
+      </div>
+    </div>
+
+    <!-- ============ 3. CROPPED ============ -->
+    <div class="col">
+      <div style="display: flex; flex-direction: column; gap: 4px;">
+        <div class="lbl">D3</div>
+        <div class="nm">Cropped</div>
+      </div>
+      <div class="tile" style="background: #1f6f5c;">
+        <svg viewBox="0 0 108 108" class="safe">
+          <text x="30" y="60" text-anchor="middle" dominant-baseline="central" style="font-family: 'Inter Tight', system-ui, sans-serif; font-size: 132px; font-weight: 800; letter-spacing: -6px; fill: #ffffff;">R</text>
+          <circle cx="54" cy="54" r="36" fill="none" stroke="#ffffff" stroke-width="0.6" stroke-dasharray="3 3" opacity="0.4"></circle>
+        </svg>
+      </div>
+      <div class="row">
+        <div class="sm" style="width: 44px; height: 44px; background: #1f6f5c; border-radius: 999px;"><svg viewBox="0 0 108 108" class="safe"><text x="30" y="60" text-anchor="middle" dominant-baseline="central" style="font-family: 'Inter Tight', system-ui, sans-serif; font-size: 132px; font-weight: 800; letter-spacing: -6px; fill: #ffffff;">R</text></svg></div>
+        <div class="sm" style="width: 44px; height: 44px; background: #1f6f5c; border-radius: 12px;"><svg viewBox="0 0 108 108" class="safe"><text x="30" y="60" text-anchor="middle" dominant-baseline="central" style="font-family: 'Inter Tight', system-ui, sans-serif; font-size: 132px; font-weight: 800; letter-spacing: -6px; fill: #ffffff;">R</text></svg></div>
+        <div class="sm" style="width: 24px; height: 24px; background: #1f6f5c; border-radius: 999px;"><svg viewBox="0 0 108 108" class="safe"><text x="30" y="60" text-anchor="middle" dominant-baseline="central" style="font-family: 'Inter Tight', system-ui, sans-serif; font-size: 132px; font-weight: 800; letter-spacing: -6px; fill: #ffffff;">R</text></svg></div>
+        <span class="cap">circle · squircle · 24dp</span>
+      </div>
+      <div class="sep">
+        <div class="dsc">Oversized and bled off two edges, so the icon is a fragment of a letter rather than a letter in a box. The bowl and leg become abstract shapes.</div>
+        <div class="meta"><span class="mk" style="color: #2f9e6e;">COST</span><span class="mv">Nil, but the crop must be re-checked against every mask shape.</span></div>
+        <div class="meta"><span class="mk" style="color: #b85c2e;">RISK</span><span class="mv">The circle mask eats more of the leg than the squircle does. Confident when it works; illegible if the crop drifts.</span></div>
+      </div>
+    </div>
+
+    <!-- ============ 4. CUT / RECALL GAP ============ -->
+    <div class="col">
+      <div style="display: flex; flex-direction: column; gap: 4px;">
+        <div class="lbl">D4</div>
+        <div class="nm">Recall gap</div>
+      </div>
+      <div class="tile" style="background: #1f6f5c;">
+        <svg viewBox="0 0 108 108" class="safe">
+          <defs>
+            <mask id="gapmask">
+              <rect x="0" y="0" width="108" height="108" fill="#ffffff"></rect>
+              <rect x="24" y="50" width="60" height="7" fill="#000000"></rect>
+            </mask>
+          </defs>
+          <text x="54" y="54" text-anchor="middle" dominant-baseline="central" mask="url(#gapmask)" style="font-family: 'Inter Tight', system-ui, sans-serif; font-size: 62px; font-weight: 800; letter-spacing: -3px; fill: #ffffff;">R</text>
+          <circle cx="54" cy="54" r="36" fill="none" stroke="#ffffff" stroke-width="0.6" stroke-dasharray="3 3" opacity="0.4"></circle>
+        </svg>
+      </div>
+      <div class="row">
+        <div class="sm" style="width: 44px; height: 44px; background: #1f6f5c; border-radius: 999px;"><svg viewBox="0 0 108 108" class="safe"><defs><mask id="gm2"><rect x="0" y="0" width="108" height="108" fill="#ffffff"></rect><rect x="24" y="50" width="60" height="7" fill="#000000"></rect></mask></defs><text x="54" y="54" text-anchor="middle" dominant-baseline="central" mask="url(#gm2)" style="font-family: 'Inter Tight', system-ui, sans-serif; font-size: 62px; font-weight: 800; letter-spacing: -3px; fill: #ffffff;">R</text></svg></div>
+        <div class="sm" style="width: 44px; height: 44px; background: #1f6f5c; border-radius: 12px;"><svg viewBox="0 0 108 108" class="safe"><defs><mask id="gm3"><rect x="0" y="0" width="108" height="108" fill="#ffffff"></rect><rect x="24" y="50" width="60" height="7" fill="#000000"></rect></mask></defs><text x="54" y="54" text-anchor="middle" dominant-baseline="central" mask="url(#gm3)" style="font-family: 'Inter Tight', system-ui, sans-serif; font-size: 62px; font-weight: 800; letter-spacing: -3px; fill: #ffffff;">R</text></svg></div>
+        <div class="sm" style="width: 24px; height: 24px; background: #1f6f5c; border-radius: 999px;"><svg viewBox="0 0 108 108" class="safe"><defs><mask id="gm4"><rect x="0" y="0" width="108" height="108" fill="#ffffff"></rect><rect x="24" y="50" width="60" height="7" fill="#000000"></rect></mask></defs><text x="54" y="54" text-anchor="middle" dominant-baseline="central" mask="url(#gm4)" style="font-family: 'Inter Tight', system-ui, sans-serif; font-size: 62px; font-weight: 800; letter-spacing: -3px; fill: #ffffff;">R</text></svg></div>
+        <span class="cap">circle · squircle · 24dp</span>
+      </div>
+      <div class="sep">
+        <div class="dsc">The R cut by a horizontal gap — the letter is <em>partly forgotten</em>, and your eye completes it. That completion is exactly what the product asks you to do every morning.</div>
+        <div class="meta"><span class="mk" style="color: #2f9e6e;">COST</span><span class="mv">Low. One glyph, one knockout rect.</span></div>
+        <div class="meta"><span class="mk" style="color: #b85c2e;">RISK</span><span class="mv">At 24dp the gap is under a pixel and may fill in or look like a rendering fault. Needs a second, wider-gap version for small sizes.</span></div>
+      </div>
+    </div>
+
+    <!-- ============ 5. CLOZE UNDERLINE ============ -->
+    <div class="col">
+      <div style="display: flex; flex-direction: column; gap: 4px;">
+        <div class="lbl">D5</div>
+        <div class="nm">Cloze R</div>
+      </div>
+      <div class="tile" style="background: #ffffff; border: 1px solid #e3e3e0;">
+        <svg viewBox="0 0 108 108" class="safe">
+          <rect x="28" y="30" width="52" height="40" rx="5" fill="#e4f0eb"></rect>
+          <text x="54" y="50" text-anchor="middle" dominant-baseline="central" style="font-family: 'Inter Tight', system-ui, sans-serif; font-size: 46px; font-weight: 800; letter-spacing: -2.2px; fill: #1f6f5c;">R</text>
+          <rect x="28" y="70" width="52" height="5" rx="2.5" fill="#1f6f5c"></rect>
+          <circle cx="54" cy="54" r="36" fill="none" stroke="#94948d" stroke-width="0.6" stroke-dasharray="3 3" opacity="0.5"></circle>
+        </svg>
+      </div>
+      <div class="row">
+        <div class="sm" style="width: 44px; height: 44px; background: #ffffff; border: 1px solid #e3e3e0; border-radius: 999px;"><svg viewBox="0 0 108 108" class="safe"><rect x="28" y="30" width="52" height="40" rx="5" fill="#e4f0eb"></rect><text x="54" y="50" text-anchor="middle" dominant-baseline="central" style="font-family: 'Inter Tight', system-ui, sans-serif; font-size: 46px; font-weight: 800; letter-spacing: -2.2px; fill: #1f6f5c;">R</text><rect x="28" y="70" width="52" height="5" rx="2.5" fill="#1f6f5c"></rect></svg></div>
+        <div class="sm" style="width: 44px; height: 44px; background: #ffffff; border: 1px solid #e3e3e0; border-radius: 12px;"><svg viewBox="0 0 108 108" class="safe"><rect x="28" y="30" width="52" height="40" rx="5" fill="#e4f0eb"></rect><text x="54" y="50" text-anchor="middle" dominant-baseline="central" style="font-family: 'Inter Tight', system-ui, sans-serif; font-size: 46px; font-weight: 800; letter-spacing: -2.2px; fill: #1f6f5c;">R</text><rect x="28" y="70" width="52" height="5" rx="2.5" fill="#1f6f5c"></rect></svg></div>
+        <div class="sm" style="width: 24px; height: 24px; background: #ffffff; border: 1px solid #e3e3e0; border-radius: 999px;"><svg viewBox="0 0 108 108" class="safe"><rect x="28" y="30" width="52" height="40" rx="5" fill="#e4f0eb"></rect><text x="54" y="50" text-anchor="middle" dominant-baseline="central" style="font-family: 'Inter Tight', system-ui, sans-serif; font-size: 46px; font-weight: 800; letter-spacing: -2.2px; fill: #1f6f5c;">R</text><rect x="28" y="70" width="52" height="5" rx="2.5" fill="#1f6f5c"></rect></svg></div>
+        <span class="cap">circle · squircle · 24dp</span>
+      </div>
+      <div class="sep">
+        <div class="dsc">The R sitting <em>in</em> a cloze blank — the wash fill and 2dp underline from <span style="font-family: ui-monospace, monospace; font-size: 12px;">ClozeText.kt</span>, exactly as the app draws it. Monogram and product idea in one mark.</div>
+        <div class="meta"><span class="mk" style="color: #2f9e6e;">COST</span><span class="mv">Low, and it reuses tokens that already exist.</span></div>
+        <div class="meta"><span class="mk" style="color: #b85c2e;">RISK</span><span class="mv">Light ground — it can vanish on a pale wallpaper, and it is busier than the others at 24dp.</span></div>
+      </div>
+    </div>
+
+    <!-- ============ 6. INVERTED / KNOCKOUT ============ -->
+    <div class="col">
+      <div style="display: flex; flex-direction: column; gap: 4px;">
+        <div class="lbl">D6</div>
+        <div class="nm">Knockout</div>
+      </div>
+      <div class="tile" style="background: #17181a;">
+        <svg viewBox="0 0 108 108" class="safe">
+          <defs>
+            <mask id="ko">
+              <rect x="0" y="0" width="108" height="108" fill="#000000"></rect>
+              <circle cx="54" cy="54" r="34" fill="#ffffff"></circle>
+              <text x="54" y="54" text-anchor="middle" dominant-baseline="central" style="font-family: 'Inter Tight', system-ui, sans-serif; font-size: 54px; font-weight: 800; letter-spacing: -2.6px; fill: #000000;">R</text>
+            </mask>
+          </defs>
+          <rect x="0" y="0" width="108" height="108" fill="#4fb894" mask="url(#ko)"></rect>
+          <circle cx="54" cy="54" r="36" fill="none" stroke="#ffffff" stroke-width="0.6" stroke-dasharray="3 3" opacity="0.3"></circle>
+        </svg>
+      </div>
+      <div class="row">
+        <div class="sm" style="width: 44px; height: 44px; background: #17181a; border-radius: 999px;"><svg viewBox="0 0 108 108" class="safe"><defs><mask id="ko2"><rect x="0" y="0" width="108" height="108" fill="#000000"></rect><circle cx="54" cy="54" r="34" fill="#ffffff"></circle><text x="54" y="54" text-anchor="middle" dominant-baseline="central" style="font-family: 'Inter Tight', system-ui, sans-serif; font-size: 54px; font-weight: 800; letter-spacing: -2.6px; fill: #000000;">R</text></mask></defs><rect x="0" y="0" width="108" height="108" fill="#4fb894" mask="url(#ko2)"></rect></svg></div>
+        <div class="sm" style="width: 44px; height: 44px; background: #17181a; border-radius: 12px;"><svg viewBox="0 0 108 108" class="safe"><defs><mask id="ko3"><rect x="0" y="0" width="108" height="108" fill="#000000"></rect><circle cx="54" cy="54" r="34" fill="#ffffff"></circle><text x="54" y="54" text-anchor="middle" dominant-baseline="central" style="font-family: 'Inter Tight', system-ui, sans-serif; font-size: 54px; font-weight: 800; letter-spacing: -2.6px; fill: #000000;">R</text></mask></defs><rect x="0" y="0" width="108" height="108" fill="#4fb894" mask="url(#ko3)"></rect></svg></div>
+        <div class="sm" style="width: 24px; height: 24px; background: #17181a; border-radius: 999px;"><svg viewBox="0 0 108 108" class="safe"><defs><mask id="ko4"><rect x="0" y="0" width="108" height="108" fill="#000000"></rect><circle cx="54" cy="54" r="34" fill="#ffffff"></circle><text x="54" y="54" text-anchor="middle" dominant-baseline="central" style="font-family: 'Inter Tight', system-ui, sans-serif; font-size: 54px; font-weight: 800; letter-spacing: -2.6px; fill: #000000;">R</text></mask></defs><rect x="0" y="0" width="108" height="108" fill="#4fb894" mask="url(#ko4)"></rect></svg></div>
+        <span class="cap">circle · squircle · 24dp</span>
+      </div>
+      <div class="sep">
+        <div class="dsc">Letter punched out of a teal disc on near-black — the dark theme's <span style="font-family: ui-monospace, monospace; font-size: 12px;">ground</span> and lifted <span style="font-family: ui-monospace, monospace; font-size: 12px;">primary</span>. The R is wallpaper showing through, not ink.</div>
+        <div class="meta"><span class="mk" style="color: #2f9e6e;">COST</span><span class="mv">Low. One mask.</span></div>
+        <div class="meta"><span class="mk" style="color: #b85c2e;">RISK</span><span class="mv">A dark icon is a commitment — it looks deliberate in a dark dock and heavy in a light one.</span></div>
+      </div>
+    </div>
+
+  </div>
+
+  <div style="margin-top: auto; border-top: 1px solid #e3e3e0; padding-top: 14px; display: flex; gap: 30px;">
+    <div style="flex: 1; display: flex; flex-direction: column; gap: 5px;">
+      <div style="font-size: 11px; font-weight: 700; color: #17181a; letter-spacing: 0.4px;">WHAT WAS ACTUALLY WRONG WITH THE FIRST ONE</div>
+      <div style="font-size: 12px; font-weight: 400; color: #57574f; line-height: 18px;">Three things, all fixable: the glyph was nudged with a hard pixel offset instead of optically centred; it filled the safe zone edge to edge, so it read as cramped; and the ghosted rule beneath it competed with the letter's own counter. D1 is that same idea with those three fixed — worth comparing against, even if you end up elsewhere.</div>
+    </div>
+    <div style="flex: 1; display: flex; flex-direction: column; gap: 5px;">
+      <div style="font-size: 11px; font-weight: 700; color: #17181a; letter-spacing: 0.4px;">MIXABLE</div>
+      <div style="font-size: 12px; font-weight: 400; color: #57574f; line-height: 18px;">These are not six sealed options — the axes combine. The serif letterform (D2) can take the recall gap (D4); the knockout (D6) works with any of the letterforms; the crop (D3) is independent of typeface. Say which parts you like and I will draw the combination.</div>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

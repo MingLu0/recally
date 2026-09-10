@@ -150,6 +150,40 @@ Four items: Today, Decks, Stats, Settings. Active item's icon sits in a 34dp `pr
 
 Adopted into `docs/android.md` (*Navigation*): Review and Approve are entered from Today rather than being nav destinations, because both are modal tasks you finish and leave.
 
+## Icon
+
+The launcher mark is the letter **R** in Inter Tight ExtraBold, white on `primary`, cut by a horizontal **recall gap**. The letter is partly missing and the eye completes it — the same act the product asks for every morning. Chosen 2026-09-09 from six monogram executions; the alternatives are on the canvas's *Monogram* page.
+
+### Geometry
+
+Authored on the adaptive-icon **108×108** canvas, all values in viewport units.
+
+| | Value | Why |
+|---|---|---|
+| Letter height | 46 | Solved, not chosen by eye: the tallest letter whose ink-box corner stays within r=32 — the 36 mask radius less 4 units of launcher parallax headroom. Furthest corner sits at **29.6**; worst case under parallax **33.6**. |
+| Ink box | x 35.32–72.68, y 31.0–77.0 | Centred on the glyph's **ink box**, not its advance width. The R's right sidebearing would otherwise push it visibly left of centre. |
+| Gap | y 51.35–56.65 (5.3 tall) | Knocked out to the teal ground, not to transparency, so the monochrome layer and notification silhouette need no separate treatment. Renders ~1.2px at 24dp — the size the width was chosen for. |
+| Ground | `#1F6F5C` (`primary`) | Flat. No gradient, no shadow — the *Rules* above apply to the icon too. |
+
+### Files
+
+| File | Role |
+|---|---|
+| `res/mipmap-anydpi-v26/ic_launcher.xml` | Adaptive icon; `ic_launcher_round.xml` is identical (the mask differs, not the art). |
+| `res/drawable/ic_launcher_background.xml` | Flat `#1F6F5C` fill. |
+| `res/drawable/ic_launcher_foreground.xml` | The cut R. |
+| `res/drawable/ic_launcher_monochrome.xml` | Android 13 themed icons. Same geometry; the system supplies the colour. |
+| `res/drawable/ic_notification.xml` | Same mark rescaled to a 24 viewport, white on transparent — Android discards colour here. |
+
+`minSdk` is 26, so every supported device gets the adaptive icon and **no legacy PNG densities are needed**. The icon ships as vectors only.
+
+### Two things not to undo
+
+- **The path is the asset.** The outline was extracted once from the vendored `inter_tight_extrabold.ttf` and committed as `pathData`. Do not re-render it from a font at build time — a shipped icon must not depend on a font being installed or on a renderer's hinting.
+- **The gap is two clip groups, not a mask.** `VectorDrawable` has no mask element, so the letter is drawn twice: once clipped above the gap, once below. This is exactly equivalent and needs no runtime support. Editing one group without the other silently desyncs the mark.
+
+Regenerate with `docs/design/icon/build_icon.py` if the geometry ever changes; it writes all five files from the font and one set of constants.
+
 ## Screens → packages → endpoints
 
 Package root `dev.recally.ui` — layout in `docs/android.md`, *Project structure*.

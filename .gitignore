@@ -57,3 +57,4 @@ backend/requirements-audit.txt
 # Design canvas: seeded editor payload (~2.6MB), rebuildable from the
 # .dc.html artboards + canvas.json. See docs/design/README.md.
 docs/design/recally-style-explore.html
+docs/design/icon/recally-launcher-icon.html
