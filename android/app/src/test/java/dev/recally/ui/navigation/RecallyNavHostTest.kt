@@ -1,6 +1,9 @@
 package dev.recally.ui.navigation
 
 import android.content.Context
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
@@ -24,7 +27,11 @@ import dev.recally.domain.repository.CardRepository
 import dev.recally.domain.repository.DeckRepository
 import dev.recally.domain.repository.Result
 import dev.recally.domain.repository.StatsRepository
+import dev.recally.ui.screens.approve.QueueFilter
+import dev.recally.ui.screens.today.TodayScreen
+import dev.recally.ui.screens.today.TodayUiState
 import dev.recally.ui.screens.today.TodayViewModel
+import dev.recally.ui.theme.RecallyTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -34,9 +41,11 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertSame
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -59,6 +68,9 @@ import java.time.ZoneOffset
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class RecallyNavHostTest {
+    @get:Rule
+    val composeTestRule = createComposeRule()
+
     private val context: Context = ApplicationProvider.getApplicationContext()
     private val testDispatcher = StandardTestDispatcher()
 
@@ -201,6 +213,95 @@ class RecallyNavHostTest {
         return opened
     }
 
+    /**
+     * Issue #178: the two "Waiting for you" tiles are distinct counts, so they
+     * must be distinct destinations. This drives the real TodayScreen through
+     * the exact wiring the Today route entry applies — the tile's callback into
+     * `Screen.Approve.createRoute` on a TestNavHostController — and reads back
+     * the route that actually landed on the back stack.
+     */
+    @Test
+    fun test_needs_you_tile_routes_with_the_needs_you_filter() {
+        val landedRoute = routeAfterTappingTile(tileLabel = "need you")
+
+        assertEquals(Screen.Approve.createRoute(QueueFilter.NEEDS_YOU), landedRoute)
+    }
+
+    @Test
+    fun test_to_approve_tile_routes_without_a_filter() {
+        // Negative: the clean-queue tile must NOT carry Needs-you. Before the
+        // fix both tiles shared one bare callback, so this is the assertion
+        // that fails first.
+        val landedRoute = routeAfterTappingTile(tileLabel = "to approve")
+
+        assertEquals(Screen.Approve.createRoute(QueueFilter.ALL), landedRoute)
+        assertFalse(
+            "the to-approve tile must not preselect the Needs-you filter",
+            QueueFilter.NEEDS_YOU.name in landedRoute,
+        )
+    }
+
+    /**
+     * Renders the real TodayScreen with both tiles present, taps one, and
+     * returns the route the Today route entry's `onOpenApprove` navigated to.
+     *
+     * The destinations never compose in a unit test, so Approve is served by
+     * the TestNavigatorProvider's plain test navigator under its real route
+     * pattern — the same technique as [test_returning_from_review_refreshes_today].
+     * What is under test is the route the tile produces, so it is read back
+     * from the back-stack entry rather than asserted on a captured lambda.
+     */
+    private fun routeAfterTappingTile(tileLabel: String): String {
+        val navController = TestNavHostController(context)
+
+        @Suppress("UNCHECKED_CAST")
+        val testNavigator = navController.navigatorProvider["test"] as Navigator<NavDestination>
+        navController.graph =
+            navController.createGraph(startDestination = Screen.Today.route) {
+                addDestination(testNavigator.createDestination().apply { route = Screen.Today.route })
+                addDestination(
+                    testNavigator.createDestination().apply {
+                        route = Screen.Approve.route
+                        addArgument(ARG_FILTER, approveFilterArgument().argument)
+                    },
+                )
+            }
+
+        composeTestRule.setContent {
+            RecallyTheme {
+                TodayScreen(
+                    uiState = todayStateWithBothTiles(),
+                    onStartReview = {},
+                    // Verbatim the Today route entry's wiring (RecallyNavHost).
+                    onOpenApprove = { filter -> navController.navigate(Screen.Approve.createRoute(filter)) },
+                    onOpenSettings = {},
+                    onRetry = {},
+                    onBookClick = {},
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithText(tileLabel).performClick()
+        composeTestRule.waitForIdle()
+
+        val landedEntry =
+            requireNotNull(navController.currentBackStackEntry) {
+                "nothing on the back stack after tapping \"$tileLabel\""
+            }
+        assertEquals(
+            "the tile navigates to Approve",
+            Screen.Approve.route,
+            landedEntry.destination.route,
+        )
+        // The route the entry actually carries, rebuilt from its own argument.
+        val filter =
+            landedEntry.arguments
+                ?.getString(ARG_FILTER)
+                ?.let(QueueFilter::valueOf)
+                ?: QueueFilter.ALL
+        return Screen.Approve.createRoute(filter)
+    }
+
     private class FakeCardRepository(
         private val refreshResult: Result<DueSummary>,
     ) : CardRepository {
@@ -262,6 +363,16 @@ class RecallyNavHostTest {
     }
 
     private companion object {
+        /** Both tiles present: the "need you" tile is dropped at zero. */
+        fun todayStateWithBothTiles(): TodayUiState =
+            TodayUiState(
+                isLoading = false,
+                dueCount = 3,
+                newCount = 1,
+                pendingReviewCount = 8,
+                needsHumanCount = 3,
+            )
+
         fun dueSummary(dueCount: Int): DueSummary =
             DueSummary(
                 dueCount = dueCount,
