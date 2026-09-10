@@ -156,8 +156,11 @@ private fun TodayMetrics(
                 modifier = Modifier.weight(1f),
             )
             Metric(
+                // Null already falls through to the no-data dash in
+                // `MetricValue`; the label is what says what the figure counts
+                // (design-system.md, "The retention figure"; issue #190).
                 value = retention30d?.let { "${(it * 100).roundToInt()}%" },
-                label = "retention 30d",
+                label = "recall 30d",
                 valueColor = colors.success,
                 modifier = Modifier.weight(1f),
             )

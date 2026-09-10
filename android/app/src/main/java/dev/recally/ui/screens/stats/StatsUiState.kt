@@ -21,7 +21,13 @@ data class StatsUiState(
     val errorMessage: String? = null,
     val streakDays: Int = 0,
     val reviewsToday: Int = 0,
-    val retention30d: Double = 0.0,
+    /**
+     * Recall on cards already learned, last 30 days. Null when no review
+     * fell in the window — an absence, never 0% (issue #190).
+     */
+    val retention30d: Double? = null,
+    /** Reviews the retention figure was computed over; drives the small-sample caption. */
+    val retentionReviewCount: Int = 0,
     val forecast: List<ForecastBar> = emptyList(),
     val lapseRateByType: Map<String, Double> = emptyMap(),
     val lapseRateByGuidanceVersion: List<GuidanceVersionLapseRate> = emptyList(),

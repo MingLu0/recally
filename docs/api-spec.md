@@ -207,6 +207,7 @@ The response carries no chapter counts: the list is complete and unpaginated, so
   "streak_days": 9,
   "reviews_today": 23,
   "retention_30d": 0.87,
+  "retention_30d_reviews": 143,
   "lapse_rate_by_type": { "qa": 0.11, "cloze": 0.18 },
   "lapse_rate_by_guidance_version": { "1": 0.19, "2": 0.12 },
   "curation_yield": 0.83,
@@ -214,6 +215,8 @@ The response carries no chapter counts: the list is complete and unpaginated, so
   "forecast": [ { "date": "2026-09-05", "due": 14 } ]
 }
 ```
+
+`retention_30d` is the share of the last 30 local days' reviews that were **not** a lapse — a lapse being an `Again` (rating 1) on a card already in FSRS `review` state, so an `Again` during (re)learning does not count against it. It is **`null` when no review fell in the window**: an absence and a genuine 0% are different statements, and serving `0.0` for "never reviewed" renders as the worse of the two (issue #190). `retention_30d_reviews` is the size of that window — `0` exactly when `retention_30d` is `null` — so the client can qualify a handful of reviews rather than present them at full confidence; `docs/design/design-system.md` (*The retention figure*) pins the caption, the no-data treatment and the small-sample threshold.
 
 `lapse_rate_by_guidance_version` keys are `cards.guidance_version` as strings (`null` guidance is omitted); it is how the Learner's effect is judged, so it is the one number that has to exist before Stage B writes a v2 (PRD success metrics, roadmap step 6b). `curation_yield` is approved cards ÷ highlights ingested. `next_due_at` is the earliest *future* `card_state.due` across approved, unsuspended cards — `null` when nothing is scheduled. It is the hours-away figure `forecast`'s day granularity cannot give, behind the session summary's "Next card due in 4 hours" and Today's nothing-due line.
 

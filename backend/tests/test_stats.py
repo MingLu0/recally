@@ -335,14 +335,20 @@ def test_forecast_excludes_suspended_cards(container: Container) -> None:
 
 
 def test_stats_on_empty_database_returns_zeros_not_errors(client: TestClient) -> None:
-    """Negative: no division by zero anywhere; every key of the documented shape is present."""
+    """Negative: no division by zero anywhere; every key of the documented shape is present.
+
+    Retention is the one figure that is null rather than zero: with no review in
+    the window there is nothing to report, and "0%" would be a claim about recall
+    that the data does not make (issue #190).
+    """
     response = client.get("/stats", headers={"X-API-Key": TEST_API_KEY})
 
     assert response.status_code == 200
     assert response.json() == {
         "streak_days": 0,
         "reviews_today": 0,
-        "retention_30d": 0.0,
+        "retention_30d": None,
+        "retention_30d_reviews": 0,
         "lapse_rate_by_type": {},
         "lapse_rate_by_guidance_version": {},
         "curation_yield": 0.0,
@@ -408,3 +414,63 @@ def test_stats_requires_the_api_key(client: TestClient) -> None:
         "status": 401,
         "detail": "Invalid or missing X-API-Key header.",
     }
+
+
+def test_retention_is_none_when_no_reviews_in_the_window(container: Container) -> None:
+    """Negative: "never reviewed" is not "0% retention" (issue #190).
+
+    `0.0` for an empty window renders as "0%", which reads as catastrophic
+    recall when the truth is that there is nothing to report. The absence is
+    the answer, so the field is null and the app renders the no-data treatment.
+    """
+    with container.session() as session:
+        card = _card(session)
+        _review(session, card, _local(-40, 8), rating=3)  # outside the 30-day window
+        session.commit()
+        assert _stats(session).retention_30d is None
+
+
+def test_retention_excludes_an_again_from_learning(container: Container) -> None:
+    """An Again during learning is not a lapse, so retention stays 1.0.
+
+    This is the definition docs/design/design-system.md pins and the reason the
+    figure reads 100% on a young collection (issue #190). Locking it here keeps
+    a well-meaning "fix" that redefines a lapse from landing silently.
+    """
+    with container.session() as session:
+        card = _card(session)
+        _review(session, card, _local(-1, 8), rating=1, state_before="learning")
+        _review(session, card, _local(-2, 8), rating=1, state_before="relearning")
+        _review(session, card, _local(-3, 8), rating=3)
+        session.commit()
+        assert _stats(session).retention_30d == 1.0
+
+
+def test_retention_counts_an_again_from_review(container: Container) -> None:
+    """The other half of the definition: an Again from `review` state does lapse."""
+    with container.session() as session:
+        card = _card(session)
+        _review(session, card, _local(-1, 8), rating=1, state_before="review")
+        _review(session, card, _local(-2, 8), rating=3)
+        _review(session, card, _local(-3, 8), rating=3)
+        _review(session, card, _local(-4, 8), rating=3)
+        session.commit()
+        assert _stats(session).retention_30d == pytest.approx(0.75)
+
+
+def test_retention_window_excludes_a_review_older_than_30_local_days(
+    container: Container,
+) -> None:
+    """Day −31 is outside the window; only the in-window lapse counts.
+
+    Day −29 is the oldest day still inside it, so a lapse there halves the
+    figure while the day −31 lapse leaves it alone — if the boundary were
+    wrong the share would be 1/3, not 1/2.
+    """
+    with container.session() as session:
+        card = _card(session)
+        _review(session, card, _local(-31, 8), rating=1, state_before="review")  # outside
+        _review(session, card, _local(-29, 8), rating=1, state_before="review")  # inside
+        _review(session, card, _local(0, 8), rating=3)
+        session.commit()
+        assert _stats(session).retention_30d == pytest.approx(0.5)

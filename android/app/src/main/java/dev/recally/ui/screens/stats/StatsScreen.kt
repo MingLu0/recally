@@ -23,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import dev.recally.ui.theme.CombinedPreviews
 import dev.recally.ui.theme.RecallyRadius
@@ -80,6 +81,7 @@ fun StatsScreen(
                     streakDays = uiState.streakDays,
                     reviewsToday = uiState.reviewsToday,
                     retention30d = uiState.retention30d,
+                    retentionReviewCount = uiState.retentionReviewCount,
                 )
                 ForecastSection(forecast = uiState.forecast)
                 LapseRateByTypeSection(lapseRateByType = uiState.lapseRateByType)
@@ -97,7 +99,8 @@ fun StatsScreen(
 private fun HeadlineStrip(
     streakDays: Int,
     reviewsToday: Int,
-    retention30d: Double,
+    retention30d: Double?,
+    retentionReviewCount: Int,
 ) {
     val colors = MaterialTheme.recallyColors
     Row(
@@ -123,9 +126,12 @@ private fun HeadlineStrip(
         )
         HeadlineDivider()
         HeadlineMetric(
-            value = "${(retention30d * 100).roundToInt()}%",
-            label = "retention 30d",
-            valueColor = colors.success,
+            // Null is an absence, never "0%" (design-system.md, "States" →
+            // "No data for a metric"; issue #190).
+            value = retention30d?.let { "${(it * 100).roundToInt()}%" } ?: NO_DATA,
+            label = "recall",
+            caption = retentionCaption(retention30d, retentionReviewCount),
+            valueColor = if (retention30d != null) colors.success else colors.inkFaint,
             modifier = Modifier.weight(1f),
         )
     }
@@ -137,16 +143,48 @@ private fun HeadlineMetric(
     label: String,
     valueColor: Color,
     modifier: Modifier = Modifier,
+    caption: String? = null,
 ) {
+    val colors = MaterialTheme.recallyColors
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(RecallySpacing.xs),
         modifier = modifier.padding(vertical = RecallySpacing.cardPadding),
     ) {
         Text(value, style = MaterialTheme.typography.titleMedium, color = valueColor)
-        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.recallyColors.inkFaint)
+        Text(label, style = MaterialTheme.typography.labelMedium, color = colors.inkFaint)
+        // The qualifier that says what the figure counts — without it "100%"
+        // is unreadable (design-system.md, "The retention figure").
+        caption?.let {
+            Text(
+                it,
+                style = MaterialTheme.typography.labelSmall,
+                color = colors.inkFaint,
+                textAlign = TextAlign.Center,
+            )
+        }
     }
 }
+
+/**
+ * What the recall figure counts, and how far to trust it
+ * (design-system.md, "The retention figure").
+ *
+ * A null figure says only that nothing was reviewed. A figure over fewer than
+ * [RETENTION_CONFIDENT_REVIEWS] reviews still renders — it is the honest
+ * number — but says so, because one lapse in three is 67% and reads as a
+ * trend when it is noise.
+ */
+private fun retentionCaption(
+    retention30d: Double?,
+    reviewCount: Int,
+): String =
+    when {
+        retention30d == null -> "no reviews yet · 30d"
+        reviewCount < RETENTION_CONFIDENT_REVIEWS ->
+            "from $reviewCount ${if (reviewCount == 1) "review" else "reviews"} · too few to read"
+        else -> "cards you'd already learned · 30d"
+    }
 
 @Composable
 private fun HeadlineDivider() {
@@ -317,6 +355,15 @@ private fun comparisonLine(orderedRates: List<Map.Entry<String, Double>>): Strin
     return "${typeLabel(highest.key)} cards lapse more often than ${typeLabel(lowest.key)}."
 }
 
+/** The no-data treatment (design-system.md, "States" → "No data for a metric"). */
+private const val NO_DATA = "–"
+
+/**
+ * Reviews in the window below which the recall figure is qualified rather than
+ * presented bare (design-system.md, "The retention figure").
+ */
+private const val RETENTION_CONFIDENT_REVIEWS = 20
+
 private val DOCUMENTED_TYPE_ORDER = listOf("qa", "cloze")
 private val HEADLINE_HEIGHT = 66.dp
 private val LAPSE_BAR_HEIGHT = 7.dp
@@ -332,6 +379,7 @@ private fun StatsScreenPreview() {
                     streakDays = 9,
                     reviewsToday = 23,
                     retention30d = 0.87,
+                    retentionReviewCount = 143,
                     forecast =
                         listOf(14, 9, 17, 6, 11, 4, 13).mapIndexed { offset, due ->
                             ForecastBar(date = today.plusDays(offset.toLong()), due = due, isToday = offset == 0)
@@ -355,6 +403,7 @@ private fun StatsScreenTwoVersionsPreview() {
                     streakDays = 9,
                     reviewsToday = 23,
                     retention30d = 0.87,
+                    retentionReviewCount = 143,
                     forecast =
                         listOf(14, 9, 17, 6, 11, 4, 13).mapIndexed { offset, due ->
                             ForecastBar(date = today.plusDays(offset.toLong()), due = due, isToday = offset == 0)
@@ -377,8 +426,9 @@ private fun StatsScreenTwoVersionsPreview() {
 private fun StatsScreenEmptyPreview() {
     val today = LocalDate.now()
     RecallyTheme {
-        // The fresh-install shape: zeros and seven zero bars, never an error
-        // (3e's test_stats_on_empty_database_returns_zeros_not_errors).
+        // The fresh-install shape: zeros, seven zero bars, and a recall
+        // figure that says "no reviews yet" rather than "0%" (issue #190).
+        // Never an error (3e's test_stats_on_empty_database_returns_zeros_not_errors).
         StatsScreen(
             uiState =
                 StatsUiState(

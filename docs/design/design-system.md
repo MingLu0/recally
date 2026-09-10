@@ -220,6 +220,16 @@ All ten screens are drawn. Two notes on the later ones:
 - **Book detail expands chapters in place** rather than pushing a third screen. One book has 30 chapters (*30 Agents in 30 Days*), so a third navigation level would be tedious to browse. Cards carry the per-card controls from ADR-008 — edit, suspend, unsuspend — per `docs/android.md` (*Screens → 4. Decks*); only review actions (rate, approve) do not happen here.
 - **Stats invents nothing.** Every figure maps one-to-one onto `GET /stats`: `streak_days`, `reviews_today`, `retention_30d`, `forecast[]`, `lapse_rate_by_type`. It is the only screen with no G-gap dependency.
 
+### The retention figure
+
+`retention_30d` is **the share of your last-30-day reviews that were not an `Again` on a card already in FSRS `review` state** — an `Again` during learning or relearning is not a lapse. That is the conventional FSRS definition and it stays (`backend/src/recally/services/stats.py`); what changes is how it is *read* (issue #190).
+
+Three rules, all three implemented on Stats and on Today's strip:
+
+- **The caption states what it counts.** "retention 30d" alone gives the reader no way to know an `Again` from learning does not count, which is precisely why the figure reads 100% on a young collection — a card has to graduate before it can lapse. The label is **"recall"** with the qualifier **"cards you'd already learned · 30d"**. Never present the bare percentage under a bare "retention" label.
+- **No data is not zero.** Null `retention_30d` renders the no-data treatment, never "0%" (see *States* below).
+- **A small sample is qualified, not hidden.** Below `RETENTION_CONFIDENT_REVIEWS` = **20** reviews in the window the figure still renders — it is the honest number — but the qualifier is replaced with **"from N reviews · too few to read"** in `ink-faint`. One lapse in three is 67%, and 67% presented like a figure computed over hundreds reads as a trend when it is noise. The threshold is a judgement, not a statistic: 20 is where a single lapse moves the figure by 5 points rather than 33.
+
 ## States
 
 Every screen implements these. They are as much a part of the design as the happy path.
@@ -231,6 +241,7 @@ Every screen implements these. They are as much a part of the design as the happ
 | Nothing due | Today's action bar becomes `line`-bordered and `ink-faint`: "Nothing due — next card in 4 hours". |
 | Queue drained | Approve shows a centred `success` check with "Queue clear". |
 | Loading | Skeleton blocks in `line-soft` at the real component's dimensions. No spinners. |
+| No data for a metric | An en dash `–` in `ink-faint`, in place of the value, at the value's own type step. The label stays. Used wherever the server serves null for a figure rather than a number — `retention_30d` with no review in the window (issue #190), and every metric on Today's strip before the first load. A metric that has nothing to report says so; it never borrows `0` or `0%`, which are claims the data does not make. |
 | `needs_human` | `danger-wash` "NEEDS YOU" badge on the card; also a filter chip on Approve. |
 | `truncated` | `warn-wash` badge: "TRUNCATED SOURCE" per card on Approve, "N TRUNCATED" per book on the Decks row (issue #173). Flag only — **never** attempt to reconstruct the text (`AGENTS.md` hard rule 7). |
 | Push window | Read-only status row, never a toggle. `PUSH_WINDOW` is a server env var in `RECALLY_TIMEZONE` local time (`docs/config.md`), and `devices` carries no per-device preference — a switch would imply control the backend does not offer. State the window and say where it is set. |

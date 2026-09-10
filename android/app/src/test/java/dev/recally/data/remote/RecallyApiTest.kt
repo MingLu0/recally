@@ -108,7 +108,7 @@ class RecallyApiTest {
                     """{"suspended_until":null}""" to { it.unsuspendCard(55) },
                     """{"decks":[]}""" to { it.decks() },
                     """{"cards":[]}""" to { it.deckCards(1, chapter = "3. Error Analysis") },
-                    """{"streak_days":9,"reviews_today":23,"retention_30d":0.87,
+                    """{"streak_days":9,"reviews_today":23,"retention_30d":0.87,"retention_30d_reviews":143,
                         "lapse_rate_by_type":{"qa":0.11},"lapse_rate_by_guidance_version":{"1":0.19},
                         "curation_yield":0.83,"forecast":[]}""".replace("\n", "")
                         .replace(" ", "") to { it.stats() },
