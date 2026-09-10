@@ -423,6 +423,7 @@ class TodayViewModelTest {
                                     due = 5,
                                     progress = 0.42f,
                                     chapters = 3,
+                                    truncated = 0,
                                 ),
                             ),
                         ),
@@ -473,8 +474,24 @@ class TodayViewModelTest {
                     decksResult =
                         Result.Success(
                             listOf(
-                                Deck(bookId = 1, title = "Evals for AI Engineers", total = 48, due = 6, progress = 0.62f, chapters = 3),
-                                Deck(bookId = 7, title = "30 Agents in 30 Days", total = 83, due = 0, progress = 0.0f, chapters = 3),
+                                Deck(
+                                    bookId = 1,
+                                    title = "Evals for AI Engineers",
+                                    total = 48,
+                                    due = 6,
+                                    progress = 0.62f,
+                                    chapters = 3,
+                                    truncated = 0,
+                                ),
+                                Deck(
+                                    bookId = 7,
+                                    title = "30 Agents in 30 Days",
+                                    total = 83,
+                                    due = 0,
+                                    progress = 0.0f,
+                                    chapters = 3,
+                                    truncated = 0,
+                                ),
                             ),
                         ),
                 )

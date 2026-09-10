@@ -149,8 +149,24 @@ private fun DecksScreenPreview() {
                 DecksUiState(
                     decks =
                         listOf(
-                            Deck(bookId = 1, title = "Evals for AI Engineers", total = 48, due = 6, progress = 0.62f, chapters = 9),
-                            Deck(bookId = 2, title = "30 Agents in 30 Days", total = 83, due = 0, progress = 0.24f, chapters = 9),
+                            Deck(
+                                bookId = 1,
+                                title = "Evals for AI Engineers",
+                                total = 48,
+                                due = 6,
+                                progress = 0.62f,
+                                chapters = 9,
+                                truncated = 0,
+                            ),
+                            Deck(
+                                bookId = 2,
+                                title = "30 Agents in 30 Days",
+                                total = 83,
+                                due = 0,
+                                progress = 0.24f,
+                                chapters = 9,
+                                truncated = 2,
+                            ),
                         ),
                 ),
             onDeckClick = {},
@@ -181,7 +197,18 @@ private fun DecksScreenOfflinePreview() {
             uiState =
                 DecksUiState(
                     isOffline = true,
-                    decks = listOf(Deck(bookId = 1, title = "Evals for AI Engineers", total = 48, due = 6, progress = 0.62f, chapters = 9)),
+                    decks =
+                        listOf(
+                            Deck(
+                                bookId = 1,
+                                title = "Evals for AI Engineers",
+                                total = 48,
+                                due = 6,
+                                progress = 0.62f,
+                                chapters = 9,
+                                truncated = 0,
+                            ),
+                        ),
                 ),
             onDeckClick = {},
             onRetry = {},

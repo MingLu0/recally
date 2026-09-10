@@ -66,6 +66,59 @@ class DecksScreenTest {
         composeTestRule.onNodeWithText("8 cards · 2 books").assertIsDisplayed()
     }
 
+    /**
+     * G6 (issue #173): the artboard's "2 TRUNCATED" badge, resolved by building
+     * the count rather than dropping the badge. The number is the server's
+     * `GET /decks` field — this screen renders it and nothing more.
+     */
+    @Test
+    fun `truncated badge shows the server count`() {
+        setScreen(decks = listOf(deck(total = 83, chapters = 30, truncated = 2)))
+
+        composeTestRule.onNodeWithText("2 TRUNCATED").assertIsDisplayed()
+    }
+
+    /**
+     * A clean book gets no badge: a "0 TRUNCATED" chip is noise, as "0 DUE" is.
+     *
+     * Both books are on screen at once so the assertion cannot pass merely
+     * because the badge is unimplemented — the clipped book must badge in the
+     * same frame the clean one does not.
+     */
+    @Test
+    fun `no truncated badge when nothing is clipped`() {
+        setScreen(
+            decks =
+                listOf(
+                    deck(bookId = 1, total = 48, chapters = 9, truncated = 0),
+                    deck(bookId = 2, total = 83, chapters = 30, truncated = 2),
+                ),
+        )
+
+        composeTestRule.onNodeWithText("2 TRUNCATED").assertIsDisplayed()
+        composeTestRule.onAllNodesWithText("0 TRUNCATED", substring = true).assertCountEquals(0)
+        // Exactly one badge on screen: the clean book contributes none.
+        composeTestRule.onAllNodesWithText("TRUNCATED", substring = true).assertCountEquals(1)
+    }
+
+    /**
+     * Hard rule 7: the badge is a flag, never an offer to recover the text. No
+     * affordance on the row invites reconstruction.
+     */
+    @Test
+    fun `truncated badge offers no way to reconstruct the text`() {
+        setScreen(decks = listOf(deck(total = 83, chapters = 30, truncated = 2)))
+
+        // The badge is on screen, so the absences below are about this row's
+        // affordances rather than about an unimplemented badge.
+        composeTestRule.onNodeWithText("2 TRUNCATED").assertIsDisplayed()
+        for (forbidden in listOf("Restore", "Recover", "Reconstruct", "Fix", "Expand")) {
+            composeTestRule
+                .onAllNodesWithText(forbidden, substring = true, ignoreCase = true)
+                .assertCountEquals(0)
+        }
+    }
+
     private fun setScreen(decks: List<Deck>) {
         composeTestRule.setContent {
             RecallyTheme {
@@ -83,6 +136,7 @@ class DecksScreenTest {
         bookId: Long = 1,
         total: Int,
         chapters: Int = 3,
+        truncated: Int = 0,
     ) = Deck(
         bookId = bookId,
         title = "Book $bookId",
@@ -90,5 +144,6 @@ class DecksScreenTest {
         due = 0,
         progress = 0f,
         chapters = chapters,
+        truncated = truncated,
     )
 }
