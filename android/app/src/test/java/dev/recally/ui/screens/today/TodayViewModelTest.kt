@@ -1,6 +1,7 @@
 package dev.recally.ui.screens.today
 
 import dev.recally.domain.model.Deck
+import dev.recally.domain.model.DeckCard
 import dev.recally.domain.model.DueSummary
 import dev.recally.domain.model.ForecastDay
 import dev.recally.domain.model.PendingCard
@@ -9,6 +10,7 @@ import dev.recally.domain.model.PendingQueue
 import dev.recally.domain.model.Stats
 import dev.recally.domain.repository.ApprovalRepository
 import dev.recally.domain.repository.CardRepository
+import dev.recally.domain.repository.DeckRepository
 import dev.recally.domain.repository.Result
 import dev.recally.domain.repository.StatsRepository
 import kotlinx.coroutines.Dispatchers
@@ -108,15 +110,34 @@ class TodayViewModelTest {
         ): Result<Unit> = throw UnsupportedOperationException("Today never rejects cards")
     }
 
+    /**
+     * The book rail rides `GET /decks` (G2, issue #133). Decks are
+     * remote-only for v1 (docs/android.md, "Offline-first sync"), so the
+     * default fake answers with a network failure: the rail stays empty and
+     * the rest of Today renders anyway.
+     */
+    private class FakeDeckRepository(
+        var decksResult: Result<List<Deck>> = Result.NetworkError(IOException("no route to host")),
+    ) : DeckRepository {
+        override suspend fun decks(): Result<List<Deck>> = decksResult
+
+        override suspend fun deckCards(
+            bookId: Long,
+            chapter: String?,
+        ): Result<List<DeckCard>> = throw UnsupportedOperationException("Today never browses a book")
+    }
+
     private fun viewModelWith(
         dueResult: Result<DueSummary>,
         statsResult: Result<Stats> = Result.Success(sampleStats()),
         pendingResult: Result<PendingQueue> = Result.NetworkError(IOException("no route to host")),
+        decksResult: Result<List<Deck>> = Result.NetworkError(IOException("no route to host")),
     ): TodayViewModel =
         TodayViewModel(
             cardRepository = FakeCardRepository(dueResult),
             statsRepository = FakeStatsRepository(statsResult),
             approvalRepository = FakeApprovalRepository(pendingResult),
+            deckRepository = FakeDeckRepository(decksResult),
             ioDispatcher = testDispatcher,
             clock = FIXED_CLOCK,
         )
@@ -302,6 +323,7 @@ class TodayViewModelTest {
                     cardRepository = cardRepository,
                     statsRepository = statsRepository,
                     approvalRepository = FakeApprovalRepository(),
+                    deckRepository = FakeDeckRepository(),
                     ioDispatcher = testDispatcher,
                     clock = FIXED_CLOCK,
                 )
@@ -334,6 +356,7 @@ class TodayViewModelTest {
                     cardRepository = cardRepository,
                     statsRepository = statsRepository,
                     approvalRepository = FakeApprovalRepository(),
+                    deckRepository = FakeDeckRepository(),
                     ioDispatcher = testDispatcher,
                     clock = FIXED_CLOCK,
                 )
@@ -362,6 +385,7 @@ class TodayViewModelTest {
                     cardRepository = cardRepository,
                     statsRepository = FakeStatsRepository(Result.Success(sampleStats())),
                     approvalRepository = FakeApprovalRepository(),
+                    deckRepository = FakeDeckRepository(),
                     ioDispatcher = testDispatcher,
                     clock = FIXED_CLOCK,
                 )
@@ -373,6 +397,88 @@ class TodayViewModelTest {
             advanceUntilIdle()
 
             assertTrue("a refresh with no connectivity sets the offline bar", viewModel.uiState.value.isOffline)
+        }
+
+    @Test
+    fun test_book_rail_progress_comes_from_the_decks_endpoint() =
+        runTest {
+            // G2 (issue #133): `GET /decks` serves `progress`, and it reaches
+            // the state unmodified. total = 10 with due = 5 would give 0.5
+            // from any client-side (total - due) / total arithmetic; the
+            // server says 0.42, so a recomputation fails this test.
+            val viewModel =
+                viewModelWith(
+                    dueResult = Result.Success(emptyDueSummary()),
+                    decksResult =
+                        Result.Success(
+                            listOf(
+                                Deck(
+                                    bookId = 2,
+                                    title = "Building Generative AI Services with FastAPI",
+                                    total = 10,
+                                    due = 5,
+                                    progress = 0.42f,
+                                ),
+                            ),
+                        ),
+                )
+            advanceUntilIdle()
+
+            val book =
+                viewModel.uiState.value.books
+                    .single()
+            assertEquals("the book's title reaches the rail", "Building Generative AI Services with FastAPI", book.title)
+            assertEquals(
+                "progress maps into UiState unmodified — never recomputed from total/due",
+                0.42f,
+                book.progress,
+            )
+            assertEquals(10, book.total)
+            assertEquals(5, book.due)
+        }
+
+    @Test
+    fun test_book_rail_is_empty_when_decks_is_unreachable() =
+        runTest {
+            // Decks are remote-only, so a failing `GET /decks` leaves the
+            // rail empty — and the failure is silent: the stats strip and due
+            // counts still render (docs/android.md, screen → endpoint map).
+            val viewModel =
+                viewModelWith(
+                    dueResult = Result.Success(dueSummary(dueCount = 3)),
+                    decksResult = Result.NetworkError(IOException("no route to host")),
+                )
+            advanceUntilIdle()
+
+            val state = viewModel.uiState.value
+            assertTrue("a failing /decks leaves the rail empty", state.books.isEmpty())
+            assertEquals("the stats strip is not blanked", 9, state.streakDays)
+            assertEquals("the due count is not blanked", 3, state.dueCount)
+            assertNull("an unreachable rail is not an error banner", state.errorMessage)
+        }
+
+    @Test
+    fun test_book_rail_renders_a_zero_progress_book() =
+        runTest {
+            // A book with `progress: 0.0` (approved cards, none in review
+            // state yet) is a real row, not an absent one.
+            val viewModel =
+                viewModelWith(
+                    dueResult = Result.Success(emptyDueSummary()),
+                    decksResult =
+                        Result.Success(
+                            listOf(
+                                Deck(bookId = 1, title = "Evals for AI Engineers", total = 48, due = 6, progress = 0.62f),
+                                Deck(bookId = 7, title = "30 Agents in 30 Days", total = 83, due = 0, progress = 0.0f),
+                            ),
+                        ),
+                )
+            advanceUntilIdle()
+
+            val books = viewModel.uiState.value.books
+            assertEquals("both books render, zero progress included", 2, books.size)
+            val zeroProgressBook = books.first { it.bookId == 7L }
+            assertEquals(0.0f, zeroProgressBook.progress)
         }
 
     @Test
