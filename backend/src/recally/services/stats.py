@@ -15,6 +15,13 @@ Conventions:
 - A lapse is an Again (rating 1) on a card in FSRS `review` state when rated; an
   Again during (re)learning is not one — that is the specific meaning
   docs/design/design-system.md pins, and `review_logs.state_before` is what records it.
+  That definition is why retention reads 100% on a young collection: a card has to
+  graduate before it can lapse, so the figure has not had the chance to be anything
+  else (issue #190). It is correct, not stuck.
+- Retention is `None` with no review in the window, never `0.0`: an absence and a
+  genuine 0% are different statements, and `0.0` renders as the worse of the two.
+  `retention_30d_reviews` is the sample it was computed over, so the client can
+  qualify a handful of reviews rather than present them at full confidence.
 - The streak is forgiving about today: a day that has not ended cannot break it, so
   with no review yet today the count starts from yesterday.
 """
@@ -49,7 +56,8 @@ class StatsSummary:
 
     streak_days: int
     reviews_today: int
-    retention_30d: float
+    retention_30d: float | None
+    retention_30d_reviews: int
     lapse_rate_by_type: dict[str, float]
     lapse_rate_by_guidance_version: dict[str, float]
     curation_yield: float
@@ -105,7 +113,7 @@ def get_stats(
     window_start = today - timedelta(days=RETENTION_WINDOW_DAYS - 1)
     windowed = [log for log, day in zip(logs, review_days, strict=True) if day >= window_start]
     window_lapses = sum(1 for log in windowed if _is_lapse(log))
-    retention_30d = (len(windowed) - window_lapses) / len(windowed) if windowed else 0.0
+    retention_30d = (len(windowed) - window_lapses) / len(windowed) if windowed else None
 
     lapse_rate_by_type = _lapse_rates(
         logs, {card_id: card.type for card_id, card in cards_by_id.items()}
@@ -164,6 +172,7 @@ def get_stats(
         streak_days=_streak_days(set(review_days), today),
         reviews_today=sum(1 for day in review_days if day == today),
         retention_30d=retention_30d,
+        retention_30d_reviews=len(windowed),
         lapse_rate_by_type=lapse_rate_by_type,
         lapse_rate_by_guidance_version=lapse_rate_by_guidance_version,
         curation_yield=curation_yield,

@@ -8,7 +8,13 @@ import kotlinx.serialization.Serializable
 data class StatsResponse(
     @SerialName("streak_days") val streakDays: Int,
     @SerialName("reviews_today") val reviewsToday: Int,
-    @SerialName("retention_30d") val retention30d: Double,
+    /**
+     * Recall on cards already learned, last 30 days. Null when no review fell in
+     * the window — an absence, not 0% (docs/api-spec.md, "Stats"; issue #190).
+     */
+    @SerialName("retention_30d") val retention30d: Double? = null,
+    /** Reviews the retention figure was computed over; 0 when it is null. */
+    @SerialName("retention_30d_reviews") val retention30dReviews: Int = 0,
     @SerialName("lapse_rate_by_type") val lapseRateByType: Map<String, Double>,
     @SerialName("lapse_rate_by_guidance_version") val lapseRateByGuidanceVersion: Map<String, Double>,
     @SerialName("curation_yield") val curationYield: Double,

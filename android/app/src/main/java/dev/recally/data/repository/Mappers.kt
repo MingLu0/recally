@@ -99,6 +99,7 @@ fun StatsResponse.toDomain(): Stats =
         streakDays = streakDays,
         reviewsToday = reviewsToday,
         retention30d = retention30d,
+        retention30dReviews = retention30dReviews,
         lapseRateByType = lapseRateByType,
         lapseRateByGuidanceVersion = lapseRateByGuidanceVersion,
         curationYield = curationYield,

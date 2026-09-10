@@ -62,7 +62,8 @@ class StatsViewModelTest {
             assertNull(state.errorMessage)
             assertEquals("streak_days", 9, state.streakDays)
             assertEquals("reviews_today", 23, state.reviewsToday)
-            assertEquals("retention_30d", 0.87, state.retention30d, 0.0001)
+            assertEquals("retention_30d", 0.87, state.retention30d!!, 0.0001)
+            assertEquals("retention_30d_reviews", 120, state.retentionReviewCount)
             assertEquals("lapse_rate_by_type", mapOf("qa" to 0.11, "cloze" to 0.18), state.lapseRateByType)
             assertEquals(
                 "lapse_rate_by_guidance_version, keys as strings sorted numerically",
@@ -199,7 +200,8 @@ class StatsViewModelTest {
                     Stats(
                         streakDays = 0,
                         reviewsToday = 0,
-                        retention30d = 0.0,
+                        retention30d = null,
+                        retention30dReviews = 0,
                         lapseRateByType = emptyMap(),
                         lapseRateByGuidanceVersion = emptyMap(),
                         curationYield = 0.0,
@@ -217,7 +219,7 @@ class StatsViewModelTest {
             assertFalse("an empty database is not a 401", state.isUnauthorized)
             assertEquals(0, state.streakDays)
             assertEquals(0, state.reviewsToday)
-            assertEquals(0.0, state.retention30d, 0.0001)
+            assertNull("an empty window has no retention to report", state.retention30d)
             assertEquals("the forecast still renders 7 bars, all zero", listOf(0, 0, 0, 0, 0, 0, 0), state.forecast.map { it.due })
         }
 
@@ -241,7 +243,7 @@ class StatsViewModelTest {
             assertFalse(state.isLoading)
             assertEquals("no stale streak", 0, state.streakDays)
             assertEquals("no stale reviews_today", 0, state.reviewsToday)
-            assertEquals("no stale retention", 0.0, state.retention30d, 0.0001)
+            assertNull("no stale retention", state.retention30d)
             assertTrue("no stale forecast bars", state.forecast.isEmpty())
             assertTrue("no stale lapse rates", state.lapseRateByType.isEmpty())
             assertTrue("no stale guidance versions", state.lapseRateByGuidanceVersion.isEmpty())
@@ -323,6 +325,7 @@ class StatsViewModelTest {
                 streakDays = 0,
                 reviewsToday = 0,
                 retention30d = 0.0,
+                retention30dReviews = 120,
                 lapseRateByType = emptyMap(),
                 lapseRateByGuidanceVersion = emptyMap(),
                 curationYield = 0.0,
@@ -335,6 +338,7 @@ class StatsViewModelTest {
                 streakDays = 0,
                 reviewsToday = 0,
                 retention30d = 0.0,
+                retention30dReviews = 120,
                 lapseRateByType = emptyMap(),
                 lapseRateByGuidanceVersion = versions,
                 curationYield = 0.0,
@@ -351,6 +355,7 @@ class StatsViewModelTest {
                 streakDays = 9,
                 reviewsToday = reviewsToday,
                 retention30d = 0.87,
+                retention30dReviews = 120,
                 lapseRateByType = mapOf("qa" to 0.11, "cloze" to 0.18),
                 lapseRateByGuidanceVersion = mapOf("1" to 0.19, "2" to 0.12),
                 curationYield = 0.83,

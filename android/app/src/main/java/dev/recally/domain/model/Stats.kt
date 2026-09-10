@@ -7,6 +7,10 @@ import java.time.Instant
  * [streakDays], [reviewsToday], [retention30d] and [nextDueAt]; the rest is the
  * Stats screen's data, carried here because both come from the one endpoint.
  *
+ * [retention30d] is null when no review fell in the 30-day window: an
+ * absence, never 0% (issue #190). [retention30dReviews] is how many reviews
+ * it was computed over, so the app can qualify a small sample.
+ *
  * [nextDueAt] is the earliest future due across approved, unsuspended cards —
  * the hours-away figure behind Today's nothing-due line and the session
  * summary's "Next card due in 4 hours" (issue #134). Null when nothing is
@@ -15,7 +19,8 @@ import java.time.Instant
 data class Stats(
     val streakDays: Int,
     val reviewsToday: Int,
-    val retention30d: Double,
+    val retention30d: Double?,
+    val retention30dReviews: Int,
     val lapseRateByType: Map<String, Double>,
     val lapseRateByGuidanceVersion: Map<String, Double>,
     val curationYield: Double,

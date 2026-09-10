@@ -67,6 +67,7 @@ class StatsViewModel
                             streakDays = result.data.streakDays,
                             reviewsToday = result.data.reviewsToday,
                             retention30d = result.data.retention30d,
+                            retentionReviewCount = result.data.retention30dReviews,
                             forecast = mapForecast(result.data.forecast, LocalDate.now(clock)),
                             lapseRateByType = result.data.lapseRateByType,
                             lapseRateByGuidanceVersion = mapGuidanceVersions(result.data.lapseRateByGuidanceVersion),

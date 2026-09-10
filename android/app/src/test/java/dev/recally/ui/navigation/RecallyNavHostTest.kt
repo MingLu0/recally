@@ -386,6 +386,7 @@ class RecallyNavHostTest {
                 streakDays = 9,
                 reviewsToday = 23,
                 retention30d = 0.87,
+                retention30dReviews = 120,
                 lapseRateByType = mapOf("qa" to 0.11),
                 lapseRateByGuidanceVersion = mapOf("1" to 0.19),
                 curationYield = 0.83,

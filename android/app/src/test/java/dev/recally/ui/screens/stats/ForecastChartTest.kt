@@ -90,6 +90,7 @@ class ForecastChartTest {
                 streakDays = 0,
                 reviewsToday = 0,
                 retention30d = 0.0,
+                retention30dReviews = 120,
                 lapseRateByType = emptyMap(),
                 lapseRateByGuidanceVersion = emptyMap(),
                 curationYield = 0.0,
