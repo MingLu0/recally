@@ -41,6 +41,9 @@ import dev.recally.ui.theme.RecallyTheme
 import dev.recally.ui.theme.recallyColors
 import java.time.Instant
 
+/** Semantics tag on the header's spine chip (issue #152), shared with its test. */
+internal const val BOOK_SPINE_TAG = "bookSpine"
+
 /**
  * Book detail (docs/design/RcBook.dc.html): chapters expand in place rather
  * than pushing a third screen — one book has 30 chapters, so a deeper nav
