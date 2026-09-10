@@ -6,12 +6,15 @@ import androidx.navigation.compose.composable
 import androidx.navigation.createGraph
 import androidx.navigation.testing.TestNavHostController
 import androidx.test.core.app.ApplicationProvider
+import dev.recally.domain.model.Deck
+import dev.recally.domain.model.DeckCard
 import dev.recally.domain.model.DueSummary
 import dev.recally.domain.model.ForecastDay
 import dev.recally.domain.model.PendingQueue
 import dev.recally.domain.model.Stats
 import dev.recally.domain.repository.ApprovalRepository
 import dev.recally.domain.repository.CardRepository
+import dev.recally.domain.repository.DeckRepository
 import dev.recally.domain.repository.Result
 import dev.recally.domain.repository.StatsRepository
 import dev.recally.fcm.DueCardsNotification
@@ -103,6 +106,7 @@ class PushDeepLinkTest {
                     cardRepository = FakeCardRepository(Result.Success(dueSummary(dueCount = 12))),
                     statsRepository = FakeStatsRepository(Result.Success(sampleStats())),
                     approvalRepository = FakeApprovalRepository(),
+                    deckRepository = FakeDeckRepository(),
                     ioDispatcher = testDispatcher,
                     clock = Clock.fixed(Instant.parse("2026-09-09T01:00:00Z"), ZoneOffset.UTC),
                 )
@@ -153,6 +157,16 @@ class PushDeepLinkTest {
             cardId: Long,
             reason: String?,
         ): Result<Unit> = throw UnsupportedOperationException("Today never rejects cards")
+    }
+
+    /** Decks are remote-only; the rail stays empty when /decks is unreachable. */
+    private class FakeDeckRepository : DeckRepository {
+        override suspend fun decks(): Result<List<Deck>> = Result.NetworkError(IOException("no route to host"))
+
+        override suspend fun deckCards(
+            bookId: Long,
+            chapter: String?,
+        ): Result<List<DeckCard>> = throw UnsupportedOperationException("Today never browses a book")
     }
 
     private companion object {

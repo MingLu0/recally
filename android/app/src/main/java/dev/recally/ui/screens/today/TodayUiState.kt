@@ -1,5 +1,7 @@
 package dev.recally.ui.screens.today
 
+import dev.recally.domain.model.Deck
+
 /**
  * The one immutable UiState for Today (docs/android.md, "One UiState per
  * screen"). Counts come from `GET /reviews/due`, the streak figures and
@@ -9,8 +11,10 @@ package dev.recally.ui.screens.today
  * stay null when the queue is unreachable: Today renders offline and the
  * queue requires connectivity.
  *
- * Scoped out per issue #57 — no field here may carry per-book progress
- * (G2).
+ * [books] feeds the "Your books" rail (G2, issue #133): `Deck.progress` is
+ * the server's figure and is rendered unmodified — never recomputed
+ * client-side from `total`/`due`. Decks are remote-only, so an unreachable
+ * `GET /decks` leaves the rail empty while the rest of Today renders.
  */
 data class TodayUiState(
     val isLoading: Boolean = true,
@@ -23,6 +27,7 @@ data class TodayUiState(
     val nextDueLabel: String? = null,
     val pendingReviewCount: Int? = null,
     val needsHumanCount: Int? = null,
+    val books: List<Deck> = emptyList(),
     val isOffline: Boolean = false,
     val showCheckSettingsBanner: Boolean = false,
     val errorMessage: String? = null,

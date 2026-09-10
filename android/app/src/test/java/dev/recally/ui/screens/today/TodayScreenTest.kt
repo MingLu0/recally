@@ -10,15 +10,18 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 /**
  * Today "Your books" rail (issue #154, artboard `docs/design/RcWhite.dc.html`):
  * the section renders below the approval row with one row per book from
  * `GET /decks`. Robolectric + createComposeRule, as in ChapterHeaderTest —
- * never a real backend.
+ * never a real backend. @GraphicsMode(NATIVE) for real text measurement:
+ * the legacy shadow layout gives the wrapped book title no real bounds.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 class TodayScreenTest {
     @get:Rule
     val composeTestRule = createComposeRule()
