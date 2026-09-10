@@ -4,7 +4,9 @@ import android.content.Context
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
+import androidx.navigation.NavArgument
 import androidx.navigation.NavDestination
+import androidx.navigation.NavType
 import androidx.navigation.Navigator
 import androidx.navigation.createGraph
 import androidx.navigation.get
@@ -32,6 +34,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertSame
 import org.junit.Before
 import org.junit.Test
@@ -138,6 +141,65 @@ class RecallyNavHostTest {
                 todayEntry.lifecycle.removeObserver(observer)
             }
         }
+
+    /**
+     * Issue #180: one book, one destination. Today's rail click and the Decks
+     * row click both run [openBookDetail] — the single navigation decision the
+     * route entries own — so the same book id opens the same Book detail.
+     */
+    @Test
+    fun test_today_book_click_navigates_to_book_detail() {
+        val bookId = 11L
+        val navController = TestNavHostController(context)
+
+        @Suppress("UNCHECKED_CAST")
+        val testNavigator = navController.navigatorProvider["test"] as Navigator<NavDestination>
+        navController.graph =
+            navController.createGraph(startDestination = Screen.Today.route) {
+                addDestination(testNavigator.createDestination().apply { route = Screen.Today.route })
+                addDestination(testNavigator.createDestination().apply { route = Screen.Decks.route })
+                addDestination(
+                    testNavigator.createDestination().apply {
+                        route = Screen.BookDetail.route
+                        addArgument("bookId", NavArgument.Builder().setType(NavType.LongType).build())
+                    },
+                )
+            }
+
+        val fromToday = navigateAndCapture(navController) { navController.openBookDetail(bookId) }
+
+        assertEquals(Screen.BookDetail.route, fromToday.route)
+        assertEquals(bookId, fromToday.bookIdArgument)
+
+        // The route Decks produces for the same book, from the same call the
+        // Decks entry makes (RecallyNavHost) — one book, one destination.
+        navController.navigate(Screen.Decks.route)
+        val fromDecks = navigateAndCapture(navController) { navController.openBookDetail(bookId) }
+
+        assertEquals("Today opens the Book detail Decks opens", fromDecks, fromToday)
+    }
+
+    /** The route and bookId argument a navigation landed on, then popped. */
+    private data class OpenedDestination(
+        val route: String,
+        val bookIdArgument: Long?,
+    )
+
+    private fun navigateAndCapture(
+        navController: TestNavHostController,
+        navigate: () -> Unit,
+    ): OpenedDestination {
+        navigate()
+        val entry = navController.currentBackStackEntry
+        assertNotNull("navigating opened a destination", entry)
+        val opened =
+            OpenedDestination(
+                route = entry!!.destination.route!!,
+                bookIdArgument = entry.arguments?.getLong("bookId"),
+            )
+        navController.popBackStack()
+        return opened
+    }
 
     private class FakeCardRepository(
         private val refreshResult: Result<DueSummary>,
