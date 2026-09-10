@@ -149,6 +149,10 @@ Critique length is unbounded by design (the Writer ⇄ Critic loop runs up to 3 
 ### Cloze rendering (`ui/components/ClozeText.kt`)
 `{{c1::answer}}` renders as the answer text on `primary-wash` with a 2dp `primary` bottom border, 4dp radius, 1×7dp padding, weight 700, colour `primary`. **Never show raw braces.** In review (unflipped) the same span renders as a blank of equivalent width. `docs/android.md` does not specify this; it is a design decision recorded here.
 
+**A deletion wider than the line drops the box and wraps instead.** The boxed form is inline content — an atomic placeholder the text engine cannot break — so an answer longer than the available width ran past the card border rather than wrapping (issue #181). Above that width the answer becomes a styled run in the same text flow: the `primary-wash` fill, weight 700 and `primary` colour all survive and now follow the text across lines; the 4dp corners and the 2dp bottom rule cannot, so the revealed run carries an underline in their place. Unrevealed it is the same run with transparent text on the filled wash, which remains a blank of equivalent width — it *is* the answer's own layout.
+
+The alternative was to clamp the placeholder and ellipsise inside it. Rejected: the revealed side of a cloze card exists to show the answer, and hiding part of it to keep a rounded corner trades the content for the decoration. Shortening the card's own text to fit was never available (hard rule 7). The threshold is measured, not a character count — the same answer boxes on a wide screen and wraps on a narrow one, which is correct: the box is kept wherever it fits.
+
 ### Source-highlight disclosure (`ui/screens/approve/HighlightDisclosure.kt`)
 Collapsed by default, above a `line-soft` top divider: chevron + "N source highlight(s)" in `label`/`ink-muted`. A grouped unit can carry several and they would otherwise dominate the card. Expanded, each highlight is `body-sm`/`ink-muted` with a `warn` "truncated" chip where `truncated` is true.
 
