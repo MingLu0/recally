@@ -88,6 +88,69 @@ class BookDetailScreenTest {
         assertEquals(1L, suspendedCardId)
     }
 
+    /**
+     * Pluralisation gate for issue #149: a one-card chapter used to read
+     * "1 cards".
+     */
+    @Test
+    fun `single card chapter reads 1 card`() {
+        setDetailContent(
+            DecksUiState(
+                isBookDetail = true,
+                bookId = 4,
+                bookTitle = "Short Book",
+                bookDue = 1,
+                chapters = listOf(ChapterSummary(name = "1. Only Chapter", cardCount = 1)),
+            ),
+        )
+
+        composeTestRule.onNodeWithText("1 card").assertIsDisplayed()
+        composeTestRule.onAllNodesWithText("1 cards", substring = true).assertCountEquals(0)
+        // The header subtitle pluralises the same way (post-#152 shape).
+        composeTestRule.onNodeWithText("1 card · 1 due").assertIsDisplayed()
+    }
+
+    /** Regression: zero and N > 1 keep the plural on chapters and subtitle. */
+    @Test
+    fun `plural forms are unchanged at zero and above one`() {
+        setDetailContent(
+            DecksUiState(
+                isBookDetail = true,
+                bookId = 3,
+                bookTitle = "Zero and Many",
+                bookDue = 2,
+                chapters =
+                    listOf(
+                        ChapterSummary(name = "1. Empty", cardCount = 0),
+                        ChapterSummary(name = "2. Busy", cardCount = 8),
+                    ),
+            ),
+        )
+
+        composeTestRule.onNodeWithText("0 cards").assertIsDisplayed()
+        composeTestRule.onNodeWithText("8 cards").assertIsDisplayed()
+        composeTestRule.onNodeWithText("8 cards · 2 due").assertIsDisplayed()
+    }
+
+    private fun setDetailContent(uiState: DecksUiState) {
+        composeTestRule.setContent {
+            RecallyTheme {
+                BookDetailScreen(
+                    uiState = uiState,
+                    onBack = {},
+                    onChapterToggled = {},
+                    onStartEdit = {},
+                    onDismissEdit = {},
+                    onSubmitEdit = { _, _ -> },
+                    onSuspendCard = {},
+                    onUnsuspendCard = {},
+                    onRetry = {},
+                    onOpenSettings = {},
+                )
+            }
+        }
+    }
+
     private fun setScreen(
         onStartEdit: (DeckCard) -> Unit = {},
         onSuspendCard: (Long) -> Unit = {},
