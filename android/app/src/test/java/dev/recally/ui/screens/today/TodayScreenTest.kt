@@ -1,7 +1,9 @@
 package dev.recally.ui.screens.today
 
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import dev.recally.domain.model.Deck
 import dev.recally.ui.theme.RecallyTheme
@@ -62,6 +64,102 @@ class TodayScreenTest {
         composeTestRule.onNodeWithText("8 cards").assertIsDisplayed()
         // 0.875 renders as 88% — rounded, never truncated to 87.
         composeTestRule.onNodeWithText("88%").assertIsDisplayed()
+    }
+
+    @Test
+    fun test_waiting_for_you_section_heading_is_displayed() {
+        composeTestRule.setContent {
+            RecallyTheme {
+                TodayScreen(
+                    uiState = loadedState(listOf(sampleDeck())).copy(pendingReviewCount = 8, needsHumanCount = 3),
+                    onStartReview = {},
+                    onOpenApprove = {},
+                    onOpenSettings = {},
+                    onRetry = {},
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithText("Waiting for you").assertIsDisplayed()
+    }
+
+    @Test
+    fun test_queue_tiles_show_the_number_apart_from_its_label() {
+        composeTestRule.setContent {
+            RecallyTheme {
+                TodayScreen(
+                    uiState = loadedState(listOf(sampleDeck())).copy(pendingReviewCount = 8, needsHumanCount = 3),
+                    onStartReview = {},
+                    onOpenApprove = {},
+                    onOpenSettings = {},
+                    onRetry = {},
+                )
+            }
+        }
+
+        // The artboard stacks the metric over its label, so each is its own
+        // node -- "8" and "to approve", never the fused "8 to approve" chip.
+        composeTestRule.onNodeWithText("8").assertIsDisplayed()
+        composeTestRule.onNodeWithText("to approve").assertIsDisplayed()
+        composeTestRule.onNodeWithText("3").assertIsDisplayed()
+        composeTestRule.onNodeWithText("need you").assertIsDisplayed()
+    }
+
+    @Test
+    fun test_queue_tiles_are_not_a_fused_count_label_chip() {
+        composeTestRule.setContent {
+            RecallyTheme {
+                TodayScreen(
+                    uiState = loadedState(listOf(sampleDeck())).copy(pendingReviewCount = 8, needsHumanCount = 3),
+                    onStartReview = {},
+                    onOpenApprove = {},
+                    onOpenSettings = {},
+                    onRetry = {},
+                )
+            }
+        }
+
+        // Negative: the pre-#132 chip rendered one fused string. Colour on
+        // numbers, not on chrome (design-system.md, "Rules") needs them split.
+        composeTestRule.onAllNodesWithText("8 to approve").assertCountEquals(0)
+        composeTestRule.onAllNodesWithText("3 need you").assertCountEquals(0)
+    }
+
+    @Test
+    fun test_needs_you_tile_is_absent_when_nothing_needs_you() {
+        composeTestRule.setContent {
+            RecallyTheme {
+                TodayScreen(
+                    uiState = loadedState(listOf(sampleDeck())).copy(pendingReviewCount = 8, needsHumanCount = 0),
+                    onStartReview = {},
+                    onOpenApprove = {},
+                    onOpenSettings = {},
+                    onRetry = {},
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithText("to approve").assertIsDisplayed()
+        composeTestRule.onAllNodesWithText("need you").assertCountEquals(0)
+    }
+
+    @Test
+    fun test_waiting_for_you_section_is_absent_while_counts_are_unknown() {
+        composeTestRule.setContent {
+            RecallyTheme {
+                TodayScreen(
+                    uiState = loadedState(listOf(sampleDeck())),
+                    onStartReview = {},
+                    onOpenApprove = {},
+                    onOpenSettings = {},
+                    onRetry = {},
+                )
+            }
+        }
+
+        // Negative: the queue needs connectivity, so Today must render before
+        // it answers -- no empty section header with no numbers under it.
+        composeTestRule.onAllNodesWithText("Waiting for you").assertCountEquals(0)
     }
 
     private companion object {
