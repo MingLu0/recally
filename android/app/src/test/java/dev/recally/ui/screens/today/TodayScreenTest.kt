@@ -275,7 +275,71 @@ class TodayScreenTest {
         assertEquals(emptyList<Long>(), clickedBookIds)
     }
 
+    @Test
+    fun test_books_rail_renders_a_card_per_book() {
+        composeTestRule.setContent {
+            RecallyTheme {
+                TodayScreen(
+                    uiState = loadedState(books = listOf(firstDeck(), secondDeck())),
+                    onStartReview = {},
+                    onOpenApprove = {},
+                    onOpenSettings = {},
+                    onRetry = {},
+                    onBookClick = {},
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithText("Your books").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Evals for AI Engineers").assertIsDisplayed()
+        composeTestRule.onNodeWithText("30 Agents in 30 Days").assertIsDisplayed()
+    }
+
+    @Test
+    fun test_books_rail_shows_its_failure_state_when_decks_did_not_load() {
+        // Issue #189: a rail that failed to load must say so, not fall silent.
+        composeTestRule.setContent {
+            RecallyTheme {
+                TodayScreen(
+                    uiState = loadedState(books = emptyList()).copy(booksFailedToLoad = true),
+                    onStartReview = {},
+                    onOpenApprove = {},
+                    onOpenSettings = {},
+                    onRetry = {},
+                    onBookClick = {},
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithText("Your books").assertIsDisplayed()
+        composeTestRule.onNodeWithText(BOOKS_FAILURE_TEXT).assertIsDisplayed()
+    }
+
+    @Test
+    fun test_books_rail_is_absent_only_for_a_genuinely_empty_library() {
+        // Loaded-and-empty draws nothing — no header over an empty rail
+        // (design-system.md, "Your books rail").
+        composeTestRule.setContent {
+            RecallyTheme {
+                TodayScreen(
+                    uiState = loadedState(books = emptyList()),
+                    onStartReview = {},
+                    onOpenApprove = {},
+                    onOpenSettings = {},
+                    onRetry = {},
+                    onBookClick = {},
+                )
+            }
+        }
+
+        composeTestRule.onAllNodesWithText("Your books").assertCountEquals(0)
+        composeTestRule.onAllNodesWithText(BOOKS_FAILURE_TEXT).assertCountEquals(0)
+    }
+
     private companion object {
+        /** The rail's failure strip (design-system.md, "Your books rail"). */
+        const val BOOKS_FAILURE_TEXT = "Couldn't load your books"
+
         fun sampleDeck(): Deck =
             Deck(bookId = 2, title = "Evals for AI Engineers", total = 8, due = 1, progress = 0.875f, chapters = 3, truncated = 0)
 

@@ -110,8 +110,13 @@ fun TodayScreen(
                 needsHumanCount = uiState.needsHumanCount,
                 onOpenApprove = onOpenApprove,
             )
-            if (uiState.books.isNotEmpty()) {
-                YourBooksRail(books = uiState.books, onBookClick = onBookClick)
+            if (uiState.books.isNotEmpty() || uiState.booksFailedToLoad) {
+                YourBooksRail(
+                    books = uiState.books,
+                    failedToLoad = uiState.booksFailedToLoad,
+                    onBookClick = onBookClick,
+                    onRetry = onRetry,
+                )
             }
             if (uiState.errorMessage != null && uiState.dueCount == null && !uiState.isLoading) {
                 ErrorRow(message = uiState.errorMessage, onRetry = onRetry)
@@ -260,9 +265,15 @@ private fun QueueCountTile(
  * section title, subtitle, and a horizontally scrolling row with one card per
  * book — spine chip, title, card count and the server's `progress`. The row
  * components are the ones Decks uses (`BookSpineChip`, `DeckProgressBar`), so
- * a book reads identically on both screens. The rail is absent while
- * `GET /decks` has never answered (decks are remote-only): an empty rail
- * draws nothing rather than an empty section header.
+ * a book reads identically on both screens.
+ *
+ * A **loaded and genuinely empty** library draws nothing — the caller keeps
+ * the whole section out rather than putting a header over an empty rail. A
+ * rail whose load **failed** is a different thing and says so, via
+ * [failedToLoad] (issue #189): previously both cases were silence, so a
+ * `GET /decks` that never answered was indistinguishable from a user with no
+ * books. The failure strip stays inside the section — the rest of Today is
+ * untouched, decks being remote-only.
  *
  * The artboard's "Import" tile is deliberately not built: ingestion is the
  * watched folder on the Mac (docs/android.md) and `api-spec.md` documents no
@@ -271,7 +282,9 @@ private fun QueueCountTile(
 @Composable
 private fun YourBooksRail(
     books: List<Deck>,
+    failedToLoad: Boolean,
     onBookClick: (Long) -> Unit,
+    onRetry: () -> Unit,
 ) {
     val colors = MaterialTheme.recallyColors
     Column(verticalArrangement = Arrangement.spacedBy(RecallySpacing.xs)) {
@@ -286,10 +299,44 @@ private fun YourBooksRail(
             color = colors.inkFaint,
         )
         Spacer(Modifier.height(RecallySpacing.sm))
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(RecallySpacing.md)) {
-            items(books, key = { it.bookId }) { deck ->
-                BookRailCard(deck = deck, onClick = { onBookClick(deck.bookId) })
+        if (books.isEmpty() && failedToLoad) {
+            BooksFailureStrip(onRetry = onRetry)
+        } else {
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(RecallySpacing.md)) {
+                items(books, key = { it.bookId }) { deck ->
+                    BookRailCard(deck = deck, onClick = { onBookClick(deck.bookId) })
+                }
             }
+        }
+    }
+}
+
+/**
+ * The rail's own failure state (design-system.md, "Your books rail"): a muted
+ * line inside the section with a quiet retry, never a screen-level error
+ * banner. `onRetry` is Today's existing refresh — the rail has no fetch of
+ * its own.
+ */
+@Composable
+private fun BooksFailureStrip(onRetry: () -> Unit) {
+    val colors = MaterialTheme.recallyColors
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(RecallySpacing.md),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .border(1.dp, colors.line, RoundedCornerShape(RecallyRadius.md))
+                .padding(RecallySpacing.cardPadding),
+    ) {
+        Text(
+            text = "Couldn't load your books",
+            style = MaterialTheme.typography.bodyMedium,
+            color = colors.inkMuted,
+            modifier = Modifier.weight(1f),
+        )
+        OutlinedButton(onClick = onRetry) {
+            Text("Try again")
         }
     }
 }
@@ -475,7 +522,7 @@ private fun TodayScreenLoadedPreview() {
     }
 }
 
-/** `GET /decks` unreachable or empty: no rail, the rest of Today renders. */
+/** A loaded, genuinely empty library: no rail, the rest of Today renders. */
 @CombinedPreviews
 @Composable
 private fun TodayScreenEmptyBooksPreview() {
@@ -490,6 +537,35 @@ private fun TodayScreenEmptyBooksPreview() {
                     reviewsToday = 23,
                     retention30d = 0.87,
                     books = emptyList(),
+                ),
+            onStartReview = {},
+            onOpenApprove = {},
+            onOpenSettings = {},
+            onRetry = {},
+            onBookClick = {},
+        )
+    }
+}
+
+/**
+ * `GET /decks` did not answer (issue #189): the section renders its failure
+ * strip, so a rail that could not load never reads as a library with no books.
+ */
+@CombinedPreviews
+@Composable
+private fun TodayScreenBooksFailedPreview() {
+    RecallyTheme {
+        TodayScreen(
+            uiState =
+                TodayUiState(
+                    isLoading = false,
+                    dueCount = 12,
+                    newCount = 5,
+                    streakDays = 9,
+                    reviewsToday = 23,
+                    retention30d = 0.87,
+                    books = emptyList(),
+                    booksFailedToLoad = true,
                 ),
             onStartReview = {},
             onOpenApprove = {},

@@ -464,6 +464,108 @@ class TodayViewModelTest {
         }
 
     @Test
+    fun test_books_are_populated_when_decks_load() =
+        runTest {
+            // `GET /decks` serves an ordered list and the rail renders it in
+            // served order — the ViewModel neither sorts nor filters it.
+            val servedDecks =
+                listOf(
+                    Deck(
+                        bookId = 1,
+                        title = "Evals for AI Engineers",
+                        total = 48,
+                        due = 6,
+                        progress = 0.62f,
+                        chapters = 9,
+                        truncated = 0,
+                    ),
+                    Deck(
+                        bookId = 7,
+                        title = "30 Agents in 30 Days",
+                        total = 83,
+                        due = 0,
+                        progress = 0.24f,
+                        chapters = 4,
+                        truncated = 2,
+                    ),
+                )
+            val viewModel =
+                viewModelWith(
+                    dueResult = Result.Success(emptyDueSummary()),
+                    decksResult = Result.Success(servedDecks),
+                )
+            advanceUntilIdle()
+
+            val state = viewModel.uiState.value
+            assertEquals("both served decks reach the rail", 2, state.books.size)
+            assertEquals(
+                "the rail keeps the served order",
+                listOf(1L, 7L),
+                state.books.map { it.bookId },
+            )
+            assertEquals("Evals for AI Engineers", state.books[0].title)
+            assertEquals("30 Agents in 30 Days", state.books[1].title)
+            assertFalse(
+                "a successful load clears the not-loaded flag",
+                state.booksFailedToLoad,
+            )
+        }
+
+    @Test
+    fun test_deck_failure_is_distinguishable_from_an_empty_library() =
+        runTest {
+            // The whole point of issue #189: a rail that failed to load must
+            // not read as a user with no books. Both leave `books` empty, so
+            // the flag is the only thing that tells them apart.
+            val failedViewModel =
+                viewModelWith(
+                    dueResult = Result.Success(emptyDueSummary()),
+                    decksResult = Result.NetworkError(IOException("no route to host")),
+                )
+            advanceUntilIdle()
+
+            val failedState = failedViewModel.uiState.value
+            assertTrue("a failing /decks leaves the rail empty", failedState.books.isEmpty())
+            assertTrue(
+                "a failing /decks sets the not-loaded flag",
+                failedState.booksFailedToLoad,
+            )
+
+            val emptyViewModel =
+                viewModelWith(
+                    dueResult = Result.Success(emptyDueSummary()),
+                    decksResult = Result.Success(emptyList()),
+                )
+            advanceUntilIdle()
+
+            val emptyState = emptyViewModel.uiState.value
+            assertTrue("a genuinely empty library is empty", emptyState.books.isEmpty())
+            assertFalse(
+                "a loaded-but-empty library never sets the not-loaded flag",
+                emptyState.booksFailedToLoad,
+            )
+        }
+
+    @Test
+    fun test_deck_failure_does_not_set_the_screen_error_message() =
+        runTest {
+            // The silent-failure rule stays (docs/android.md, "Offline-first
+            // sync"): the rail never blanks Today, and a decks failure is not
+            // a screen-level error.
+            val viewModel =
+                viewModelWith(
+                    dueResult = Result.Success(dueSummary(dueCount = 3)),
+                    decksResult = Result.NetworkError(IOException("no route to host")),
+                )
+            advanceUntilIdle()
+
+            val state = viewModel.uiState.value
+            assertNull("a decks failure is not a screen error", state.errorMessage)
+            assertEquals("the due count is not blanked", 3, state.dueCount)
+            assertEquals("the stats strip is not blanked", 9, state.streakDays)
+        }
+
+    @Test
     fun test_book_rail_renders_a_zero_progress_book() =
         runTest {
             // A book with `progress: 0.0` (approved cards, none in review
