@@ -58,7 +58,8 @@ fun DecksScreen(
         Spacer(Modifier.height(RecallySpacing.screenPadding))
         Text("Decks", style = MaterialTheme.typography.titleLarge, color = colors.ink)
         Text(
-            "${uiState.totalCards} cards · ${uiState.decks.size} books",
+            "${uiState.totalCards} card${if (uiState.totalCards == 1) "" else "s"} · " +
+                "${uiState.decks.size} book${if (uiState.decks.size == 1) "" else "s"}",
             style = MaterialTheme.typography.labelMedium,
             color = colors.inkFaint,
         )
@@ -113,7 +114,7 @@ private fun DeckRow(
                 color = colors.ink,
             )
             Text(
-                "${deck.total} cards",
+                "${deck.total} card${if (deck.total == 1) "" else "s"}",
                 style = MaterialTheme.typography.labelMedium,
                 color = colors.inkFaint,
             )

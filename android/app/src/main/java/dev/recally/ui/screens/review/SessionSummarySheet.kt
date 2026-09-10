@@ -81,7 +81,7 @@ fun SessionSummarySheet(
                 color = colors.ink,
             )
             Text(
-                text = "${summary.reviewedCount} cards in ${formatElapsed(summary.elapsedMs)}",
+                text = "${summary.reviewedCount} card${if (summary.reviewedCount == 1) "" else "s"} in ${formatElapsed(summary.elapsedMs)}",
                 style = MaterialTheme.typography.bodySmall,
                 color = colors.inkSoft,
             )

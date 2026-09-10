@@ -50,7 +50,8 @@ internal const val BOOK_SPINE_TAG = "bookSpine"
  * the decks list resolves, so the subtitle degrades to the card count alone.
  */
 private fun bookSubtitle(uiState: DecksUiState): String {
-    val cardCount = "${uiState.chapters.sumOf { it.cardCount }} cards"
+    val total = uiState.chapters.sumOf { it.cardCount }
+    val cardCount = "$total card${if (total == 1) "" else "s"}"
     return uiState.bookDue?.let { "$cardCount · $it due" } ?: cardCount
 }
 
@@ -215,7 +216,7 @@ private fun ChapterSection(
                 modifier = Modifier.weight(1f),
             )
             Text(
-                "${chapter.cardCount} cards",
+                "${chapter.cardCount} card${if (chapter.cardCount == 1) "" else "s"}",
                 style = MaterialTheme.typography.labelMedium,
                 color = colors.inkFaint,
             )
