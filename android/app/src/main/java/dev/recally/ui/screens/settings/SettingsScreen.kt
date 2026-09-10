@@ -400,7 +400,7 @@ private fun SettingsScreenConnectedPreview() {
                     connectionTest =
                         ConnectionTestState.Connected(
                             latencyMs = 42,
-                            message = "Connected — responded in 42 ms",
+                            message = "Responded in 42 ms",
                         ),
                 ),
             onBaseUrlChange = {},

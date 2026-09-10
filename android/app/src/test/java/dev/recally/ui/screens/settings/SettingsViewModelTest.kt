@@ -13,6 +13,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -138,6 +139,30 @@ class SettingsViewModelTest {
                 "each of the four outcomes carries its own message",
                 4,
                 messages.toSet().size,
+            )
+        }
+
+    @Test
+    fun test_successful_connection_message_does_not_repeat_the_title() =
+        runTest {
+            // The result row already titles the outcome "Connected"
+            // (SettingsScreen's ConnectionTestResult); the message must carry
+            // only the latency — "Responded in N ms" (issue #153,
+            // docs/design/RcSettings.dc.html).
+            val viewModel = viewModelWith(Result.Success(Unit))
+            viewModel.testConnection()
+            advanceUntilIdle()
+
+            val connected = viewModel.uiState.value.connectionTest
+            assertTrue(connected is ConnectionTestState.Connected)
+            val message = requireNotNull(connected.message)
+            assertFalse(
+                "the title says \"Connected\"; the message must not repeat it: $message",
+                message.contains("Connected", ignoreCase = true),
+            )
+            assertTrue(
+                "the message is the latency line: $message",
+                message.matches(Regex("Responded in \\d+ ms")),
             )
         }
 

@@ -107,6 +107,77 @@ class ReviewViewModelTest {
         }
 
     @Test
+    fun test_interval_hints_use_the_server_step_for_an_unrated_card() =
+        runTest {
+            // A card the server reports at step 1 must hint Again at the
+            // step-1 interval on a fresh session — never the step-0 fallback
+            // (issue #153). Steps [1, 10, 60]: step 1 → Again "10m".
+            val viewModel =
+                newViewModel(
+                    cards = listOf(card(id = 1, step = 1)),
+                    learningStepsMinutes = listOf(1, 10, 60),
+                )
+
+            viewModel.flip()
+
+            val hints = viewModel.uiState.value.ratingHints
+            assertNotNull(hints)
+            assertEquals("the server step (1) drives the Again hint", "10m", hints?.again)
+            assertEquals("1h", hints?.hard)
+        }
+
+    @Test
+    fun test_local_step_overrides_the_server_step_after_rating() =
+        runTest {
+            // Offline, no rate response: the in-session step counter advances
+            // past the server's value and the hints must follow the local
+            // step once the card comes back (issue #153).
+            val clock = MutableClock(sessionStart)
+            val reviewRepository = FakeReviewRepository().apply { offline() }
+            val viewModel =
+                newViewModel(
+                    cards = listOf(card(id = 1, step = 1)),
+                    learningStepsMinutes = listOf(1, 10, 60),
+                    clock = clock,
+                    reviewRepository = reviewRepository,
+                )
+
+            // Server step 1: Again waits 10m and advances the local step to 2.
+            viewModel.flip()
+            viewModel.rate(RATING_AGAIN)
+            clock.advance(Duration.ofMinutes(11))
+
+            // The repeat returns; the local step (2) now drives the hints.
+            assertEquals(
+                1L,
+                viewModel.uiState.value.card
+                    ?.id,
+            )
+            viewModel.flip()
+            val hints = viewModel.uiState.value.ratingHints
+            assertEquals("the in-session step overrides the server's after rating", "1h", hints?.again)
+        }
+
+    @Test
+    fun test_missing_server_step_falls_back_to_zero() =
+        runTest {
+            // A review-state card carries step: null; the hints behave as
+            // step 0, exactly as before the server-step seeding (issue #153).
+            val viewModel =
+                newViewModel(
+                    cards = listOf(card(id = 1, step = null)),
+                    learningStepsMinutes = listOf(1, 10, 60),
+                )
+
+            viewModel.flip()
+
+            val hints = viewModel.uiState.value.ratingHints
+            assertNotNull(hints)
+            assertEquals("<1m", hints?.again)
+            assertEquals("10m", hints?.hard)
+        }
+
+    @Test
     fun test_requeue_uses_the_cards_current_step() =
         runTest {
             val clock = MutableClock(sessionStart)

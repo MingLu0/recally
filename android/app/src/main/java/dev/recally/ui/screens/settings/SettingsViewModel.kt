@@ -114,7 +114,7 @@ class SettingsViewModel
                 is Result.Success ->
                     ConnectionTestState.Connected(
                         latencyMs = latencyMs,
-                        message = "Connected — responded in $latencyMs ms",
+                        message = "Responded in $latencyMs ms",
                     )
                 Result.Unauthorized ->
                     ConnectionTestState.WrongKey(MESSAGE_WRONG_KEY)
