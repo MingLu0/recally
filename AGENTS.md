@@ -128,6 +128,18 @@ cd android && ./gradlew ktlintCheck
 #      the `android-testers` group must exist under App Distribution → Testers)
 cd android && ./gradlew assembleDebug appDistributionUploadDebug
 
+# android — the tag-to-ship path (issue #175). Pushing a v* tag runs the
+# `distribute` job, which derives the version from the tag (refs/tags/v0.2.0 →
+# -Precally.versionName=0.2.0, overriding gradle.properties for that build
+# only), generates release notes naming the version/SHA/date, uploads to App
+# Distribution, retains the APK for 30 days, and cuts a GitHub Release with the
+# APK attached. A human decides when to ship; the tag does not bump the
+# committed version, so edit gradle.properties in the same change if the
+# default should move too.
+git tag v0.2.0 && git push origin v0.2.0
+# A workflow_dispatch run does the same minus the GitHub Release, and keeps the
+# gradle.properties version — no input required.
+
 # orchestrator (hand-started parallel dispatcher, ADR-013)
 scala-cli scripts/orchestrate.sc -- --dry-run
 scala-cli scripts/orchestrate.sc -- --step=step-4
