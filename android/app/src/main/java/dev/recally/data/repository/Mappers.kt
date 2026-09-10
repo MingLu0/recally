@@ -91,7 +91,7 @@ fun DeckDto.toDomain(): Deck =
         due = due,
         progress = progress,
         chapters = chapters,
-        truncated = 0,
+        truncated = truncated,
     )
 
 fun StatsResponse.toDomain(): Stats =

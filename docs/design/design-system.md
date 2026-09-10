@@ -123,6 +123,16 @@ Rendered from `GET /decks` (G2, issue #133; rail built in #154). Decks are remot
 
 The artboard's "Import" tile is deliberately not built: ingestion is the watched folder (`AGENTS.md` hard rule 12) and `api-spec.md` documents no client-initiated import. Do not add one to fill the space.
 
+### Deck row (`ui/screens/decks/DecksScreen.kt`)
+
+One book per row: spine chip, title in `label`/700, a `caption`/`ink-faint` subtitle ("48 cards · 9 chapters"), and the shared `DeckProgressBar`. Badges sit right-aligned in a 6dp-gapped column and each hides at zero rather than reading "0": `due` in `primary-wash`/`primary`, `truncated` in `warn-wash`/`warn`.
+
+Every number is a `GET /decks` field — `total`, `chapters`, `due`, `truncated`, `progress`. This screen never fetches a book's cards, so it computes none of them.
+
+**"2 TRUNCATED" was kept, and the count built** (issue #173). The gap was posed as an either/or — add a `truncated` count to `GET /decks`, or drop the badge — and resolved by building it, so a reading of `RcDecks.dc.html` that finds the badge is reading the current design. What the count means is deliberately unlike its neighbours: it spans **every card status**, because `truncated` is a `highlights` column and clipping is a property of the O'Reilly export, not of the approved population. A clipped highlight stays clipped while its card sits in the approval queue.
+
+The badge is a **flag only**. It names a condition of the source text and offers nothing that would recover it — no retry, no expand, no "restore" (`AGENTS.md` hard rule 7; the lost text exists nowhere else). The per-card `TRUNCATED SOURCE` chip on Approve stays the place the human sees truncation *while it matters*; this one is the per-book roll-up.
+
 ### Session progress (`ui/screens/review/SessionProgress.kt`)
 A single 6dp `pill` bar with proportional fills — `success` for cards answered Good/Easy, `warn` for those pending a repeat — plus a "N left" count in `caption`/`ink-faint`.
 
@@ -218,7 +228,7 @@ Every screen implements these. They are as much a part of the design as the happ
 | Queue drained | Approve shows a centred `success` check with "Queue clear". |
 | Loading | Skeleton blocks in `line-soft` at the real component's dimensions. No spinners. |
 | `needs_human` | `danger-wash` "NEEDS YOU" badge on the card; also a filter chip on Approve. |
-| `truncated` | `warn-wash` "TRUNCATED SOURCE" badge. Flag only — **never** attempt to reconstruct the text (`AGENTS.md` hard rule 7). |
+| `truncated` | `warn-wash` badge: "TRUNCATED SOURCE" per card on Approve, "N TRUNCATED" per book on the Decks row (issue #173). Flag only — **never** attempt to reconstruct the text (`AGENTS.md` hard rule 7). |
 | Push window | Read-only status row, never a toggle. `PUSH_WINDOW` is a server env var in `RECALLY_TIMEZONE` local time (`docs/config.md`), and `devices` carries no per-device preference — a switch would imply control the backend does not offer. State the window and say where it is set. |
 | Connection test | Four results, all specified: connected, 401, no answer, and **HTTPS required** — the network security config (`docs/android.md`, *Connecting to the backend*) blocks cleartext to any non-private host before a request leaves the phone. |
 
@@ -236,10 +246,8 @@ From `AGENTS.md` hard rules — the design is bound by these, not merely aware o
 
 Audited against `docs/api-spec.md` on 2026-09-07. Each item is data the design displays that no documented endpoint returns. These are **kept in the design deliberately** — the screens are built as intended and the endpoints catch up.
 
-Tracked in [`docs/roadmap.md`](../roadmap.md) → *Feature gaps*, which carries the proposed field shapes and test gates. Resolve them before the step 4 gate passes. The last two were added by a second audit on 2026-09-07 covering Decks, Book, Stats, Settings and States. The pending-counts gap was closed in issue #132 (`counts` on `GET /cards/pending` backs the tiles and the Approve header), per-book progress in issue #133 (`progress` on `GET /decks`), the next-due timestamp in issue #134 (`next_due_at` on `GET /stats`), bulk approve in issue #168 (`POST /cards/approve-batch`), and the browse response shape in issue #172 (per-card `state` and `due` on `GET /decks/{book_id}/cards`, plus `chapters` on `GET /decks`).
+Tracked in [`docs/roadmap.md`](../roadmap.md) → *Feature gaps*. The last two were added by a second audit on 2026-09-07 covering Decks, Book, Stats, Settings and States. The pending-counts gap was closed in issue #132 (`counts` on `GET /cards/pending` backs the tiles and the Approve header), per-book progress in issue #133 (`progress` on `GET /decks`), the next-due timestamp in issue #134 (`next_due_at` on `GET /stats`), bulk approve in issue #168 (`POST /cards/approve-batch`), the browse response shape in issue #172 (per-card `state` and `due` on `GET /decks/{book_id}/cards`, plus `chapters` on `GET /decks`), and the per-book truncated count in issue #173 (`truncated` on `GET /decks`).
 
-| # | Design element | Needs | Where |
-|---|---|---|---|
-| G6 | "2 TRUNCATED" per book | A truncated count on `GET /decks`, or drop the badge. | Decks |
+**All closed — the design depends on no undocumented field.** The last one, "2 TRUNCATED" per book, was resolved in issue #173 by adding `truncated` to `GET /decks` rather than dropping the badge; the reasoning is beside the *Deck row* component entry above.
 
 Fixed during the audit, recorded so they are not reintroduced: Good/Easy interval hints (violated hard rule 5); a "142 reviews / 38 new" stats strip mixing three timeframes under one "week" heading, when `NEW_CARDS_PER_DAY` caps new cards at 10; a fixed 12-segment progress bar incompatible with same-session re-queueing; "Lapsed" as a summary label, colliding with the spec's `lapse_rate_by_type`; and an approval card missing its required approve/edit/reject row (`docs/android.md`, *Screens → 3. Approval queue*).

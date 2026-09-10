@@ -48,8 +48,10 @@ private fun deckSubtitle(deck: Deck): String {
  * (docs/android.md, "Pure screen composables").
  *
  * Rows show only what the endpoint documents: title, `total`, `chapters`,
- * `due`, and the `progress` bar. The artboard's TRUNCATED badge (G6) stays
- * scoped out — the endpoint documents no truncated count.
+ * `due`, `truncated`, and the `progress` bar — every one a `GET /decks` field.
+ * The artboard's TRUNCATED badge is the last of those (G6, issue #173): a
+ * flag on how many of the book's source highlights the O'Reilly export
+ * clipped. It never offers to recover the text (hard rule 7).
  */
 
 @Composable
@@ -134,8 +136,29 @@ private fun DeckRow(
             Spacer(Modifier.height(7.dp))
             DeckProgressBar(progress = deck.progress)
         }
-        if (deck.due > 0) {
-            Badge(text = "${deck.due} DUE", fill = colors.primaryWash, textColor = colors.primary)
+        // Both badges in one 6dp-gapped column, as the artboard stacks them
+        // (docs/design/RcDecks.dc.html). Each hides at zero rather than
+        // rendering "0 DUE" / "0 TRUNCATED".
+        Column(
+            horizontalAlignment = Alignment.End,
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            if (deck.due > 0) {
+                Badge(
+                    text = "${deck.due} DUE",
+                    fill = colors.primaryWash,
+                    textColor = colors.primary,
+                )
+            }
+            if (deck.truncated > 0) {
+                // `warn` wash, matching the per-card TRUNCATED SOURCE chip on
+                // Approve (design-system.md, "States"). Flag only.
+                Badge(
+                    text = "${deck.truncated} TRUNCATED",
+                    fill = colors.warnWash,
+                    textColor = colors.warn,
+                )
+            }
         }
     }
 }

@@ -19,6 +19,11 @@ class Deck(BaseModel):
     # "48 cards · 9 chapters" (issue #172). The Decks screen never fetches a
     # book's cards, so it cannot derive this the way Book detail can.
     chapters: int
+    # The book's clipped source highlights, behind the row's "2 TRUNCATED"
+    # badge (G6, issue #173). Counted across every card status, unlike the
+    # counts above — truncation is a property of the export. Informational
+    # only: nothing reconstructs the lost text (hard rule 7).
+    truncated: int
 
     @classmethod
     def from_summary(cls, summary: DeckSummary) -> "Deck":
@@ -29,6 +34,7 @@ class Deck(BaseModel):
             due=summary.due,
             progress=summary.progress,
             chapters=summary.chapters,
+            truncated=summary.truncated,
         )
 
 

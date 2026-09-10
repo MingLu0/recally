@@ -504,10 +504,11 @@ class TodayViewModelTest {
         }
 
     @Test
-    fun test_ui_state_carries_no_truncated_count() {
-        // Negative guard: G6 (truncated counts) is still out — no
-        // `truncated` field appears on the Today rail, while the G2 book
-        // field itself must now be present and server-sourced (issue #154).
+    fun test_today_rail_derives_no_truncated_count_of_its_own() {
+        // G6 landed as a `GET /decks` field in issue #173, so `Deck` now carries
+        // `truncated` — the Decks row badges it. What this guard still protects is
+        // the Today rail: it renders no truncated count, and TodayUiState derives
+        // none. The G2 book field must be present and server-sourced (issue #154).
         val truncatedField = Regex("truncated", RegexOption.IGNORE_CASE)
         // Meta-assertion: the check bites.
         assertTrue(truncatedField.containsMatchIn("truncatedCount"))
@@ -520,14 +521,17 @@ class TodayViewModelTest {
             railField!!.type == List::class.java,
         )
 
-        val checkedTypes = listOf(TodayUiState::class, Deck::class)
-        for (type in checkedTypes) {
-            val offending =
-                type.java.declaredFields
-                    .map { it.name }
-                    .filter { truncatedField.containsMatchIn(it) }
-            assertTrue("${type.simpleName} carries a G6 truncated field: $offending", offending.isEmpty())
-        }
+        // The server's count reaches the rail's Deck objects untouched...
+        assertTrue(
+            "Deck must carry the G6 truncated count from GET /decks",
+            Deck::class.java.declaredFields.any { truncatedField.containsMatchIn(it.name) },
+        )
+        // ...and TodayUiState adds no aggregate or per-rail count of its own.
+        val offending =
+            TodayUiState::class.java.declaredFields
+                .map { it.name }
+                .filter { truncatedField.containsMatchIn(it) }
+        assertTrue("TodayUiState derives a truncated count: $offending", offending.isEmpty())
     }
 
     private companion object {
