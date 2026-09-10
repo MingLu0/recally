@@ -14,7 +14,7 @@ ADR-012's auto-merge boundary also has a hole: its conditions (named tests green
    - `--step=<label>` scopes dispatch to issues carrying that label (e.g. `--step=step-4`), so a new step can be trialled without opening the whole backlog to automation.
    - Up to **10** issues in flight (was 3 worktrees). Dispatch is via Orca worktrees + supervised workers; the prompt is `scripts/orca-autostart-prompt.md`.
    - State lives in `.orca/orchestrator-state.json` (gitignored) and is reconciled against GitHub every tick, so restarts never double-dispatch.
-   - Rate-limit failures hot-swap the agent along a pool (`opencode` → `claude`); other failures retry once, then the issue is marked needs-human with a comment.
+   - Rate-limit failures hot-swap the agent along a pool (`claude` → `opencode`; order is config in `orchestrate.sc`, the live value is in `workflow.md`'s tooling table); other failures retry once, then the issue is marked needs-human with a comment.
    - A PR marked CONFLICTING gets a rebase dispatched into the same worktree, at most twice, then it is left for a human with a comment.
    - The orchestrator **never merges**: merge authority stays with the worktree agent under the policy in `workflow.md`.
 2. **The PR must carry a `## TDD evidence` section** (that exact heading): the red output of every negative assertion, captured before the implementation, followed by the green run. This is what makes ADR-012's red-output requirement mechanically checkable — by the orchestrator's nudge path and by a human scanning the PR.
