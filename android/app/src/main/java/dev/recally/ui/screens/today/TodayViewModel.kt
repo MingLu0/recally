@@ -170,18 +170,27 @@ class TodayViewModel
          * The "Your books" rail (G2, issue #133; rail built in #154). The
          * served `progress` is written into the state unmodified — never
          * recomputed client-side from `total`/`due`. Decks are remote-only
-         * (docs/android.md, "Offline-first sync"), so any failure keeps the
-         * last-known books and shows nothing rather than an error.
+         * (docs/android.md, "Offline-first sync"), so a failure keeps the
+         * last-known books and never raises a screen-level error — the rail
+         * must not blank the rest of Today.
+         *
+         * It does, however, record that the load failed
+         * ([TodayUiState.booksFailedToLoad], issue #189). Silence alone made a
+         * rail that could not load indistinguishable from a library with no
+         * books; the flag lets the rail say which it is while the silence rule
+         * above stays intact.
          */
         private suspend fun loadDecks() {
             when (val result = withContext(ioDispatcher) { deckRepository.decks() }) {
                 is Result.Success ->
-                    mutableUiState.update { it.copy(books = result.data) }
+                    mutableUiState.update {
+                        it.copy(books = result.data, booksFailedToLoad = false)
+                    }
                 Result.Unauthorized,
                 is Result.HttpError,
                 is Result.NetworkError,
                 is Result.UnexpectedError,
-                -> Unit
+                -> mutableUiState.update { it.copy(booksFailedToLoad = true) }
             }
         }
 

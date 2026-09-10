@@ -28,6 +28,13 @@ data class TodayUiState(
     val pendingReviewCount: Int? = null,
     val needsHumanCount: Int? = null,
     val books: List<Deck> = emptyList(),
+    /**
+     * `GET /decks` did not answer, so [books] is unknown rather than empty
+     * (issue #189). A failed rail must not read as a library with no books:
+     * the rail renders its own failure strip while the rest of Today is
+     * untouched. Cleared by any successful load, empty list included.
+     */
+    val booksFailedToLoad: Boolean = false,
     val isOffline: Boolean = false,
     val showCheckSettingsBanner: Boolean = false,
     val errorMessage: String? = null,

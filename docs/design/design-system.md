@@ -119,7 +119,9 @@ The counts are the collection-wide `counts` on `GET /cards/pending` (G1, issue #
 ### Your books rail (`ui/screens/today/TodayScreen.kt`)
 Section title in `title` over a `body`/`ink-faint` subtitle ("From your O'Reilly highlights"), then a horizontally scrolling row of 190dp book cards. Each card carries the spine chip and title, the card count in `caption`/`ink-faint`, and the server's `progress` on the same bar Decks uses — `BookSpineChip` and `DeckProgressBar` are shared, so a book reads identically on both screens.
 
-Rendered from `GET /decks` (G2, issue #133; rail built in #154). Decks are remote-only, so an empty list draws **nothing** — no section header over an empty rail.
+Rendered from `GET /decks` (G2, issue #133; rail built in #154). Decks are remote-only, so a **loaded and genuinely empty** list draws **nothing** — no section header over an empty rail.
+
+**A failed load is not an empty library** (issue #189). When `GET /decks` does not answer, the section renders with its header and a failure strip in place of the card row: a `line`-bordered `md`-radius box, "Couldn't load your books" in `body`/`ink-muted`, with a `Try again` outlined button right-aligned that calls Today's own refresh. It stays **inside the section** — the rail never raises the screen-level error row and never blanks the rest of Today, since decks are remote-only and Today must render without them. Before this, both cases were silence, and a rail that could not load was indistinguishable from a user with no books.
 
 The artboard's "Import" tile is deliberately not built: ingestion is the watched folder (`AGENTS.md` hard rule 12) and `api-spec.md` documents no client-initiated import. Do not add one to fill the space.
 
