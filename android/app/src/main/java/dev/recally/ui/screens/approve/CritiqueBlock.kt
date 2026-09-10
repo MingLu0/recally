@@ -16,6 +16,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.SemanticsPropertyKey
 import androidx.compose.ui.unit.dp
 import dev.recally.ui.theme.CombinedPreviews
 import dev.recally.ui.theme.RecallySpacing
@@ -77,6 +78,21 @@ fun CritiqueBlock(
 private val CRITIQUE_FILL_LIGHT = Color(0xFFFDF6F3)
 private val CRITIQUE_BODY_LIGHT = Color(0xFF6B5A4F)
 private val RULE_WIDTH = 3.dp
+
+/**
+ * Lines a long critique collapses to behind its disclosure (issue #150). The
+ * Critic's prose is context, not content (design-system.md, "Critique
+ * block"), so the clamp keeps the block shorter than the card body and the
+ * card's action row reachable; four lines is enough to recognise which
+ * critique this is before deciding to expand.
+ */
+internal const val CRITIQUE_COLLAPSED_MAX_LINES = 4
+
+/**
+ * Rendered line count of the critique body. Lets the UI tests assert the
+ * clamp without depending on font metrics (issue #150).
+ */
+internal val CritiqueLineCountKey = SemanticsPropertyKey<Int>("CritiqueLineCount")
 
 @CombinedPreviews
 @Composable
