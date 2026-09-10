@@ -27,10 +27,11 @@ object Orchestrator:
 
   // --- configuration (ADR-013) ---
   val WorktreeCap = 10
-  val AgentPool = List("claude", "opencode")
+  val AgentPool = List("claude")
   val PollInterval = 60.seconds
   val MaxAttempts = 2       // dispatch retries per issue before needs_human
   val MaxConflictFixes = 2  // rebase dispatches per PR before needs_human
+  val UsageRetryInterval = 1.hour // usage-limited workers park and re-check
   val GithubRepo = "MingLu0/recally"
   val PrecheckScript = "scripts/orca-ready-issues.sh"
   val PromptFile: os.RelPath = os.rel / "scripts" / "orca-autostart-prompt.md"
@@ -39,12 +40,15 @@ object Orchestrator:
   val RateLimitSignatures = List("rate limit", "429", "usage limit", "quota", "limit reached")
 
   object Phase:
-    val Dispatched = "dispatched"  // worker running, no PR yet
-    val PrOpen = "pr_open"         // PR exists, not merged
-    val Merged = "merged"          // terminal
-    val NeedsHuman = "needs_human" // reconciled every tick (ADR-014): closed →
+    val Dispatched = "dispatched"    // worker running, no PR yet
+    val PrOpen = "pr_open"           // PR exists, not merged
+    val Merged = "merged"            // terminal
+    val NeedsHuman = "needs_human"   // reconciled every tick (ADR-014): closed →
     // merged, open + unassigned → dropped (redispatchable), open + assigned → kept
-  val ActivePhases = Set(Phase.Dispatched, Phase.PrOpen)
+    val RateLimited = "rate_limited" // usage window full; parked until nextRetryAt,
+    // then retried on the same task (ADR-014: no fallback agent while the pool
+    // is single-agent, so waiting is the only honest move)
+  val ActivePhases = Set(Phase.Dispatched, Phase.PrOpen, Phase.RateLimited)
 
   case class TrackedIssue(
     issue: Int,
@@ -58,6 +62,7 @@ object Orchestrator:
     evidenceNudged: Boolean,
     phase: String,
     parent: Int = 0, // parent step issue; 0 = predates this field
+    nextRetryAt: Long = 0, // epoch millis; used when phase == rate_limited
   )
   object TrackedIssue:
     given upickle.default.ReadWriter[TrackedIssue] = upickle.default.macroRW
@@ -179,10 +184,13 @@ object Orchestrator:
   case object Settled extends WorkerStatus
   case class Failed(rateLimited: Boolean) extends WorkerStatus
   case object WaitingOnHuman extends WorkerStatus
+  case object UsageLimited extends WorkerStatus // window full: park, don't escalate
   case object Unknown extends WorkerStatus
 
   // Shape verified against a live worker-show: result.dispatch.status
   // (dispatched → completed/failed) and result.worker.state (ready → ...).
+  // Rate-limit signatures are checked first: a worker parked at a usage-limit
+  // prompt shows up as agentWait ("waiting on human") but is really parked.
   def workerStatus(dispatchId: String): IO[WorkerStatus] =
     shOpt(List("orca", "orchestration", "worker-show", "--dispatch", dispatchId, "--json")).map {
       case None => Unknown
@@ -195,7 +203,8 @@ object Orchestrator:
         val dispatchStatus = strAt("dispatch", "status")
         val workerState = strAt("worker", "state")
         val isRateLimited = RateLimitSignatures.exists(raw.toLowerCase.contains)
-        if waiting then WaitingOnHuman
+        if isRateLimited then UsageLimited
+        else if waiting then WaitingOnHuman
         else if dispatchStatus.contains("fail") || dispatchStatus.contains("error") || workerState.contains("fail") then Failed(isRateLimited)
         else if dispatchStatus.contains("complete") || dispatchStatus.contains("success") || workerState.contains("exit") then Settled
         else if dispatchStatus.nonEmpty || workerState.nonEmpty then Running // dispatched/ready/running all mean in flight
@@ -296,9 +305,6 @@ object Orchestrator:
   def retryWorker(t: TrackedIssue, agent: String, runId: String): IO[String] =
     startWorker(t.taskId, t.issue, agent, retryOf = Some(t.dispatchId), runId)
 
-  def nextAgent(current: String): Option[String] =
-    AgentPool.dropWhile(_ != current).drop(1).headOption
-
   // --- logging (events always print; dashboard renders on change only, ADR-014) ---
   //
   // TTY runs enter the alternate screen: the dashboard panel stays pinned at
@@ -357,13 +363,19 @@ object Orchestrator:
     case Phase.Dispatched => "🌱"
     case Phase.PrOpen => "👀"
     case Phase.Merged => "🎉"
+    case Phase.RateLimited => "⏳"
     case _ => "🆘"
 
   def phaseWord(phase: String): String = phase match
     case Phase.Dispatched => "dispatched"
     case Phase.PrOpen => "PR open"
     case Phase.Merged => "merged"
+    case Phase.RateLimited => "usage-limited"
     case _ => "needs you"
+
+  def hhmm(epochMillis: Long): String =
+    java.time.Instant.ofEpochMilli(epochMillis).atZone(java.time.ZoneId.systemDefault()).toLocalTime
+      .format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))
 
   // --- reconcile one tracked issue ---
   // Returns None when the issue should be dropped from tracking (a needs-human
@@ -394,10 +406,57 @@ object Orchestrator:
     gh(List("issue", "view", issue.toString, "--repo", GithubRepo, "--json", "assignees",
       "-q", ".assignees | length")).map(_.trim.toInt).handleError(_ => 1) // fail closed: keep reporting
 
+  // Park a usage-limited worker until the window resets; retried on the same
+  // task. With a single-agent pool, waiting is the only honest move (ADR-014).
+  def park(t: TrackedIssue, why: String): IO[TrackedIssue] =
+    val at = java.time.Instant.ofEpochMilli(System.currentTimeMillis() + UsageRetryInterval.toMillis)
+      .atZone(java.time.ZoneId.systemDefault()).toLocalTime
+      .format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))
+    event(s"⏳ #${t.issue} ${t.agent} usage-limited — parked, next check ~$at ($why)")
+      .as(t.copy(phase = Phase.RateLimited, nextRetryAt = System.currentTimeMillis() + UsageRetryInterval.toMillis))
+
+  // Parked worker whose window should have reloaded: follow reality first
+  // (issue closed / PR landed while parked), otherwise retry the same task.
+  def reconcileParked(t: TrackedIssue, repoId: String, runId: String): IO[Option[TrackedIssue]] =
+    if System.currentTimeMillis() < t.nextRetryAt then IO.pure(Some(t))
+    else issueState(t.issue).flatMap {
+      case "CLOSED" =>
+        event(green(s"🎉 #${t.issue} merged — closed while parked, following reality")) *>
+          sleepWorktree(t.issue, t.dispatchId, announce = true) *> IO.pure(Some(t.copy(phase = Phase.Merged)))
+      case _ =>
+        prsForIssue("merged", t.issue).flatMap { merged =>
+          if merged.nonEmpty then
+            event(green(s"🎉 #${t.issue} merged — PR landed while parked")) *>
+              sleepWorktree(t.issue, t.dispatchId, announce = true) *> IO.pure(Some(t.copy(phase = Phase.Merged)))
+          else
+            prsForIssue("open", t.issue).flatMap { open =>
+              if open.nonEmpty then
+                // the work product exists; the merge-policy handlers resume from here
+                event(s"▶️  #${t.issue} usage window reset — PR #${open.head("number").num.toInt} open, back in the flow")
+                  .as(Some(t.copy(phase = Phase.PrOpen, nextRetryAt = 0, conflictDispatchId = None)))
+              else
+                retryWorker(t, t.agent, runId).flatMap { newDispatchId =>
+                  event(s"▶️  #${t.issue} usage window reset — resumed on ${t.agent}")
+                    .as(Some(t.copy(dispatchId = newDispatchId, phase = Phase.Dispatched, nextRetryAt = 0)))
+                }.handleErrorWith {
+                  case e: OrcaException if RateLimitSignatures.exists(e.lastError.toLowerCase.contains) =>
+                    park(t, s"still usage-limited (${e.lastError.take(60)})").map(Some(_))
+                  case e: OrcaException =>
+                    if t.attempts < MaxAttempts then
+                      event(red(s"💥 #${t.issue} resume failed: ${e.lastError.take(100)} — retrying in an hour"))
+                        .as(Some(t.copy(nextRetryAt = System.currentTimeMillis() + UsageRetryInterval.toMillis,
+                                        attempts = t.attempts + 1)))
+                    else escalate(t, s"resume from usage-limit park failed ${t.attempts} times (${e.lastError.take(80)}).")
+                }
+            }
+        }
+    }
+
   def reconcile(t: TrackedIssue, repoId: String, runId: String): IO[Option[TrackedIssue]] =
     t.phase match
       case Phase.Merged => IO.pure(Some(t))
       case Phase.NeedsHuman => reconcileNeedsHuman(t)
+      case Phase.RateLimited => reconcileParked(t, repoId, runId)
       case _ => reconcileActive(t, repoId, runId).map(Some(_))
 
   // needs-human is not terminal (ADR-014): the state file follows reality.
@@ -461,6 +520,7 @@ object Orchestrator:
         workerStatus(id).flatMap {
           case Running | Unknown => IO.pure(t) // fix in flight, or unverifiable — never double-dispatch
           case WaitingOnHuman => escalate(t, "conflict-fix worker is parked on a question only a human can answer.").map(_.get)
+          case UsageLimited => park(t.copy(conflictDispatchId = None), "conflict-fix worker usage-limited")
           case Failed(_) | Settled => dispatchConflictFix(t, prNumber, repoId, runId) // done but still conflicting
         }
       case None => dispatchConflictFix(t, prNumber, repoId, runId)
@@ -508,15 +568,8 @@ object Orchestrator:
         escalate(t, "worker settled without opening a PR; check its output in Orca.").map(_.get)
       case WaitingOnHuman =>
         escalate(t, "worker is parked on a question only a human can answer (agentWait).").map(_.get)
-      case Failed(rateLimited) if rateLimited =>
-        nextAgent(t.agent) match
-          case Some(failover) =>
-            event(s"♻️  #${t.issue} ${t.agent} rate-limited → $failover") *>
-              retryWorker(t, failover, runId).map { newDispatchId =>
-                t.copy(dispatchId = newDispatchId, agent = failover, attempts = t.attempts + 1)
-              }
-          case None =>
-            escalate(t, s"agent pool exhausted (${AgentPool.mkString(" -> ")}); all rate-limited.").map(_.get)
+      case UsageLimited =>
+        park(t, "usage window full")
       case Failed(_) =>
         if t.attempts < MaxAttempts then
           event(s"🔁 #${t.issue} worker failed — retry ${t.attempts + 1}/$MaxAttempts on ${t.agent}") *>
@@ -588,7 +641,9 @@ object Orchestrator:
     val header = s"╭─ 🍊 recally orch ─ $now " + "─" * 20
     val graphLines = if graph.isEmpty then Nil else Vector("│") ++ graph.map(g => s"│  $g") ++ Vector("│")
     val trackedLines = tracked.filter(t => ActivePhases(t.phase)).map(t =>
-      s"│  ${phaseGlyph(t.phase)} #${t.issue} ${shortTitle(t.title)} — ${phaseWord(t.phase)} (${t.agent})")
+      if t.phase == Phase.RateLimited then
+        s"│  ⏳ #${t.issue} ${shortTitle(t.title)} — usage-limited (${t.agent}), next check ~${hhmm(t.nextRetryAt)}"
+      else s"│  ${phaseGlyph(t.phase)} #${t.issue} ${shortTitle(t.title)} — ${phaseWord(t.phase)} (${t.agent})")
     val slotsLine = s"│  ⚡ $freeSlots slots free"
     val actionLines = actions.map(a => yellow(s"│  ⚠️  $a"))
     val footer = if actions.isEmpty then "╰─ ✨ nothing needs you" else "╰─ ⚠️  items above need you"
@@ -681,12 +736,14 @@ object Orchestrator:
         case Some(t) if t.phase == Phase.Dispatched => "🌱"
         case Some(t) if t.phase == Phase.PrOpen => "👀"
         case Some(t) if t.phase == Phase.NeedsHuman => "🆘"
+        case Some(t) if t.phase == Phase.RateLimited => "⏳"
         case _ =>
           if bi.state == "CLOSED" then "✅" else if bi.labels.contains("manual") then "✋" else "○"
     tracked.find(_.issue == issue.number) match
       case Some(t) if t.phase == Phase.Dispatched => ("🌱", s"dispatched (${t.agent})")
       case Some(t) if t.phase == Phase.PrOpen => ("👀", "PR open")
       case Some(t) if t.phase == Phase.NeedsHuman => ("🆘", "needs you")
+      case Some(t) if t.phase == Phase.RateLimited => ("⏳", s"usage-limited, next check ~${hhmm(t.nextRetryAt)}")
       case _ =>
         if issue.state == "CLOSED" then ("✅", "")
         else if issue.labels.contains("manual") then ("✋", "manual")
