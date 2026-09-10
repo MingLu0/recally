@@ -3,9 +3,7 @@ package dev.recally.ui.screens.decks
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -13,7 +11,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -31,9 +28,7 @@ import dev.recally.ui.theme.CombinedPreviews
 import dev.recally.ui.theme.RecallyRadius
 import dev.recally.ui.theme.RecallySpacing
 import dev.recally.ui.theme.RecallyTheme
-import dev.recally.ui.theme.bookCoverColor
 import dev.recally.ui.theme.recallyColors
-import kotlin.math.roundToInt
 
 /**
  * The deck list (docs/design/RcDecks.dc.html): one row per book from
@@ -108,20 +103,7 @@ private fun DeckRow(
     ) {
         // Book cover colours are data keyed off book_id, not theme
         // (design-system.md, "Colour").
-        Box(
-            modifier =
-                Modifier
-                    .size(44.dp)
-                    .clip(RoundedCornerShape(RecallyRadius.sm))
-                    .background(bookCoverColor(deck.bookId, isSystemInDarkTheme())),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                deck.title.firstOrNull()?.uppercase() ?: "?",
-                style = MaterialTheme.typography.titleMedium,
-                color = androidx.compose.ui.graphics.Color.White,
-            )
-        }
+        BookSpineChip(bookId = deck.bookId, title = deck.title)
         Spacer(Modifier.width(RecallySpacing.md))
         Column(Modifier.weight(1f)) {
             Text(
@@ -136,51 +118,11 @@ private fun DeckRow(
                 color = colors.inkFaint,
             )
             Spacer(Modifier.height(7.dp))
-            ProgressBar(progress = deck.progress)
+            DeckProgressBar(progress = deck.progress)
         }
         if (deck.due > 0) {
             Badge(text = "${deck.due} DUE", fill = colors.primaryWash, textColor = colors.primary)
         }
-    }
-}
-
-/**
- * The deck-row progress bar (docs/design/RcDecks.dc.html): a 5dp `pill` track
- * with a proportional fill, plus the percentage in `labelMedium`/700. The
- * artboard draws high progress in `success` and low in `accent`; half learned
- * is where the fill flips.
- */
-@Composable
-private fun ProgressBar(progress: Float) {
-    val colors = MaterialTheme.recallyColors
-    val fillColor = if (progress >= 0.5f) colors.success else colors.accent
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            modifier =
-                Modifier
-                    .weight(1f)
-                    .height(5.dp)
-                    .clip(RoundedCornerShape(RecallyRadius.pill))
-                    .background(colors.track),
-        ) {
-            Box(
-                modifier =
-                    Modifier
-                        .fillMaxWidth(progress.coerceIn(0f, 1f))
-                        .height(5.dp)
-                        .background(fillColor, RoundedCornerShape(RecallyRadius.pill)),
-            )
-        }
-        Spacer(Modifier.width(RecallySpacing.sm))
-        Text(
-            "${(progress * 100).roundToInt()}%",
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.Bold,
-            color = fillColor,
-        )
     }
 }
 

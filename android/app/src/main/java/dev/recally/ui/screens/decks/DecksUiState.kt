@@ -24,6 +24,13 @@ data class DecksUiState(
     // Book detail mode
     val bookId: Long? = null,
     val bookTitle: String? = null,
+    /**
+     * The header's due count and progress (issue #152): the cards endpoint
+     * documents neither, so they are resolved from `GET /decks` alongside the
+     * title. Null until that list resolves — the header renders without them.
+     */
+    val bookDue: Int? = null,
+    val bookProgress: Float? = null,
     val chapters: List<ChapterSummary> = emptyList(),
     val expandedChapter: String? = null,
     val expandedCards: List<DeckCard> = emptyList(),

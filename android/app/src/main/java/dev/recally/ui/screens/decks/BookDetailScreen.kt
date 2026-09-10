@@ -27,6 +27,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -40,6 +41,18 @@ import dev.recally.ui.theme.RecallySpacing
 import dev.recally.ui.theme.RecallyTheme
 import dev.recally.ui.theme.recallyColors
 import java.time.Instant
+
+/** Semantics tag on the header's spine chip (issue #152), shared with its test. */
+internal const val BOOK_SPINE_TAG = "bookSpine"
+
+/**
+ * "N cards · N due" (docs/design/RcBook.dc.html). The due count is null until
+ * the decks list resolves, so the subtitle degrades to the card count alone.
+ */
+private fun bookSubtitle(uiState: DecksUiState): String {
+    val cardCount = "${uiState.chapters.sumOf { it.cardCount }} cards"
+    return uiState.bookDue?.let { "$cardCount · $it due" } ?: cardCount
+}
 
 /**
  * Book detail (docs/design/RcBook.dc.html): chapters expand in place rather
@@ -92,16 +105,41 @@ fun BookDetailScreen(
                 color = colors.inkFaint,
             )
         }
-        Text(
-            uiState.bookTitle ?: "Book",
-            style = MaterialTheme.typography.titleLarge,
-            color = colors.ink,
-        )
-        Text(
-            "${uiState.chapters.sumOf { it.cardCount }} cards · read-only",
-            style = MaterialTheme.typography.labelMedium,
-            color = colors.inkFaint,
-        )
+        // The header mirrors the book's Decks row (docs/design/RcBook.dc.html,
+        // issue #152): spine chip, title, progress % and due count — all from
+        // `GET /decks`, resolved into the UiState by the ViewModel. Nothing
+        // here says "read-only": the rows below carry the ADR-008 edit and
+        // suspend controls.
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(RecallySpacing.md),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            BookSpineChip(
+                bookId = uiState.bookId ?: 0L,
+                title = uiState.bookTitle ?: "?",
+                modifier = Modifier.testTag(BOOK_SPINE_TAG),
+            )
+            Column(Modifier.weight(1f)) {
+                Text(
+                    uiState.bookTitle ?: "Book",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = colors.ink,
+                )
+                uiState.bookProgress?.let { progress ->
+                    Spacer(Modifier.height(7.dp))
+                    DeckProgressBar(progress = progress)
+                }
+                Text(
+                    bookSubtitle(uiState),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = colors.inkFaint,
+                )
+            }
+            val dueCount = uiState.bookDue ?: 0
+            if (dueCount > 0) {
+                Badge(text = "$dueCount DUE", fill = colors.primaryWash, textColor = colors.primary)
+            }
+        }
         Spacer(Modifier.height(RecallySpacing.md))
 
         if (uiState.isOffline) OfflineBar()
@@ -365,6 +403,8 @@ private fun sampleDetailState(
     isBookDetail = true,
     bookId = 1,
     bookTitle = "Evals for AI Engineers",
+    bookDue = 6,
+    bookProgress = 0.62f,
     isLoading = isLoading,
     isOffline = isOffline,
     chapters =

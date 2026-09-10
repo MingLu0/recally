@@ -153,7 +153,7 @@ Package root `dev.recally.ui` — layout in `docs/android.md`, *Project structur
 
 All ten screens are drawn. Two notes on the later ones:
 
-- **Book detail expands chapters in place** rather than pushing a third screen. One book has 30 chapters (*30 Agents in 30 Days*), so a third navigation level would be tedious to browse. Cards are read-only here per `docs/android.md` (*Screens → 4. Decks*) — no rating, no approve.
+- **Book detail expands chapters in place** rather than pushing a third screen. One book has 30 chapters (*30 Agents in 30 Days*), so a third navigation level would be tedious to browse. Cards carry the per-card controls from ADR-008 — edit, suspend, unsuspend — per `docs/android.md` (*Screens → 4. Decks*); only review actions (rate, approve) do not happen here.
 - **Stats invents nothing.** Every figure maps one-to-one onto `GET /stats`: `streak_days`, `reviews_today`, `retention_30d`, `forecast[]`, `lapse_rate_by_type`. It is the only screen with no G-gap dependency.
 
 ## States

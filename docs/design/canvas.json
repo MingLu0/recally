@@ -262,7 +262,7 @@
       "x": 3660,
       "y": 1085,
       "w": 560,
-      "text": "BOOK — CHAPTERS → CARDS\n\nThe second level of the Decks screen (docs/android.md, *Decks*). Chapters expand in place rather than pushing another screen — with 30 chapters in one book, a third level of navigation would be tedious.\n\nCards are read-only here: no rating, no approve. Due dates shown for scheduled cards, 'Not scheduled' for new ones.\n\nA NEW card is dimmed to 62% so scheduled cards read first."
+      "text": "BOOK — CHAPTERS → CARDS\n\nThe second level of the Decks screen (docs/android.md, *Decks*). Chapters expand in place rather than pushing another screen — with 30 chapters in one book, a third level of navigation would be tedious.\n\nCards carry the ADR-008 controls (edit, suspend, unsuspend) — no rating, no approve. Due dates shown for scheduled cards, 'Not scheduled' for new ones.\n\nA NEW card is dimmed to 62% so scheduled cards read first."
     },
     {
       "id": "n-stats",
