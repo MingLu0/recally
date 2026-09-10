@@ -28,6 +28,9 @@ from recally.api.errors import ProblemDetail
 from recally.models import Card
 from recally.models.base import utc_now
 from recally.schemas.cards import (
+    ApproveBatchRequest,
+    ApproveBatchResponse,
+    ApproveBatchResultResponse,
     ApproveCardRequest,
     CardResponse,
     PatchCardRequest,
@@ -91,6 +94,62 @@ def approve_card(
     record_approval(session, card)
     session.commit()
     return CardResponse.from_card(card)
+
+
+@router.post("/approve-batch", response_model=ApproveBatchResponse)
+def approve_batch(body: ApproveBatchRequest, session: SessionDep) -> ApproveBatchResponse:
+    """Bulk human approval (issue #168).
+
+    One entry per request id, in request order, so the client matches by
+    position. A bad id fails only its own entry: an unknown card, an
+    already-decided card and a `needs_human` card are per-item failures, never
+    a whole-body error — a queue-clearing action must not be defeated by one
+    stale id.
+
+    **`needs_human` is refused here, not by the caller** (hard rule 1;
+    design-system.md, "Constraints this design must not break"). Those cards
+    are opened individually, and putting the exclusion server-side means no
+    client can skip it.
+    """
+    results: list[ApproveBatchResultResponse] = []
+    for card_id in body.card_ids:
+        card = session.get(Card, card_id)
+        if card is None:
+            results.append(
+                ApproveBatchResultResponse(
+                    card_id=card_id,
+                    ok=False,
+                    error_status=404,
+                    detail=f"Card {card_id} not found.",
+                )
+            )
+            continue
+        if card.status == "needs_human":
+            results.append(
+                ApproveBatchResultResponse(
+                    card_id=card_id,
+                    ok=False,
+                    error_status=409,
+                    detail=(
+                        f"Card {card_id} needs a human decision and must be opened individually."
+                    ),
+                )
+            )
+            continue
+        if card.status not in QUEUE_STATUSES:
+            results.append(
+                ApproveBatchResultResponse(
+                    card_id=card_id,
+                    ok=False,
+                    error_status=409,
+                    detail=f"Card {card_id} is not awaiting review (status: {card.status}).",
+                )
+            )
+            continue
+        record_approval(session, card)
+        results.append(ApproveBatchResultResponse(card_id=card_id, ok=True, status=card.status))
+    session.commit()
+    return ApproveBatchResponse(results=results)
 
 
 @router.post("/{card_id}/reject", response_model=CardResponse)

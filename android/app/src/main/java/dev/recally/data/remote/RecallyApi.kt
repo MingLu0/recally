@@ -40,6 +40,12 @@ interface RecallyApi {
         @Query("chapter") chapter: String? = null,
     ): PendingCardsResponse
 
+    /** Bulk approve (issue #168). `needs_human` ids are refused server-side, per card. */
+    @POST("cards/approve-batch")
+    suspend fun approveBatch(
+        @Body body: ApproveBatchRequest,
+    ): ApproveBatchResponseDto
+
     @POST("cards/{card_id}/approve")
     suspend fun approveCard(
         @Path("card_id") cardId: Long,

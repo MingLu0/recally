@@ -50,9 +50,10 @@ fun groupIntoChapters(cards: List<PendingCard>): List<ChapterGroup> {
  *
  * [pendingCount] is the header's "N pending" — the whole queue, from the
  * collection-wide `counts` on `GET /cards/pending` (G1, issue #132), never
- * the loaded list's length. Still scoped out: any multi-card approve
- * affordance (G4 — no batch endpoint exists, and `needs_human` cards are
- * excluded from any future bulk path by hard rule 1).
+ * the loaded list's length. [bulkApprovableCount] backs the bulk action
+ * (issue #168) and comes from the same `counts` for the same reason;
+ * `needs_human` is excluded from it, and the server refuses those ids per
+ * card besides (hard rule 1).
  *
  * [truncated] source highlights are a flag, never a repair (hard rule 7):
  * nothing here offers to reconstruct clipped text.
@@ -67,8 +68,22 @@ data class ApproveUiState(
     val expandedHighlightCardIds: Set<Long> = emptySet(),
     val editingCardId: Long? = null,
     val busyCardId: Long? = null,
+    /** Cards in the collection-wide `pending_review` bucket — the bulk action's N. */
+    val bulkApprovableCount: Int? = null,
+    val isBulkApproving: Boolean = false,
     val errorMessage: String? = null,
 ) {
+    /**
+     * The bulk bar shows only when there is clean work to do. It is hidden on
+     * the NEEDS_YOU filter: every card there is `needs_human`, which the bulk
+     * path excludes (hard rule 1), so the button would claim work it cannot do.
+     */
+    val showBulkApprove: Boolean
+        get() =
+            !isLoading &&
+                filter != QueueFilter.NEEDS_YOU &&
+                (bulkApprovableCount ?: 0) > 0
+
     /** The groups the current filter shows; NEEDS_YOU keeps only `needs_human` cards. */
     val visibleGroups: List<ChapterGroup>
         get() =

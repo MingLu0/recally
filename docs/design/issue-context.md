@@ -49,7 +49,6 @@ Three API gaps remain in [`docs/roadmap.md`](docs/roadmap.md) under *Feature gap
 
 | | Blocks | Needs |
 |---|---|---|
-| G4 | Approve | A bulk-approve endpoint, or a recorded fan-out decision |
 | G5 | Book detail, Decks | `GET /decks/{book_id}/cards` has no documented response at all |
 | G6 | Decks | A truncated count per book |
 

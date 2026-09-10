@@ -1,10 +1,12 @@
 package dev.recally.data.repository
 
+import dev.recally.data.remote.ApproveBatchRequest
 import dev.recally.data.remote.ApproveCardRequest
 import dev.recally.data.remote.RecallyApi
 import dev.recally.data.remote.RejectCardRequest
 import dev.recally.data.remote.apiCall
 import dev.recally.di.IoDispatcher
+import dev.recally.domain.model.ApproveBatchResult
 import dev.recally.domain.model.PendingQueue
 import dev.recally.domain.repository.ApprovalRepository
 import dev.recally.domain.repository.Result
@@ -35,6 +37,19 @@ class ApprovalRepositoryImpl
         ): Result<Unit> =
             withContext(ioDispatcher) {
                 apiCall { api.approveCard(cardId, ApproveCardRequest(front = front, back = back)) }.toUnit()
+            }
+
+        override suspend fun approveBatch(cardIds: List<Long>): Result<List<ApproveBatchResult>> =
+            withContext(ioDispatcher) {
+                apiCall {
+                    api.approveBatch(ApproveBatchRequest(cardIds = cardIds)).results.map { result ->
+                        ApproveBatchResult(
+                            cardId = result.cardId,
+                            ok = result.ok,
+                            detail = result.detail,
+                        )
+                    }
+                }
             }
 
         override suspend fun rejectCard(

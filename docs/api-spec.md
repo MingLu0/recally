@@ -96,6 +96,26 @@ Items are validated individually, not by the request schema, so one malformed it
 Optional edits: `{ "front": "...", "back": "..." }` → status `approved`, `approved_at` set, `card_state` row created (enters FSRS). Edits overwrite `front`/`back`; `original_front`/`original_back` keep the Writer's text for the Learner.
 **Response**: the updated card (same shape as `PATCH /cards/{id}` below), so the client can update its cache.
 
+### POST /cards/approve-batch
+Bulk human approval, behind Approve's "Approve N ready" (issue #168). Body `{ "card_ids": [12, 15, 19] }`.
+
+**Response**: `{ "results": [...] }` — exactly one entry per request id, **in request order**, so the client matches by position (the same contract as `POST /reviews/rate-batch`).
+
+```json
+{ "results": [
+    { "card_id": 12, "ok": true,  "status": "approved" },
+    { "card_id": 15, "ok": false, "error_status": 409,
+      "detail": "Card 15 needs a human decision and must be opened individually." },
+    { "card_id": 19, "ok": true,  "status": "approved" }
+]}
+```
+
+A bad id fails only its own entry — an unknown card (404), an already-decided card (409) and a `needs_human` card (409) never fail the whole body, because a queue-clearing action must not be defeated by one stale id. Only a body that is not `{"card_ids": [...]}` is a 422; unlike `rate-batch`, whose items arrive from an offline queue and are validated individually, a malformed body here is a caller bug rather than a stale client.
+
+**`needs_human` cards are refused by this endpoint**, not filtered by the client (hard rule 1). Each is entered individually through `POST /cards/{id}/approve` after a human reads it; server-side enforcement means no client can skip the gate.
+
+There is deliberately no bulk reject: a rejection carries a reason that feeds the Learner, and one reason applied to N cards is not that.
+
 ### POST /cards/{id}/reject
 `{ "reason": "..." }` → status `rejected`. Reasons feed the Learner.
 **Response**: the updated card (same shape as `PATCH /cards/{id}` below).

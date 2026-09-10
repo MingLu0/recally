@@ -519,3 +519,134 @@ def test_health_auth_accepts_the_configured_key(client: TestClient) -> None:
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
+
+def test_approve_batch_approves_every_clean_card(client: TestClient, container: Container) -> None:
+    """G4: a batch of `pending_review` ids is approved in one call."""
+    with container.session() as session:
+        book = _book(title="Evals for AI Engineers", external_id="9781098188283")
+        session.add(book)
+        session.flush()
+        for index in range(3):
+            _seed_queued_card(session, book=book, status="pending_review", dedupe_key=f"pr-{index}")
+        session.commit()
+
+    pending = client.get("/cards/pending", headers={"X-API-Key": TEST_API_KEY}).json()
+    card_ids = [card["id"] for card in pending["cards"]]
+
+    response = client.post(
+        "/cards/approve-batch",
+        json={"card_ids": card_ids},
+        headers={"X-API-Key": TEST_API_KEY},
+    )
+
+    assert response.status_code == 200
+    results = response.json()["results"]
+    assert [item["ok"] for item in results] == [True, True, True]
+    assert all(item["status"] == "approved" for item in results)
+
+    after = client.get("/cards/pending", headers={"X-API-Key": TEST_API_KEY}).json()
+    assert after["counts"] == {"pending_review": 0, "needs_human": 0}
+
+
+def test_approve_batch_never_approves_a_needs_human_card(
+    client: TestClient, container: Container
+) -> None:
+    """Hard rule 1: `needs_human` is excluded from every bulk path, server-side.
+
+    The card must still be `needs_human` afterwards — a bulk action can never be
+    the thing that enters it into FSRS.
+    """
+    with container.session() as session:
+        book = _book(title="Evals for AI Engineers", external_id="9781098188283")
+        session.add(book)
+        session.flush()
+        _seed_queued_card(session, book=book, status="pending_review", dedupe_key="pr-0")
+        _seed_queued_card(session, book=book, status="needs_human", dedupe_key="nh-0")
+        session.commit()
+
+    pending = client.get("/cards/pending", headers={"X-API-Key": TEST_API_KEY}).json()
+    clean_id = next(c["id"] for c in pending["cards"] if c["status"] == "pending_review")
+    needs_human_id = next(c["id"] for c in pending["cards"] if c["status"] == "needs_human")
+
+    response = client.post(
+        "/cards/approve-batch",
+        json={"card_ids": [clean_id, needs_human_id]},
+        headers={"X-API-Key": TEST_API_KEY},
+    )
+
+    assert response.status_code == 200
+    results = {item["card_id"]: item for item in response.json()["results"]}
+    assert results[clean_id]["ok"] is True
+    assert results[needs_human_id]["ok"] is False
+
+    after = client.get("/cards/pending", headers={"X-API-Key": TEST_API_KEY}).json()
+    assert after["counts"] == {"pending_review": 0, "needs_human": 1}
+    still_queued = next(c for c in after["cards"] if c["id"] == needs_human_id)
+    assert still_queued["status"] == "needs_human"
+
+
+def test_approve_batch_results_are_in_request_order(
+    client: TestClient, container: Container
+) -> None:
+    """One entry per request item, in request order — the client matches by position."""
+    with container.session() as session:
+        book = _book(title="Evals for AI Engineers", external_id="9781098188283")
+        session.add(book)
+        session.flush()
+        for index in range(2):
+            _seed_queued_card(session, book=book, status="pending_review", dedupe_key=f"pr-{index}")
+        session.commit()
+
+    pending = client.get("/cards/pending", headers={"X-API-Key": TEST_API_KEY}).json()
+    real_ids = [card["id"] for card in pending["cards"]]
+    requested = [real_ids[0], 999_999, real_ids[1]]
+
+    response = client.post(
+        "/cards/approve-batch",
+        json={"card_ids": requested},
+        headers={"X-API-Key": TEST_API_KEY},
+    )
+
+    results = response.json()["results"]
+    assert [item["card_id"] for item in results] == requested
+    assert [item["ok"] for item in results] == [True, False, True]
+
+
+def test_approve_batch_partial_failure_leaves_no_card_inconsistent(
+    client: TestClient, container: Container
+) -> None:
+    """An unknown id fails only its own entry; the rest approve exactly once."""
+    with container.session() as session:
+        book = _book(title="Evals for AI Engineers", external_id="9781098188283")
+        session.add(book)
+        session.flush()
+        for index in range(2):
+            _seed_queued_card(session, book=book, status="pending_review", dedupe_key=f"pr-{index}")
+        session.commit()
+
+    pending = client.get("/cards/pending", headers={"X-API-Key": TEST_API_KEY}).json()
+    card_ids = [card["id"] for card in pending["cards"]]
+
+    response = client.post(
+        "/cards/approve-batch",
+        json={"card_ids": [card_ids[0], 999_999, card_ids[1]]},
+        headers={"X-API-Key": TEST_API_KEY},
+    )
+    assert response.status_code == 200
+
+    with container.session() as session:
+        for card_id in card_ids:
+            states = session.query(CardState).filter(CardState.card_id == card_id).all()
+            assert len(states) == 1
+
+
+def test_approve_batch_rejects_a_malformed_body(client: TestClient) -> None:
+    """A body that is not `{"card_ids": [...]}` is a 422, as `rate-batch` is."""
+    response = client.post(
+        "/cards/approve-batch",
+        json={"ids": [1, 2]},
+        headers={"X-API-Key": TEST_API_KEY},
+    )
+
+    assert response.status_code == 422
