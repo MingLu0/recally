@@ -46,6 +46,10 @@ fun RecallyNavHost(
         composable(Screen.Today.route) {
             val todayViewModel: TodayViewModel = hiltViewModel()
             val todayUiState by todayViewModel.uiState.collectAsStateWithLifecycle()
+            // Issue #147: the ViewModel survives on the back stack, so the
+            // screen re-queries when it regains focus or connectivity flips.
+            RefreshOnResumeEffect(todayViewModel::refresh)
+            RefreshOnConnectivityChangeEffect(todayViewModel::refresh)
 
             TodayScreen(
                 uiState = todayUiState,
@@ -95,6 +99,8 @@ fun RecallyNavHost(
         composable(Screen.Decks.route) {
             val decksViewModel: DecksViewModel = hiltViewModel()
             val decksUiState by decksViewModel.uiState.collectAsStateWithLifecycle()
+            RefreshOnResumeEffect(decksViewModel::refresh)
+            RefreshOnConnectivityChangeEffect(decksViewModel::refresh)
             DecksScreen(
                 uiState = decksUiState,
                 onDeckClick = { bookId -> navController.navigate(Screen.BookDetail.createRoute(bookId)) },
@@ -124,6 +130,8 @@ fun RecallyNavHost(
         composable(Screen.Stats.route) {
             val statsViewModel: StatsViewModel = hiltViewModel()
             val statsUiState by statsViewModel.uiState.collectAsStateWithLifecycle()
+            RefreshOnResumeEffect(statsViewModel::refresh)
+            RefreshOnConnectivityChangeEffect(statsViewModel::refresh)
 
             StatsScreen(
                 uiState = statsUiState,

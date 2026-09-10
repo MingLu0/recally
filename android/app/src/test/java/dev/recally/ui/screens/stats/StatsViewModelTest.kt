@@ -286,10 +286,32 @@ class StatsViewModelTest {
             assertEquals("StatsUiState carries exactly the next-due field", listOf("nextDueAt"), carried)
         }
 
+    @Test
+    fun test_refresh_re_queries_stats() =
+        runTest {
+            // Issue #147: refresh() on the surviving ViewModel re-queries
+            // rather than serving the first load forever.
+            statsRepository.result = Result.Success(fullStats(reviewsToday = 23))
+            val viewModel = StatsViewModel(statsRepository, testDispatcher, FIXED_CLOCK)
+            advanceUntilIdle()
+            assertEquals(23, viewModel.uiState.value.reviewsToday)
+
+            statsRepository.result = Result.Success(fullStats(reviewsToday = 25))
+            viewModel.refresh()
+            advanceUntilIdle()
+
+            assertEquals("a second refresh issues a new /stats call", 2, statsRepository.calls)
+            assertEquals("the updated figure is emitted", 25, viewModel.uiState.value.reviewsToday)
+        }
+
     private class FakeStatsRepository : StatsRepository {
         var result: Result<Stats> = Result.Success(statsWithForecast())
+        var calls = 0
 
-        override suspend fun stats(): Result<Stats> = result
+        override suspend fun stats(): Result<Stats> {
+            calls++
+            return result
+        }
     }
 
     private companion object {
@@ -321,10 +343,13 @@ class StatsViewModelTest {
             )
 
         /** The documented payload (docs/api-spec.md, "Stats"). */
-        fun fullStats(nextDueAt: Instant? = null): Stats =
+        fun fullStats(
+            reviewsToday: Int = 23,
+            nextDueAt: Instant? = null,
+        ): Stats =
             Stats(
                 streakDays = 9,
-                reviewsToday = 23,
+                reviewsToday = reviewsToday,
                 retention30d = 0.87,
                 lapseRateByType = mapOf("qa" to 0.11, "cloze" to 0.18),
                 lapseRateByGuidanceVersion = mapOf("1" to 0.19, "2" to 0.12),
