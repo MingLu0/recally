@@ -8,12 +8,18 @@ wrong, and a transport error means the server was not reachable at all.
 
 Neither touches the database: a liveness probe that fails when the database is
 slow reports the wrong thing.
+
+The authenticated twin also reports the running build's version. A backend left
+running across a deploy serves the old code from memory, and the app's only
+symptom was a decoding failure on a field the stale process never sent; the
+version turns that into something the connection test can read (issue #195).
 """
 
 from fastapi import APIRouter
 
+from recally import __version__
 from recally.api.auth import ApiKeyGuard
-from recally.schemas.health import HealthResponse
+from recally.schemas.health import AuthedHealthResponse, HealthResponse
 
 router = APIRouter(tags=["health"])
 authed_router = APIRouter(tags=["health"], dependencies=[ApiKeyGuard])
@@ -25,7 +31,7 @@ def get_health() -> HealthResponse:
     return HealthResponse(status="ok")
 
 
-@authed_router.get("/health/auth", response_model=HealthResponse)
-def get_health_auth() -> HealthResponse:
-    """Liveness plus a valid `X-API-Key`; the Settings connection test."""
-    return HealthResponse(status="ok")
+@authed_router.get("/health/auth", response_model=AuthedHealthResponse)
+def get_health_auth() -> AuthedHealthResponse:
+    """Liveness, a valid `X-API-Key`, and the running build's version."""
+    return AuthedHealthResponse(status="ok", version=__version__)

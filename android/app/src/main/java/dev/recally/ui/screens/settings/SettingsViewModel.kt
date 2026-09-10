@@ -120,12 +120,17 @@ class SettingsViewModel
             }
         }
 
-        private fun Result<Unit>.toConnectionTestState(latencyMs: Long): ConnectionTestState =
+        private fun Result<String?>.toConnectionTestState(latencyMs: Long): ConnectionTestState =
             when (this) {
+                // The reported version is shown on success so a backend left
+                // running across a deploy is visible here, rather than only as
+                // a failed decode on Decks or Today (issue #195).
                 is Result.Success ->
                     ConnectionTestState.Connected(
                         latencyMs = latencyMs,
-                        message = "Responded in $latencyMs ms",
+                        message =
+                            data?.let { version -> "Responded in $latencyMs ms · backend $version" }
+                                ?: "Responded in $latencyMs ms · backend version not reported",
                     )
                 Result.Unauthorized ->
                     ConnectionTestState.WrongKey(MESSAGE_WRONG_KEY)

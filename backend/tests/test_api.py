@@ -518,7 +518,11 @@ def test_health_auth_accepts_the_configured_key(client: TestClient) -> None:
     response = client.get("/health/auth", headers={"X-API-Key": TEST_API_KEY})
 
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    # The authenticated probe also reports the running build's version, so
+    # version skew is readable in the Settings connection test rather than only
+    # as a failed decode in the app (issue #195); tests/api/test_health.py owns
+    # that contract. Here the point is only that the key is accepted.
+    assert response.json()["status"] == "ok"
 
 
 def test_approve_batch_approves_every_clean_card(client: TestClient, container: Container) -> None:

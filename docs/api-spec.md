@@ -10,7 +10,9 @@ Base: FastAPI. Auth: `X-API-Key` header (single user, value from `RECALLY_API_KE
 Unauthenticated liveness check: `{ "status": "ok" }`. Does not touch the database.
 
 ### GET /health/auth
-Same, but behind the `X-API-Key` dependency. This is what the Android Settings screen's *connection test* calls: 200 means the base URL and the key are both right, 401 means the key is wrong, and a connection error means the server was not reachable at all. Kept separate from `GET /health` so a load balancer probe never needs the key.
+Same, but behind the `X-API-Key` dependency, plus the running build's version: `{ "status": "ok", "version": "0.1.0" }`. This is what the Android Settings screen's *connection test* calls: 200 means the base URL and the key are both right, 401 means the key is wrong, and a connection error means the server was not reachable at all. Kept separate from `GET /health` so a load balancer probe never needs the key.
+
+`version` is `recally.__version__`, and it rides on the authenticated probe alone — the unauthenticated one is a load-balancer target that should disclose nothing. It exists because a backend process left running across a deploy keeps serving the old code from memory, and the app's only symptom is a decoding failure on a field the stale process no longer sends (issue #195). The connection test shows the version it got back, so skew is readable rather than something to diagnose. The client treats it as optional: a backend too old to report a version is exactly the skew the field reveals, so its absence must not fail the connection test.
 
 ## Reviews
 
