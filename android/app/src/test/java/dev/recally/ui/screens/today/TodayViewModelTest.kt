@@ -1,5 +1,6 @@
 package dev.recally.ui.screens.today
 
+import dev.recally.domain.model.Deck
 import dev.recally.domain.model.DueSummary
 import dev.recally.domain.model.ForecastDay
 import dev.recally.domain.model.PendingCard
@@ -373,6 +374,33 @@ class TodayViewModelTest {
 
             assertTrue("a refresh with no connectivity sets the offline bar", viewModel.uiState.value.isOffline)
         }
+
+    @Test
+    fun test_ui_state_carries_no_truncated_count() {
+        // Negative guard: G6 (truncated counts) is still out — no
+        // `truncated` field appears on the Today rail, while the G2 book
+        // field itself must now be present and server-sourced (issue #154).
+        val truncatedField = Regex("truncated", RegexOption.IGNORE_CASE)
+        // Meta-assertion: the check bites.
+        assertTrue(truncatedField.containsMatchIn("truncatedCount"))
+
+        val railField =
+            TodayUiState::class.java.declaredFields.firstOrNull { it.name == "books" }
+        assertTrue("the G2 book rail field must exist on TodayUiState", railField != null)
+        assertTrue(
+            "the rail is a list of books served by GET /decks",
+            railField!!.type == List::class.java,
+        )
+
+        val checkedTypes = listOf(TodayUiState::class, Deck::class)
+        for (type in checkedTypes) {
+            val offending =
+                type.java.declaredFields
+                    .map { it.name }
+                    .filter { truncatedField.containsMatchIn(it) }
+            assertTrue("${type.simpleName} carries a G6 truncated field: $offending", offending.isEmpty())
+        }
+    }
 
     private companion object {
         val FIXED_INSTANT: Instant = Instant.parse("2026-09-09T01:00:00Z")
