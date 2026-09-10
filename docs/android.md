@@ -88,6 +88,8 @@ composable(Screen.Approve.route) {
 }
 ```
 
+The route entry also owns *when* a screen re-queries (issue #147). The ViewModel's `init` block owns the first load; because the ViewModel survives on the back stack while another route is pushed over it, the resumable list screens (Today, Decks, Stats) additionally call `refresh()` from two route-entry effects in `ui/navigation/RouteRefreshEffects.kt`: `RefreshOnResumeEffect` re-queries when the entry returns to RESUMED (its first resume is skipped — that load is `init`'s), and `RefreshOnConnectivityChangeEffect` re-queries when connectivity crosses the online/offline boundary, so the offline bar appears and clears on an already-loaded screen without a cold start. The fetch result still decides the `isOffline` flag (`Result.NetworkError` / `servedFromCache`); the connectivity signal only triggers the re-query, it never sets state directly.
+
 ### Navigation decisions live at the route, not in the screen
 
 A screen raises an event; the route entry decides where that goes. Navigation flags on `UiState` are cleared after navigating, so a config change does not re-navigate.

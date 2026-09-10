@@ -1,9 +1,13 @@
 package dev.recally.ui.navigation
 
 import android.content.Context
-import androidx.navigation.compose.ComposeNavigator
-import androidx.navigation.compose.composable
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.LifecycleRegistry
+import androidx.navigation.NavDestination
+import androidx.navigation.Navigator
 import androidx.navigation.createGraph
+import androidx.navigation.get
 import androidx.navigation.testing.TestNavHostController
 import androidx.test.core.app.ApplicationProvider
 import dev.recally.domain.model.DueSummary
@@ -24,6 +28,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertSame
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -76,12 +81,27 @@ class RecallyNavHostTest {
             val callsAfterInitialLoad = cardRepository.refreshDueCardsCalls
 
             val navController = TestNavHostController(context)
-            navController.navigatorProvider.addNavigator(ComposeNavigator())
+
+            // The destinations never compose in a unit test, so they are
+            // served by the TestNavigatorProvider's plain test navigator
+            // under the real Screen routes; a RESUMED host lifecycle owner
+            // then drives the back-stack entries through the same
+            // RESUMED → CREATED → RESUMED cycle the real NavHost produces.
+            @Suppress("UNCHECKED_CAST")
+            val testNavigator = navController.navigatorProvider["test"] as Navigator<NavDestination>
             navController.graph =
                 navController.createGraph(startDestination = Screen.Today.route) {
-                    composable(Screen.Today.route) { }
-                    composable(Screen.Review.route) { }
+                    addDestination(testNavigator.createDestination().apply { route = Screen.Today.route })
+                    addDestination(testNavigator.createDestination().apply { route = Screen.Review.route })
                 }
+            val hostOwner =
+                object : LifecycleOwner {
+                    val registry = LifecycleRegistry(this)
+                    override val lifecycle: Lifecycle get() = registry
+                }
+            navController.setLifecycleOwner(hostOwner)
+            hostOwner.registry.currentState = Lifecycle.State.RESUMED
+            advanceUntilIdle()
 
             // The wiring the Today route entry applies: the back-stack entry
             // survives beneath Review, and regaining RESUMED re-queries on the
@@ -99,6 +119,11 @@ class RecallyNavHostTest {
 
                 navController.popBackStack()
                 advanceUntilIdle()
+                assertSame(
+                    "Today survives beneath Review — the same back-stack entry returns",
+                    todayEntry,
+                    navController.getBackStackEntry(Screen.Today.route),
+                )
                 assertEquals(
                     "returning to the surviving Today reloads it",
                     callsAfterInitialLoad + 1,
