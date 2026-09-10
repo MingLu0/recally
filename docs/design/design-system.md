@@ -109,6 +109,20 @@ Light: no fill at all — the card is `ground`, defined solely by its 1dp `line`
 ### Stats strip (`ui/screens/today/StatsStrip.kt`)
 One bordered unit. Left cell fixed 104dp wide with a right `line` border, holding the streak. Right region holds three metrics in an equal grid. A full-width `primary` action bar is fused to the bottom, inside the same border and radius clip — it is part of the strip, not a separate button.
 
+### Waiting for you (`ui/screens/today/TodayScreen.kt`)
+Section title in `title`, then the two queue buckets as a two-column grid of bordered tiles (`md` radius, 14dp interior padding, 12dp gap). Each tile is a small `pill` dot in its bucket's colour, then the count in `metric`/`ink` stacked over its label in `label`/400/`ink-soft`.
+
+**Colour lands on the dot, not the number** — `primary` for "to approve", `danger` for "need you". Both tiles count the same kind of thing, so a coloured figure would read as a status rather than a quantity; this is the "colour on numbers" rule (*Rules* above) meeting the case where two numbers are peers.
+
+The counts are the collection-wide `counts` on `GET /cards/pending` (G1, issue #132) — never a list length. **The whole section is absent while the counts are null**: the approval queue requires connectivity and Today must render before it is reachable, so a heading with nothing under it would read as an error rather than an empty queue. The "need you" tile is dropped at zero — `needs_human` is an exception state, and a permanent "0 need you" tile makes the ordinary case look like it has an outstanding problem.
+
+### Your books rail (`ui/screens/today/TodayScreen.kt`)
+Section title in `title` over a `body`/`ink-faint` subtitle ("From your O'Reilly highlights"), then a horizontally scrolling row of 190dp book cards. Each card carries the spine chip and title, the card count in `caption`/`ink-faint`, and the server's `progress` on the same bar Decks uses — `BookSpineChip` and `DeckProgressBar` are shared, so a book reads identically on both screens.
+
+Rendered from `GET /decks` (G2, issue #133; rail built in #154). Decks are remote-only, so an empty list draws **nothing** — no section header over an empty rail.
+
+The artboard's "Import" tile is deliberately not built: ingestion is the watched folder (`AGENTS.md` hard rule 12) and `api-spec.md` documents no client-initiated import. Do not add one to fill the space.
+
 ### Session progress (`ui/screens/review/SessionProgress.kt`)
 A single 6dp `pill` bar with proportional fills — `success` for cards answered Good/Easy, `warn` for those pending a repeat — plus a "N left" count in `caption`/`ink-faint`.
 
@@ -142,7 +156,7 @@ Package root `dev.recally.ui` — layout in `docs/android.md`, *Project structur
 
 | Artboard | Package | Endpoint |
 |---|---|---|
-| Today | `ui/screens/today` | `GET /reviews/due`, `GET /stats`, `GET /decks` |
+| Today | `ui/screens/today` | `GET /reviews/due`, `GET /stats`, `GET /decks`, `GET /cards/pending` |
 | Review — front | `ui/screens/review` | `GET /reviews/due` |
 | Review — flipped | `ui/screens/review` | `POST /reviews/{id}/rate`, queued to `POST /reviews/rate-batch` |
 | Session summary | `ui/screens/review` | local session state + `GET /stats` for next-due |
