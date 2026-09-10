@@ -3,6 +3,7 @@ package dev.recally.ui.screens.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dev.recally.data.sync.RatingOutbox
 import dev.recally.di.IoDispatcher
 import dev.recally.domain.repository.ConnectionTester
 import dev.recally.domain.repository.Result
@@ -31,6 +32,7 @@ class SettingsViewModel
     constructor(
         private val settings: SettingsRepository,
         private val connectionTester: ConnectionTester,
+        private val ratingOutbox: RatingOutbox,
         @Named("appVersion") appVersion: String,
         @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     ) : ViewModel() {
@@ -59,6 +61,14 @@ class SettingsViewModel
                         hasStoredApiKey = stored.hasApiKey,
                         isLoading = false,
                     )
+                }
+            }
+            // The queued-ratings row is the DAO's live count, not a local
+            // counter — the same flow the review session's queued bar reads
+            // (#115), so Settings cannot disagree with what is stored (#151).
+            viewModelScope.launch(exceptionHandler) {
+                ratingOutbox.queuedCount().collect { count ->
+                    mutableUiState.update { it.copy(queuedRatingsCount = count) }
                 }
             }
         }

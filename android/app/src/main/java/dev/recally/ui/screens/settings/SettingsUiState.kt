@@ -68,4 +68,15 @@ data class SettingsUiState(
     val pushWindow: String = PUSH_WINDOW_DISPLAY,
     val appVersion: String = "",
     val errorMessage: String? = null,
-)
+    /**
+     * Live depth of the Room rating outbox (docs/android.md, "Offline-first
+     * sync"), collected from `RatingOutbox.queuedCount()` — the same DAO
+     * count the review session's queued bar reads, so the two can never
+     * disagree (issue #151).
+     */
+    val queuedRatingsCount: Int = 0,
+) {
+    /** Subtitle of the queued-ratings row (Settings artboard): "All synced" once the outbox has drained. */
+    val queuedRatingsSummary: String
+        get() = if (queuedRatingsCount == 0) "All synced" else "Waiting to sync"
+}
