@@ -14,6 +14,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.recally.ui.theme.CombinedPreviews
 import dev.recally.ui.theme.RecallySpacing
@@ -59,12 +60,23 @@ fun ChapterHeader(
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.recallyColors.ink,
+            // #146: the header is one line (design-system.md, "Chapter group
+            // header"). The title is capped at its weight share but not
+            // stretched to it, so it can never consume the whole row and
+            // push the chapter out; the secondary chapter takes the
+            // remainder and yields first. Both truncate with an ellipsis.
+            modifier = Modifier.weight(1f, fill = false),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
         if (chapter.isNotEmpty()) {
             Text(
                 text = "· $chapter",
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.recallyColors.inkFaint,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
     }
@@ -81,6 +93,19 @@ private fun ChapterHeaderPreview() {
             bookId = 1,
             book = "Evals for AI Engineers",
             chapter = "1. Introduction",
+        )
+    }
+}
+
+/** The overflow case from issue #146: both strings past one line. */
+@CombinedPreviews
+@Composable
+private fun ChapterHeaderOverflowPreview() {
+    RecallyTheme {
+        ChapterHeader(
+            bookId = 2,
+            book = "Building Generative AI Services with FastAPI",
+            chapter = "2. Getting Started with FastAPI",
         )
     }
 }

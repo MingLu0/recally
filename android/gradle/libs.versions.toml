@@ -44,6 +44,11 @@ compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = 
 compose-material3 = { group = "androidx.compose.material3", name = "material3" }
 compose-material-icons = { group = "androidx.compose.material", name = "material-icons-core" }
 compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
+# ui-test-junit4 runs Compose layout assertions under Robolectric (unit-test
+# source set); ui-test-manifest declares the host ComponentActivity for
+# debug. Both versions come from the Compose BOM.
+compose-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
+compose-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" }
 compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
 activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activity-compose" }
 navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigation-compose" }
