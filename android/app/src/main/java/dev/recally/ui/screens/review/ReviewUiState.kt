@@ -28,7 +28,13 @@ data class ReviewUiState(
     val doneCount: Int = 0,
     /** Cards waiting to be shown again inside this session. */
     val toRepeatCount: Int = 0,
-    /** Remaining presentations after the current card. Rises on a re-queue. */
+    /**
+     * Remaining presentations, including the card on screen and any queued
+     * repeats — the header's "N left" (#148). Rises on a re-queue. The
+     * progress bar's denominator is `doneCount + cardsLeft`: [toRepeatCount]
+     * is a segment of the bar, not an extra term, because the repeats are
+     * already counted here.
+     */
     val cardsLeft: Int = 0,
     val isEditing: Boolean = false,
     /** Non-null when the session is finished — the summary sheet shows. */

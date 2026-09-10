@@ -26,10 +26,12 @@ import dev.recally.ui.theme.recallyColors
  * 6dp pill bar — `success` for cards answered, `warn` for cards pending a
  * repeat — plus a "N left" count.
  *
- * The denominator is *current* remaining work (done + to repeat + left), not
+ * The denominator is *current* remaining work (`doneCount + cardsLeft`), not
  * a fixed session size: same-session re-queueing means a 12-card session
  * produces more than 12 presentations, so a fixed bar would jump backwards or
- * silently drop the repeat (docs/android.md, *Screens → 2*).
+ * silently drop the repeat (docs/android.md, *Screens → 2*). `cardsLeft`
+ * already counts the repeats, so adding `toRepeatCount` to the denominator
+ * would count each repeat twice (#148).
  */
 @Composable
 fun SessionProgress(
@@ -93,14 +95,15 @@ private fun SessionProgressPreview() {
 /**
  * Bar-fill weights for the done and to-repeat segments, extracted so the
  * fraction is unit-testable without rendering the composable. The
- * denominator is the current remaining work: `doneCount + toRepeatCount +
- * cardsLeft`.
+ * denominator is the current remaining work: `doneCount + cardsLeft` —
+ * `cardsLeft` already includes the repeats, so `toRepeatCount` must not be
+ * added a second time (#148).
  */
 internal fun sessionProgressFillWeights(
     doneCount: Int,
     toRepeatCount: Int,
     cardsLeft: Int,
 ): Pair<Float, Float> {
-    val denominator = (doneCount + toRepeatCount + cardsLeft).coerceAtLeast(1)
+    val denominator = (doneCount + cardsLeft).coerceAtLeast(1)
     return (doneCount.toFloat() / denominator) to (toRepeatCount.toFloat() / denominator)
 }

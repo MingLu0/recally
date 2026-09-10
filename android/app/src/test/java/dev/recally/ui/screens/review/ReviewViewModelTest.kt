@@ -331,12 +331,12 @@ class ReviewViewModelTest {
                     reviewRepository = reviewRepository,
                 )
 
-            assertEquals(2, viewModel.uiState.value.cardsLeft)
+            assertEquals(3, viewModel.uiState.value.cardsLeft)
             viewModel.flip()
             viewModel.rate(RATING_AGAIN)
             assertEquals(
                 "the re-queued repeat joins the remaining count — a fixed total could only shrink",
-                2,
+                3,
                 viewModel.uiState.value.cardsLeft,
             )
 
