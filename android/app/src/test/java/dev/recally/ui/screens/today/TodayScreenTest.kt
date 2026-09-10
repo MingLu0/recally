@@ -279,9 +279,11 @@ class TodayScreenTest {
         fun sampleDeck(): Deck =
             Deck(bookId = 2, title = "Evals for AI Engineers", total = 8, due = 1, progress = 0.875f, chapters = 3, truncated = 0)
 
-        fun firstDeck(): Deck = Deck(bookId = 7, title = "Evals for AI Engineers", total = 8, due = 1, progress = 0.875f)
+        fun firstDeck(): Deck =
+            Deck(bookId = 7, title = "Evals for AI Engineers", total = 8, due = 1, progress = 0.875f, chapters = 3, truncated = 0)
 
-        fun secondDeck(): Deck = Deck(bookId = 11, title = "30 Agents in 30 Days", total = 83, due = 0, progress = 0.24f)
+        fun secondDeck(): Deck =
+            Deck(bookId = 11, title = "30 Agents in 30 Days", total = 83, due = 0, progress = 0.24f, chapters = 12, truncated = 0)
 
         fun loadedState(books: List<Deck>): TodayUiState =
             TodayUiState(
