@@ -269,6 +269,28 @@ class DecksViewModelTest {
             )
         }
 
+    /**
+     * Issue #188: the offline bar is a statement about connectivity, so only a
+     * genuine `NetworkError` may raise it. An unexpected exception on a
+     * reachable server (a decoding fault, say) arrives as `UnexpectedError` and
+     * must surface as an error message, never as "offline".
+     */
+    @Test
+    fun test_offline_is_set_only_for_a_network_error() =
+        runTest {
+            deckRepository.decksResult = Result.NetworkError(IOException("no route to host"))
+            val offlineViewModel = DecksViewModel(deckRepository, cardRepository, SavedStateHandle())
+            assertTrue("a network failure raises the offline bar", offlineViewModel.uiState.value.isOffline)
+
+            deckRepository.decksResult = Result.UnexpectedError(IllegalStateException("bad payload"))
+            val unexpectedViewModel = DecksViewModel(deckRepository, cardRepository, SavedStateHandle())
+
+            val state = unexpectedViewModel.uiState.value
+            assertFalse("an unexpected exception is not a connectivity failure", state.isOffline)
+            assertFalse("the screen has finished loading", state.isLoading)
+            assertTrue("the failure is still reported to the user", state.errorMessage != null)
+        }
+
     private fun detailViewModel(): DecksViewModel {
         deckRepository.decksResult =
             Result.Success(listOf(Deck(BOOK_ID, "Evals for AI Engineers", 48, 6, 0.625f, chapters = 9, truncated = 0)))

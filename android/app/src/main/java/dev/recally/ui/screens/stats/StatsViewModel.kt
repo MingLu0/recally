@@ -7,6 +7,7 @@ import dev.recally.di.IoDispatcher
 import dev.recally.domain.model.ForecastDay
 import dev.recally.domain.repository.Result
 import dev.recally.domain.repository.StatsRepository
+import dev.recally.domain.repository.displayMessage
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -90,6 +91,10 @@ class StatsViewModel
                             isLoading = false,
                             errorMessage = result.detail ?: "Couldn't load stats (HTTP ${result.status})",
                         )
+                    }
+                is Result.UnexpectedError ->
+                    mutableUiState.update {
+                        it.copy(isLoading = false, errorMessage = result.displayMessage())
                     }
             }
         }

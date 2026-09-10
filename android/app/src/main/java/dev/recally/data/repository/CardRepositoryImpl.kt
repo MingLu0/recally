@@ -11,7 +11,6 @@ import dev.recally.domain.repository.CardRepository
 import dev.recally.domain.repository.Result
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
-import java.io.IOException
 import java.time.Instant
 import javax.inject.Inject
 import kotlin.coroutines.cancellation.CancellationException
@@ -46,6 +45,12 @@ class CardRepositoryImpl
                         is Result.Unauthorized -> Result.Unauthorized
                         is Result.HttpError -> cached?.let { Result.Success(it, servedFromCache = true) } ?: fresh
                         is Result.NetworkError -> cached?.let { Result.Success(it, servedFromCache = true) } ?: fresh
+                        // Same shape as an HTTP failure: the refresh did not
+                        // land, so stale cards beat no cards and a review
+                        // session still works. With no cache the fault
+                        // surfaces as itself, never relabelled "offline"
+                        // (issue #188).
+                        is Result.UnexpectedError -> cached?.let { Result.Success(it, servedFromCache = true) } ?: fresh
                     }
                 }
             }
@@ -73,11 +78,12 @@ class CardRepositoryImpl
                         is Result.Unauthorized -> Result.Unauthorized
                         is Result.HttpError -> result
                         is Result.NetworkError -> result
+                        is Result.UnexpectedError -> result
                     }
                 } catch (cancellation: CancellationException) {
                     throw cancellation
                 } catch (exception: Exception) {
-                    Result.NetworkError(IOException("failed to edit card $cardId", exception))
+                    Result.UnexpectedError(exception)
                 }
             }
 
@@ -96,11 +102,12 @@ class CardRepositoryImpl
                         is Result.Unauthorized -> Result.Unauthorized
                         is Result.HttpError -> result
                         is Result.NetworkError -> result
+                        is Result.UnexpectedError -> result
                     }
                 } catch (cancellation: CancellationException) {
                     throw cancellation
                 } catch (exception: Exception) {
-                    Result.NetworkError(IOException("failed to update suspension for card $cardId", exception))
+                    Result.UnexpectedError(exception)
                 }
             }
 
@@ -122,7 +129,7 @@ class CardRepositoryImpl
                 // apiCall already maps HTTP and network failures; this catches
                 // anything left (e.g. a malformed body) so the repository still
                 // never throws.
-                Result.NetworkError(IOException("failed to load due cards", exception))
+                Result.UnexpectedError(exception)
             }
 
         /** Null when nothing has ever been cached. */

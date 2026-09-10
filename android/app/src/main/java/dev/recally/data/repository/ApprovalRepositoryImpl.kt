@@ -67,5 +67,6 @@ class ApprovalRepositoryImpl
                 is Result.Unauthorized -> Result.Unauthorized
                 is Result.HttpError -> this
                 is Result.NetworkError -> this
+                is Result.UnexpectedError -> this
             }
     }

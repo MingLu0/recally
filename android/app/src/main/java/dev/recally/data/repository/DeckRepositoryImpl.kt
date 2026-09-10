@@ -9,7 +9,6 @@ import dev.recally.domain.repository.DeckRepository
 import dev.recally.domain.repository.Result
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
-import java.io.IOException
 import javax.inject.Inject
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -32,11 +31,12 @@ class DeckRepositoryImpl
                         is Result.Unauthorized -> Result.Unauthorized
                         is Result.HttpError -> result
                         is Result.NetworkError -> result
+                        is Result.UnexpectedError -> result
                     }
                 } catch (cancellation: CancellationException) {
                     throw cancellation
                 } catch (exception: Exception) {
-                    Result.NetworkError(IOException("failed to load decks", exception))
+                    Result.UnexpectedError(exception)
                 }
             }
 
@@ -51,11 +51,12 @@ class DeckRepositoryImpl
                         is Result.Unauthorized -> Result.Unauthorized
                         is Result.HttpError -> result
                         is Result.NetworkError -> result
+                        is Result.UnexpectedError -> result
                     }
                 } catch (cancellation: CancellationException) {
                     throw cancellation
                 } catch (exception: Exception) {
-                    Result.NetworkError(IOException("failed to load cards for book $bookId", exception))
+                    Result.UnexpectedError(exception)
                 }
             }
     }

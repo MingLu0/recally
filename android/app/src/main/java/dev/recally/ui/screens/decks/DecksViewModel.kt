@@ -8,6 +8,7 @@ import dev.recally.domain.model.DeckCard
 import dev.recally.domain.repository.CardRepository
 import dev.recally.domain.repository.DeckRepository
 import dev.recally.domain.repository.Result
+import dev.recally.domain.repository.displayMessage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -88,6 +89,11 @@ class DecksViewModel
                         mutableUiState.update {
                             it.copy(isChapterLoading = false, errorMessage = result.detail ?: "HTTP ${result.status}")
                         }
+
+                    is Result.UnexpectedError ->
+                        mutableUiState.update {
+                            it.copy(isChapterLoading = false, errorMessage = result.displayMessage())
+                        }
                 }
             }
         }
@@ -138,6 +144,11 @@ class DecksViewModel
                         mutableUiState.update {
                             it.copy(editingCard = null, errorMessage = result.detail ?: "HTTP ${result.status}")
                         }
+
+                    is Result.UnexpectedError ->
+                        mutableUiState.update {
+                            it.copy(editingCard = null, errorMessage = result.displayMessage())
+                        }
                 }
             }
         }
@@ -180,6 +191,9 @@ class DecksViewModel
 
                     is Result.HttpError ->
                         mutableUiState.update { it.copy(errorMessage = result.detail ?: "HTTP ${result.status}") }
+
+                    is Result.UnexpectedError ->
+                        mutableUiState.update { it.copy(errorMessage = result.displayMessage()) }
                 }
             }
         }
@@ -208,6 +222,11 @@ class DecksViewModel
                     is Result.HttpError ->
                         mutableUiState.update {
                             it.copy(isLoading = false, errorMessage = result.detail ?: "HTTP ${result.status}")
+                        }
+
+                    is Result.UnexpectedError ->
+                        mutableUiState.update {
+                            it.copy(isLoading = false, errorMessage = result.displayMessage())
                         }
                 }
             }
@@ -256,6 +275,11 @@ class DecksViewModel
                     is Result.HttpError ->
                         mutableUiState.update {
                             it.copy(isLoading = false, errorMessage = result.detail ?: "HTTP ${result.status}")
+                        }
+
+                    is Result.UnexpectedError ->
+                        mutableUiState.update {
+                            it.copy(isLoading = false, errorMessage = result.displayMessage())
                         }
                 }
             }

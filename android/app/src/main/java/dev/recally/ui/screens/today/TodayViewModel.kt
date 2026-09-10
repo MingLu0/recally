@@ -9,6 +9,7 @@ import dev.recally.domain.repository.CardRepository
 import dev.recally.domain.repository.DeckRepository
 import dev.recally.domain.repository.Result
 import dev.recally.domain.repository.StatsRepository
+import dev.recally.domain.repository.displayMessage
 import dev.recally.ui.formatNextDueIn
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -109,6 +110,12 @@ class TodayViewModel
                                     ?: "Couldn't load today's cards (HTTP ${result.status})",
                         )
                     }
+                // Not a connectivity failure: the server answered, the answer
+                // could not be read (issue #188).
+                is Result.UnexpectedError ->
+                    mutableUiState.update {
+                        it.copy(isLoading = false, errorMessage = result.displayMessage())
+                    }
             }
         }
 
@@ -131,6 +138,7 @@ class TodayViewModel
                     mutableUiState.update { it.copy(showCheckSettingsBanner = true) }
                 is Result.HttpError,
                 is Result.NetworkError,
+                is Result.UnexpectedError,
                 -> Unit
             }
         }
@@ -153,6 +161,7 @@ class TodayViewModel
                 Result.Unauthorized,
                 is Result.HttpError,
                 is Result.NetworkError,
+                is Result.UnexpectedError,
                 -> Unit
             }
         }
@@ -171,6 +180,7 @@ class TodayViewModel
                 Result.Unauthorized,
                 is Result.HttpError,
                 is Result.NetworkError,
+                is Result.UnexpectedError,
                 -> Unit
             }
         }

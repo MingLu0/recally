@@ -7,6 +7,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.recally.di.IoDispatcher
 import dev.recally.domain.repository.ApprovalRepository
 import dev.recally.domain.repository.Result
+import dev.recally.domain.repository.displayMessage
 import dev.recally.ui.navigation.ARG_FILTER
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -85,6 +86,12 @@ class ApproveViewModel
                     is Result.HttpError ->
                         mutableUiState.update {
                             it.copy(isLoading = false, errorMessage = result.detail ?: MESSAGE_GENERIC)
+                        }
+                    // The server answered and the answer could not be read —
+                    // not a connectivity failure (issue #188).
+                    is Result.UnexpectedError ->
+                        mutableUiState.update {
+                            it.copy(isLoading = false, errorMessage = result.displayMessage())
                         }
                 }
             }
@@ -186,6 +193,11 @@ class ApproveViewModel
                                 isBulkApproving = false,
                                 errorMessage = result.detail ?: MESSAGE_GENERIC,
                             )
+                        is Result.UnexpectedError ->
+                            state.copy(
+                                isBulkApproving = false,
+                                errorMessage = result.displayMessage(),
+                            )
                     }
                 }
             }
@@ -221,6 +233,8 @@ class ApproveViewModel
                             it.copy(busyCardId = null, isOffline = true)
                         is Result.HttpError ->
                             it.copy(busyCardId = null, errorMessage = result.detail ?: MESSAGE_GENERIC)
+                        is Result.UnexpectedError ->
+                            it.copy(busyCardId = null, errorMessage = result.displayMessage())
                     }
                 }
             }
