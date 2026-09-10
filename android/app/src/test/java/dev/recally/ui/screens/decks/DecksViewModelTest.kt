@@ -208,6 +208,38 @@ class DecksViewModelTest {
         }
     }
 
+    @Test
+    fun test_refresh_re_queries_decks() =
+        runTest {
+            // Issue #147: refresh() on the surviving ViewModel re-queries the
+            // deck list rather than serving the first load forever.
+            deckRepository.decksResult =
+                Result.Success(listOf(Deck(BOOK_ID, "Evals for AI Engineers", 48, 6, 0.625f)))
+            val viewModel = DecksViewModel(deckRepository, cardRepository, SavedStateHandle())
+            assertEquals(
+                listOf("Evals for AI Engineers"),
+                viewModel.uiState.value.decks
+                    .map { it.title },
+            )
+
+            deckRepository.decksResult =
+                Result.Success(
+                    listOf(
+                        Deck(BOOK_ID, "Evals for AI Engineers", 48, 6, 0.625f),
+                        Deck(9L, "Designing Machine Learning Systems", 100, 10, 0.5f),
+                    ),
+                )
+            viewModel.refresh()
+
+            assertEquals("a second refresh issues a new /decks call", 2, deckRepository.decksCalls)
+            assertEquals(
+                "the updated list is emitted",
+                listOf("Evals for AI Engineers", "Designing Machine Learning Systems"),
+                viewModel.uiState.value.decks
+                    .map { it.title },
+            )
+        }
+
     private fun detailViewModel(): DecksViewModel {
         deckRepository.decksResult = Result.Success(listOf(Deck(BOOK_ID, "Evals for AI Engineers", 48, 6, 0.625f)))
         return DecksViewModel(deckRepository, cardRepository, SavedStateHandle(mapOf("bookId" to BOOK_ID)))
@@ -245,9 +277,13 @@ class DecksViewModelTest {
     private class FakeDeckRepository : DeckRepository {
         var decksResult: Result<List<Deck>> = Result.Success(emptyList())
         var deckCardsResult: Result<List<DeckCard>> = Result.Success(emptyList())
+        var decksCalls = 0
         val deckCardsCalls = mutableListOf<Pair<Long, String?>>()
 
-        override suspend fun decks(): Result<List<Deck>> = decksResult
+        override suspend fun decks(): Result<List<Deck>> {
+            decksCalls++
+            return decksResult
+        }
 
         override suspend fun deckCards(
             bookId: Long,

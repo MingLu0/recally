@@ -51,9 +51,14 @@ class TodayViewModelTest {
     private class FakeCardRepository(
         var refreshResult: Result<DueSummary>,
     ) : CardRepository {
+        var refreshDueCardsCalls = 0
+
         override suspend fun dueCards(forceRefresh: Boolean): Result<DueSummary> = refreshResult
 
-        override suspend fun refreshDueCards(): Result<DueSummary> = refreshResult
+        override suspend fun refreshDueCards(): Result<DueSummary> {
+            refreshDueCardsCalls++
+            return refreshResult
+        }
 
         // ADR-008 controls (step 4j) — Today never calls them.
         override suspend fun editCard(
@@ -72,7 +77,12 @@ class TodayViewModelTest {
     private class FakeStatsRepository(
         var result: Result<Stats>,
     ) : StatsRepository {
-        override suspend fun stats(): Result<Stats> = result
+        var statsCalls = 0
+
+        override suspend fun stats(): Result<Stats> {
+            statsCalls++
+            return result
+        }
     }
 
     /**
@@ -279,6 +289,91 @@ class TodayViewModelTest {
             )
         }
 
+    @Test
+    fun test_refresh_re_queries_due_counts_and_stats() =
+        runTest {
+            // Issue #147: refresh() on the surviving ViewModel re-hits the
+            // repositories rather than serving the first load forever.
+            val cardRepository = FakeCardRepository(Result.Success(dueSummary(dueCount = 1)))
+            val statsRepository = FakeStatsRepository(Result.Success(sampleStats(reviewsToday = 24)))
+            val viewModel =
+                TodayViewModel(
+                    cardRepository = cardRepository,
+                    statsRepository = statsRepository,
+                    approvalRepository = FakeApprovalRepository(),
+                    ioDispatcher = testDispatcher,
+                    clock = FIXED_CLOCK,
+                )
+            advanceUntilIdle()
+            assertEquals(1, viewModel.uiState.value.dueCount)
+            assertEquals(24, viewModel.uiState.value.reviewsToday)
+
+            // The review session rated the card; the server state moved on.
+            cardRepository.refreshResult = Result.Success(emptyDueSummary())
+            statsRepository.result = Result.Success(sampleStats(reviewsToday = 25))
+            viewModel.refresh()
+            advanceUntilIdle()
+
+            assertEquals("a second refresh issues a new /reviews/due call", 2, cardRepository.refreshDueCardsCalls)
+            assertEquals("a second refresh issues a new /stats call", 2, statsRepository.statsCalls)
+            val state = viewModel.uiState.value
+            assertEquals("the updated due count is emitted", 0, state.dueCount)
+            assertEquals("the reviewed count increments", 25, state.reviewsToday)
+        }
+
+    @Test
+    fun test_nothing_due_state_is_emitted_when_the_last_due_card_is_rated() =
+        runTest {
+            // Issue #147: rating the last due card, then refreshing, reaches
+            // the nothing-due treatment (design-system.md, "States").
+            val cardRepository = FakeCardRepository(Result.Success(dueSummary(dueCount = 1)))
+            val statsRepository = FakeStatsRepository(Result.Success(sampleStats(reviewsToday = 24)))
+            val viewModel =
+                TodayViewModel(
+                    cardRepository = cardRepository,
+                    statsRepository = statsRepository,
+                    approvalRepository = FakeApprovalRepository(),
+                    ioDispatcher = testDispatcher,
+                    clock = FIXED_CLOCK,
+                )
+            advanceUntilIdle()
+            assertFalse("one due card is not the nothing-due state", viewModel.uiState.value.nothingDue)
+
+            cardRepository.refreshResult = Result.Success(emptyDueSummary())
+            statsRepository.result =
+                Result.Success(sampleStats(reviewsToday = 25, nextDueAt = FIXED_INSTANT.plusSeconds(23 * 3600)))
+            viewModel.refresh()
+            advanceUntilIdle()
+
+            val state = viewModel.uiState.value
+            assertTrue("due_count 0 after the rating emits the nothing-due state", state.nothingDue)
+            assertEquals("next card in 23 hours", state.nextDueLabel)
+        }
+
+    @Test
+    fun test_offline_is_reflected_on_refresh_without_recreating_the_view_model() =
+        runTest {
+            // Issue #147: a connectivity drop between loads surfaces on the
+            // next refresh — the same ViewModel instance, never a cold start.
+            val cardRepository = FakeCardRepository(Result.Success(dueSummary(dueCount = 3)))
+            val viewModel =
+                TodayViewModel(
+                    cardRepository = cardRepository,
+                    statsRepository = FakeStatsRepository(Result.Success(sampleStats())),
+                    approvalRepository = FakeApprovalRepository(),
+                    ioDispatcher = testDispatcher,
+                    clock = FIXED_CLOCK,
+                )
+            advanceUntilIdle()
+            assertFalse("the first load is online", viewModel.uiState.value.isOffline)
+
+            cardRepository.refreshResult = Result.NetworkError(IOException("no route to host"))
+            viewModel.refresh()
+            advanceUntilIdle()
+
+            assertTrue("a refresh with no connectivity sets the offline bar", viewModel.uiState.value.isOffline)
+        }
+
     private companion object {
         val FIXED_INSTANT: Instant = Instant.parse("2026-09-09T01:00:00Z")
         val FIXED_CLOCK: Clock = Clock.fixed(FIXED_INSTANT, ZoneOffset.UTC)
@@ -314,10 +409,21 @@ class TodayViewModelTest {
                 chapter = "1. Introduction",
             )
 
-        fun sampleStats(nextDueAt: Instant? = null): Stats =
+        fun dueSummary(dueCount: Int): DueSummary =
+            DueSummary(
+                dueCount = dueCount,
+                newCount = 0,
+                learningStepsMinutes = listOf(1, 10),
+                cards = emptyList(),
+            )
+
+        fun sampleStats(
+            reviewsToday: Int = 23,
+            nextDueAt: Instant? = null,
+        ): Stats =
             Stats(
                 streakDays = 9,
-                reviewsToday = 23,
+                reviewsToday = reviewsToday,
                 retention30d = 0.87,
                 lapseRateByType = mapOf("qa" to 0.11),
                 lapseRateByGuidanceVersion = mapOf("1" to 0.19),
