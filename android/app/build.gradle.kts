@@ -90,6 +90,14 @@ android {
         // BuildConfig.VERSION_NAME backs the Settings About row.
         buildConfig = true
     }
+
+    testOptions {
+        unitTests {
+            // Robolectric compose tests (ChapterHeaderTest) need the merged
+            // resources and manifest on the unit-test classpath.
+            isIncludeAndroidResources = true
+        }
+    }
 }
 
 // JDK 17 toolchain (docs/android.md, "Tooling"). Must match the Temurin 17 in
@@ -147,4 +155,6 @@ dependencies {
     testImplementation(libs.robolectric)
     testImplementation(libs.androidx.test.core)
     testImplementation(libs.navigation.testing)
+    testImplementation(libs.compose.ui.test.junit4)
+    debugImplementation(libs.compose.ui.test.manifest)
 }
