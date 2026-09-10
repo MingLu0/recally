@@ -31,14 +31,27 @@ import dev.recally.ui.theme.RecallyTheme
 import dev.recally.ui.theme.recallyColors
 
 /**
+ * "48 cards · 9 chapters" (docs/design/RcDecks.dc.html). `chapters` is a
+ * `GET /decks` field (issue #172) — this screen never fetches a book's cards,
+ * so it cannot count them itself. A book with no chapters yet shows the card
+ * count alone rather than a bare "0 chapters".
+ */
+private fun deckSubtitle(deck: Deck): String {
+    val cardCount = "${deck.total} card${if (deck.total == 1) "" else "s"}"
+    if (deck.chapters == 0) return cardCount
+    return "$cardCount · ${deck.chapters} chapter${if (deck.chapters == 1) "" else "s"}"
+}
+
+/**
  * The deck list (docs/design/RcDecks.dc.html): one row per book from
  * `GET /decks`. Pure composable — UiState in, callbacks out
  * (docs/android.md, "Pure screen composables").
  *
- * Rows show only what the endpoint documents: title, `total`, `due`, and the
- * G2 `progress` bar. The artboard's TRUNCATED badge (G6) stays scoped out —
- * the endpoint documents no truncated count.
+ * Rows show only what the endpoint documents: title, `total`, `chapters`,
+ * `due`, and the `progress` bar. The artboard's TRUNCATED badge (G6) stays
+ * scoped out — the endpoint documents no truncated count.
  */
+
 @Composable
 fun DecksScreen(
     uiState: DecksUiState,
@@ -114,7 +127,7 @@ private fun DeckRow(
                 color = colors.ink,
             )
             Text(
-                "${deck.total} card${if (deck.total == 1) "" else "s"}",
+                deckSubtitle(deck),
                 style = MaterialTheme.typography.labelMedium,
                 color = colors.inkFaint,
             )
@@ -136,8 +149,8 @@ private fun DecksScreenPreview() {
                 DecksUiState(
                     decks =
                         listOf(
-                            Deck(bookId = 1, title = "Evals for AI Engineers", total = 48, due = 6, progress = 0.62f),
-                            Deck(bookId = 2, title = "30 Agents in 30 Days", total = 83, due = 0, progress = 0.24f),
+                            Deck(bookId = 1, title = "Evals for AI Engineers", total = 48, due = 6, progress = 0.62f, chapters = 9),
+                            Deck(bookId = 2, title = "30 Agents in 30 Days", total = 83, due = 0, progress = 0.24f, chapters = 9),
                         ),
                 ),
             onDeckClick = {},
@@ -168,7 +181,7 @@ private fun DecksScreenOfflinePreview() {
             uiState =
                 DecksUiState(
                     isOffline = true,
-                    decks = listOf(Deck(bookId = 1, title = "Evals for AI Engineers", total = 48, due = 6, progress = 0.62f)),
+                    decks = listOf(Deck(bookId = 1, title = "Evals for AI Engineers", total = 48, due = 6, progress = 0.62f, chapters = 9)),
                 ),
             onDeckClick = {},
             onRetry = {},

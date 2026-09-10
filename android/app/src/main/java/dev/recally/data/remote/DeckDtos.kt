@@ -17,6 +17,7 @@ data class DeckDto(
     val total: Int,
     val due: Int,
     val progress: Float,
+    val chapters: Int,
 )
 
 /** `GET /decks/{book_id}/cards` response. */
@@ -25,7 +26,10 @@ data class DeckCardsResponse(
     val cards: List<DeckCardDto>,
 )
 
-/** One card in the per-book browse list; `suspendedUntil` is null in rotation. */
+/**
+ * One card in the per-book browse list; `suspendedUntil` is null in rotation.
+ * `due` is null for a card FSRS has never scheduled (docs/api-spec.md).
+ */
 @Serializable
 data class DeckCardDto(
     val id: Long,
@@ -35,4 +39,6 @@ data class DeckCardDto(
     val chapter: String?,
     val tags: List<String>,
     @SerialName("suspended_until") val suspendedUntil: String?,
+    val state: String,
+    val due: String?,
 )

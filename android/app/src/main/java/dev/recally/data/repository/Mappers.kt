@@ -90,6 +90,7 @@ fun DeckDto.toDomain(): Deck =
         total = total,
         due = due,
         progress = progress,
+        chapters = chapters,
     )
 
 fun StatsResponse.toDomain(): Stats =
@@ -119,6 +120,8 @@ fun DeckCardDto.toDomain(): DeckCard =
         chapter = chapter,
         tags = tags,
         suspendedUntil = suspendedUntil?.let(Instant::parse),
+        state = state,
+        due = due?.let(Instant::parse),
     )
 
 fun RateResponse.toDomain(): RateOutcome =

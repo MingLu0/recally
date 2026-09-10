@@ -45,11 +45,10 @@ All under `docs/design/`. Canvas: https://claude.ai/code/artifact/25472047-e5cc-
 
 ### Blockers — check before planning a screen
 
-Three API gaps remain in [`docs/roadmap.md`](docs/roadmap.md) under *Feature gaps*. The designs show data no documented endpoint returns; this was deliberate, and the endpoints are expected to catch up. Each has a proposed field shape and a test gate. Pending counts were closed in issue #132, per-book progress in #133 and the next-due timestamp in #134.
+One API gap remains in [`docs/roadmap.md`](docs/roadmap.md) under *Feature gaps*. The designs show data no documented endpoint returns; this was deliberate, and the endpoints are expected to catch up. It has a proposed field shape and a test gate. Pending counts were closed in issue #132, per-book progress in #133, the next-due timestamp in #134, and the browse response shape plus per-book chapter count in #172.
 
 | | Blocks | Needs |
 |---|---|---|
-| G5 | Book detail, Decks | `GET /decks/{book_id}/cards` has no documented response at all |
 | G6 | Decks | A truncated count per book |
 
 If an issue covers a screen with an open gap, either resolve the gap in `api-spec.md` first or scope the dependent element out — do not invent a field.

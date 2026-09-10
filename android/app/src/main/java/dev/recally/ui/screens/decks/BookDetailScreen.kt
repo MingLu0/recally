@@ -32,6 +32,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import dev.recally.domain.model.DeckCard
 import dev.recally.ui.components.parseClozeSegments
@@ -64,8 +65,8 @@ private fun bookSubtitle(uiState: DecksUiState): String {
  *
  * Expanding a chapter issues the server-side `?chapter=` filter; the rows
  * render in a lazy list so a ~1000-card book never materialises every row.
- * Scoped out until G5/G6 land: per-card state/due badges and the truncated
- * badge.
+ * Each row carries the server's FSRS state and due (issue #172). Still scoped
+ * out until G6 lands: the truncated badge.
  */
 @Composable
 fun BookDetailScreen(
@@ -259,14 +260,39 @@ private fun BrowseCardRow(
                 .border(1.dp, colors.line, RoundedCornerShape(RecallyRadius.md))
                 .padding(RecallySpacing.cardPadding),
     ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(RecallySpacing.sm)) {
+        // Type, FSRS state, then the due label pushed to the trailing edge
+        // (docs/design/RcBook.dc.html). Both state and due are the server's,
+        // rendered as delivered — the client schedules nothing (hard rule 5).
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(RecallySpacing.sm),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Badge(
                 text = if (card.type == "cloze") "CLOZE" else "Q&A",
                 fill = colors.neutralWash,
                 textColor = colors.inkMuted,
             )
+            // `review` is the steady state and needs no badge; the artboard
+            // labels only the cards still working through their steps.
+            if (card.state != "review") {
+                Badge(
+                    text = card.state.uppercase(),
+                    fill = colors.neutralWash,
+                    textColor = colors.inkMuted,
+                )
+            }
             if (card.isSuspended) {
                 Badge(text = "SUSPENDED", fill = colors.warnWash, textColor = colors.warn)
+            }
+            deckCardDueLabel(due = card.due)?.let { dueLabel ->
+                Text(
+                    dueLabel,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = colors.inkFaint,
+                    modifier = Modifier.weight(1f),
+                    textAlign = TextAlign.End,
+                )
             }
         }
         Spacer(Modifier.height(RecallySpacing.sm))
@@ -379,6 +405,8 @@ private fun EditCardDialog(
 private fun sampleCard(
     id: Long,
     suspended: Boolean = false,
+    state: String = "review",
+    due: Instant? = Instant.parse("2026-09-09T08:00:00Z"),
 ) = DeckCard(
     id = id,
     type = if (id % 2L == 0L) "cloze" else "qa",
@@ -394,6 +422,8 @@ private fun sampleCard(
     chapter = "3. Error Analysis",
     tags = emptyList(),
     suspendedUntil = if (suspended) Instant.parse("9999-12-31T00:00:00Z") else null,
+    state = state,
+    due = due,
 )
 
 private fun sampleDetailState(

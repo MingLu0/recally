@@ -216,7 +216,7 @@ class TodayScreenTest {
     }
 
     private companion object {
-        fun sampleDeck(): Deck = Deck(bookId = 2, title = "Evals for AI Engineers", total = 8, due = 1, progress = 0.875f)
+        fun sampleDeck(): Deck = Deck(bookId = 2, title = "Evals for AI Engineers", total = 8, due = 1, progress = 0.875f, chapters = 3)
 
         fun loadedState(books: List<Deck>): TodayUiState =
             TodayUiState(

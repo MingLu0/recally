@@ -160,12 +160,15 @@ Clears `suspended_until` (whether set by bury or suspend). FSRS state is unchang
 ### GET /decks
 Books with card counts, due counts, and per-book progress.
 ```json
-{ "decks": [ { "book_id": 1, "title": "Evals for AI Engineers", "total": 48, "due": 6, "progress": 0.625 } ] }
+{ "decks": [ { "book_id": 1, "title": "Evals for AI Engineers", "total": 48, "due": 6, "progress": 0.625, "chapters": 9 } ] }
 ```
 `progress` is the share of the book's approved cards whose FSRS state is `review` (definition in docs/data-model.md, `card_state`); a book with no approved cards reports `0`.
 
+`chapters` is the count of distinct chapters among those approved cards — the "48 cards · 9 chapters" on the Decks row. It is a field rather than client arithmetic because the Decks screen never fetches a book's cards; Book detail, which does, derives its own per-chapter counts from the list below. A book with no approved cards reports `0`.
+
 ### GET /decks/{book_id}/cards
-`?chapter=` optional filter. Browse cards per book. Each card carries `suspended_until` (null when in rotation) so the browse view can show suspended cards and offer unsuspend; unlike `/reviews/due`, this list does not filter them out.
+`?chapter=` optional filter. Browse cards per book, ordered by chapter then the source highlight's `export_position`. Each card carries `suspended_until` (null when in rotation) so the browse view can show suspended cards and offer unsuspend; unlike `/reviews/due`, this list does not filter them out.
+**Response**
 ```json
 {
   "cards": [
@@ -174,11 +177,25 @@ Books with card counts, due counts, and per-book progress.
       "front": "The {{c1::Gulf of Specification}} is the gap between intent and instructions.",
       "back": "—",
       "chapter": "1. Introduction", "tags": [],
-      "suspended_until": null
+      "suspended_until": null,
+      "state": "review", "due": "2026-09-09T08:00:00Z"
+    },
+    {
+      "id": 56, "type": "qa",
+      "front": "What makes an error taxonomy useful rather than merely tidy?",
+      "back": "It has to change what you fix next.",
+      "chapter": "3. Error Analysis", "tags": [],
+      "suspended_until": null,
+      "state": "learning", "due": null
     }
   ]
 }
 ```
+`state` is the card's server-side FSRS state (`learning`, `review`, `relearning`), and `due` its `card_state.due` — both read straight from the server so the browse row can show "Due in 4h" or a date. The client **renders** `due`; it never computes one (hard rule 5, ADR-005).
+
+`due` is `null` for a card FSRS has never scheduled. Approval writes `card_state` at `learning` step 0 due immediately (docs/data-model.md), so that stored timestamp says "available now" rather than naming an interval a review produced; the row shows the state alone rather than a date the human would misread. Once a card has been reviewed, `due` is always present.
+
+The response carries no chapter counts: the list is complete and unpaginated, so the client groups by `chapter` and counts client-side. Grouping must preserve the server's order — chapter names are not alphabetical.
 
 ## Stats
 
