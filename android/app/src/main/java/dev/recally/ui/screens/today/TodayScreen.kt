@@ -63,6 +63,7 @@ fun TodayScreen(
     onOpenApprove: () -> Unit,
     onOpenSettings: () -> Unit,
     onRetry: () -> Unit,
+    onBookClick: (Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier.fillMaxSize()) {
@@ -109,7 +110,7 @@ fun TodayScreen(
                 onOpenApprove = onOpenApprove,
             )
             if (uiState.books.isNotEmpty()) {
-                YourBooksRail(books = uiState.books)
+                YourBooksRail(books = uiState.books, onBookClick = onBookClick)
             }
             if (uiState.errorMessage != null && uiState.dueCount == null && !uiState.isLoading) {
                 ErrorRow(message = uiState.errorMessage, onRetry = onRetry)
@@ -263,7 +264,10 @@ private fun QueueCountTile(
  * client-initiated import — the app does not invent one (issue #154).
  */
 @Composable
-private fun YourBooksRail(books: List<Deck>) {
+private fun YourBooksRail(
+    books: List<Deck>,
+    onBookClick: (Long) -> Unit,
+) {
     val colors = MaterialTheme.recallyColors
     Column(verticalArrangement = Arrangement.spacedBy(RecallySpacing.xs)) {
         Text(
@@ -279,15 +283,23 @@ private fun YourBooksRail(books: List<Deck>) {
         Spacer(Modifier.height(RecallySpacing.sm))
         LazyRow(horizontalArrangement = Arrangement.spacedBy(RecallySpacing.md)) {
             items(books, key = { it.bookId }) { deck ->
-                BookRailCard(deck = deck)
+                BookRailCard(deck = deck, onClick = { onBookClick(deck.bookId) })
             }
         }
     }
 }
 
-/** One book on the rail: spine chip and title, then count and progress. */
+/**
+ * One book on the rail: spine chip and title, then count and progress. The
+ * whole card is the click target and opens Book detail — the same destination
+ * the Decks row opens (issue #180). The section heading is deliberately left
+ * outside it: chrome is not a book.
+ */
 @Composable
-private fun BookRailCard(deck: Deck) {
+private fun BookRailCard(
+    deck: Deck,
+    onClick: () -> Unit,
+) {
     val colors = MaterialTheme.recallyColors
     Column(
         verticalArrangement = Arrangement.spacedBy(RecallySpacing.sm),
@@ -295,6 +307,7 @@ private fun BookRailCard(deck: Deck) {
             Modifier
                 .width(190.dp)
                 .border(1.dp, colors.line, RoundedCornerShape(RecallyRadius.md))
+                .clickable(onClick = onClick)
                 .padding(RecallySpacing.cardPadding),
     ) {
         Row(
@@ -406,6 +419,7 @@ private fun TodayScreenLoadingPreview() {
             onOpenApprove = {},
             onOpenSettings = {},
             onRetry = {},
+            onBookClick = {},
         )
     }
 }
@@ -451,6 +465,7 @@ private fun TodayScreenLoadedPreview() {
             onOpenApprove = {},
             onOpenSettings = {},
             onRetry = {},
+            onBookClick = {},
         )
     }
 }
@@ -475,6 +490,7 @@ private fun TodayScreenEmptyBooksPreview() {
             onOpenApprove = {},
             onOpenSettings = {},
             onRetry = {},
+            onBookClick = {},
         )
     }
 }
@@ -498,6 +514,7 @@ private fun TodayScreenNothingDuePreview() {
             onOpenApprove = {},
             onOpenSettings = {},
             onRetry = {},
+            onBookClick = {},
         )
     }
 }
@@ -532,6 +549,7 @@ private fun TodayScreenOfflinePreview() {
             onOpenApprove = {},
             onOpenSettings = {},
             onRetry = {},
+            onBookClick = {},
         )
     }
 }
@@ -550,6 +568,7 @@ private fun TodayScreenCheckSettingsPreview() {
             onOpenApprove = {},
             onOpenSettings = {},
             onRetry = {},
+            onBookClick = {},
         )
     }
 }

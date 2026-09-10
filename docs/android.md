@@ -149,7 +149,7 @@ Bottom navigation with four items: **Today, Decks, Stats, Settings**. Review and
 ### 1. Today
 - Due count + new card count, streak, start-review button.
 - Approval-queue row with the collection-wide `GET /cards/pending` counts.
-- "Your books" rail: one card per book from `GET /decks` — spine colour, card count and the server's `progress`, rendered unmodified (never recomputed from `total`/`due`). Decks are remote-only, so an unreachable endpoint leaves the rail absent without blanking the rest of the screen. No Import affordance: ingestion is the watched folder, and `api-spec.md` documents no client-initiated import.
+- "Your books" rail: one card per book from `GET /decks` — spine colour, card count and the server's `progress`, rendered unmodified (never recomputed from `total`/`due`). Tapping a card opens that book's Book detail, the same destination the Decks row opens — one book, one destination. The section heading and subtitle are not click targets. Decks are remote-only, so an unreachable endpoint leaves the rail absent without blanking the rest of the screen. No Import affordance: ingestion is the watched folder, and `api-spec.md` documents no client-initiated import.
 - Entry point from FCM notification deep link.
 
 ### 2. Review session

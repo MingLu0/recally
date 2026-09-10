@@ -5,8 +5,10 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import dev.recally.domain.model.Deck
 import dev.recally.ui.theme.RecallyTheme
+import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -38,6 +40,7 @@ class TodayScreenTest {
                     onOpenApprove = {},
                     onOpenSettings = {},
                     onRetry = {},
+                    onBookClick = {},
                 )
             }
         }
@@ -57,6 +60,7 @@ class TodayScreenTest {
                     onOpenApprove = {},
                     onOpenSettings = {},
                     onRetry = {},
+                    onBookClick = {},
                 )
             }
         }
@@ -76,6 +80,7 @@ class TodayScreenTest {
                     onOpenApprove = {},
                     onOpenSettings = {},
                     onRetry = {},
+                    onBookClick = {},
                 )
             }
         }
@@ -93,6 +98,7 @@ class TodayScreenTest {
                     onOpenApprove = {},
                     onOpenSettings = {},
                     onRetry = {},
+                    onBookClick = {},
                 )
             }
         }
@@ -115,6 +121,7 @@ class TodayScreenTest {
                     onOpenApprove = {},
                     onOpenSettings = {},
                     onRetry = {},
+                    onBookClick = {},
                 )
             }
         }
@@ -135,6 +142,7 @@ class TodayScreenTest {
                     onOpenApprove = {},
                     onOpenSettings = {},
                     onRetry = {},
+                    onBookClick = {},
                 )
             }
         }
@@ -153,6 +161,7 @@ class TodayScreenTest {
                     onOpenApprove = {},
                     onOpenSettings = {},
                     onRetry = {},
+                    onBookClick = {},
                 )
             }
         }
@@ -172,6 +181,7 @@ class TodayScreenTest {
                     onOpenApprove = {},
                     onOpenSettings = {},
                     onRetry = {},
+                    onBookClick = {},
                 )
             }
         }
@@ -191,6 +201,7 @@ class TodayScreenTest {
                     onOpenApprove = {},
                     onOpenSettings = {},
                     onRetry = {},
+                    onBookClick = {},
                 )
             }
         }
@@ -208,6 +219,7 @@ class TodayScreenTest {
                     onOpenApprove = {},
                     onOpenSettings = {},
                     onRetry = {},
+                    onBookClick = {},
                 )
             }
         }
@@ -215,9 +227,63 @@ class TodayScreenTest {
         composeTestRule.onNodeWithText("0 cards").assertIsDisplayed()
     }
 
+    @Test
+    fun test_tapping_a_book_emits_its_book_id() {
+        val clickedBookIds = mutableListOf<Long>()
+        composeTestRule.setContent {
+            RecallyTheme {
+                TodayScreen(
+                    uiState = loadedState(books = listOf(firstDeck(), secondDeck())),
+                    onStartReview = {},
+                    onOpenApprove = {},
+                    onOpenSettings = {},
+                    onRetry = {},
+                    onBookClick = { bookId -> clickedBookIds += bookId },
+                )
+            }
+        }
+
+        // The second book, not the first: a rail that always emitted
+        // books.first() would pass a single-book test.
+        composeTestRule.onNodeWithText("30 Agents in 30 Days").performClick()
+
+        assertEquals(listOf(secondDeck().bookId), clickedBookIds)
+    }
+
+    @Test
+    fun test_book_click_is_not_emitted_on_section_chrome() {
+        val clickedBookIds = mutableListOf<Long>()
+        composeTestRule.setContent {
+            RecallyTheme {
+                TodayScreen(
+                    uiState = loadedState(books = listOf(firstDeck(), secondDeck())),
+                    onStartReview = {},
+                    onOpenApprove = {},
+                    onOpenSettings = {},
+                    onRetry = {},
+                    onBookClick = { bookId -> clickedBookIds += bookId },
+                )
+            }
+        }
+
+        // Negative: the click target is the card, never the section heading.
+        // A clickable wrapped around the whole rail Column would open a book
+        // from the heading -- and pick an arbitrary one.
+        composeTestRule.onNodeWithText("Your books").performClick()
+        composeTestRule.onNodeWithText("From your O'Reilly highlights").performClick()
+
+        assertEquals(emptyList<Long>(), clickedBookIds)
+    }
+
     private companion object {
         fun sampleDeck(): Deck =
             Deck(bookId = 2, title = "Evals for AI Engineers", total = 8, due = 1, progress = 0.875f, chapters = 3, truncated = 0)
+
+        fun firstDeck(): Deck =
+            Deck(bookId = 7, title = "Evals for AI Engineers", total = 8, due = 1, progress = 0.875f, chapters = 3, truncated = 0)
+
+        fun secondDeck(): Deck =
+            Deck(bookId = 11, title = "30 Agents in 30 Days", total = 83, due = 0, progress = 0.24f, chapters = 12, truncated = 0)
 
         fun loadedState(books: List<Deck>): TodayUiState =
             TodayUiState(

@@ -57,6 +57,7 @@ fun RecallyNavHost(
                 onOpenApprove = { navController.navigate(Screen.Approve.route) },
                 onOpenSettings = { navController.navigate(Screen.Settings.route) },
                 onRetry = todayViewModel::refresh,
+                onBookClick = navController::openBookDetail,
             )
         }
         composable(Screen.Review.route) {
@@ -104,7 +105,7 @@ fun RecallyNavHost(
             RefreshOnConnectivityChangeEffect(decksViewModel::refresh)
             DecksScreen(
                 uiState = decksUiState,
-                onDeckClick = { bookId -> navController.navigate(Screen.BookDetail.createRoute(bookId)) },
+                onDeckClick = navController::openBookDetail,
                 onRetry = decksViewModel::refresh,
                 onOpenSettings = { navController.navigate(Screen.Settings.route) },
             )
@@ -153,4 +154,12 @@ fun RecallyNavHost(
             )
         }
     }
+}
+
+/**
+ * The single navigation decision for "open this book" (issue #180): the Today
+ * rail and the Decks list both call it, so one book has one destination.
+ */
+fun NavHostController.openBookDetail(bookId: Long) {
+    navigate(Screen.BookDetail.createRoute(bookId))
 }
