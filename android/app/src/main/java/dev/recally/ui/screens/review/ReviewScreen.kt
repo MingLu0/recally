@@ -39,6 +39,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -124,6 +127,9 @@ fun ReviewScreen(
 
 private val ScrimColor = Color(0x61141A18)
 
+/** Names the card-front tap target for a screen reader (issue #179). */
+private const val REVEAL_ANSWER_LABEL = "Reveal the answer"
+
 @Composable
 private fun ReviewSessionContent(
     uiState: ReviewUiState,
@@ -191,6 +197,7 @@ private fun ReviewSessionContent(
                     card = card,
                     isFlipped = uiState.isFlipped,
                     answer = uiState.answer,
+                    onFlip = onFlip,
                     modifier = Modifier.weight(1f),
                 )
             }
@@ -244,12 +251,20 @@ private fun ReviewSessionContent(
  * The card surface (design-system.md, "Card surface"): defined by its 1dp
  * `line` border, never a shadow; sections separated by `line-soft`. Front and
  * flipped are two layouts sharing the shell.
+ *
+ * The front body is itself the reveal target (issue #179) — the face says
+ * "Tap to reveal the answer", so it has to be tappable. The click is attached
+ * **only while unflipped**: after the reveal the rating row is the next
+ * decision, and a tap that flipped back would hide the answer and restart the
+ * flip-to-rate `response_ms` (docs/android.md:158). Both this and the Show
+ * answer button call the same [onFlip], so there is one timing path.
  */
 @Composable
 private fun ReviewCardSurface(
     card: ReviewCardUi,
     isFlipped: Boolean,
     answer: String?,
+    onFlip: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = MaterialTheme.recallyColors
@@ -299,7 +314,15 @@ private fun ReviewCardSurface(
                 Modifier
                     .weight(1f)
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = RecallySpacing.reviewCardPadding, vertical = RecallySpacing.reviewCardPadding),
+                    .then(
+                        if (isFlipped) {
+                            Modifier
+                        } else {
+                            Modifier
+                                .clickable(onClick = onFlip)
+                                .semantics { contentDescription = REVEAL_ANSWER_LABEL }
+                        },
+                    ).padding(horizontal = RecallySpacing.reviewCardPadding, vertical = RecallySpacing.reviewCardPadding),
             verticalArrangement = Arrangement.spacedBy(RecallySpacing.lg),
         ) {
             ClozeText(
@@ -335,10 +358,14 @@ private fun ReviewCardSurface(
                         modifier =
                             Modifier
                                 .size(46.dp)
-                                .border(1.5.dp, colors.line, RoundedCornerShape(RecallyRadius.pill)),
+                                .border(1.5.dp, colors.line, RoundedCornerShape(RecallyRadius.pill))
+                                // The tappable column already announces
+                                // [REVEAL_ANSWER_LABEL]; the glyph is
+                                // decorative and must not repeat it.
+                                .clearAndSetSemantics {},
                         contentAlignment = Alignment.Center,
                     ) {
-                        Icon(Icons.Default.Refresh, contentDescription = null, tint = colors.inkFaint)
+                        Icon(Icons.Default.Refresh, contentDescription = REVEAL_ANSWER_LABEL, tint = colors.inkFaint)
                     }
                     Text(
                         text = "Tap to reveal the answer",

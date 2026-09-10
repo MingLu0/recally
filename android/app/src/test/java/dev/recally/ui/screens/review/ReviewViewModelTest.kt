@@ -631,6 +631,67 @@ class ReviewViewModelTest {
             )
         }
 
+    /**
+     * Issue #179: the card face is now a second flip affordance beside the
+     * Show answer button. Both call the same [ReviewViewModel.flip], so the
+     * response clock starts at the flip whichever one the user tapped — a
+     * second timing path would let the card-tap route report display-to-rate.
+     */
+    @Test
+    fun test_response_ms_measured_from_flip_not_from_card_shown() =
+        runTest {
+            val clock = MutableClock(sessionStart)
+            val reviewRepository = FakeReviewRepository()
+            val viewModel = newViewModel(cards = listOf(card(id = 1, step = null)), clock = clock, reviewRepository = reviewRepository)
+
+            // The card face is on screen for a full minute before the tap.
+            clock.advance(Duration.ofSeconds(60))
+            // What the card-face tap invokes — the same callback the Show
+            // answer button is wired to (ReviewScreen's `onFlip`).
+            val cardFaceTap: () -> Unit = viewModel::flip
+            cardFaceTap()
+            clock.advance(Duration.ofSeconds(7))
+            viewModel.rate(RATING_GOOD)
+
+            assertEquals(1, reviewRepository.ratings.size)
+            assertEquals(
+                "a card-face flip must start the same clock: 7 s, not 67 s",
+                7_000L,
+                reviewRepository.ratings.single().responseMs,
+            )
+        }
+
+    /**
+     * Issue #179: after the flip the rating row is the next decision, so a
+     * tap on the revealed card must be inert — it may neither hide the answer
+     * nor restart the response clock.
+     */
+    @Test
+    fun test_tapping_a_flipped_card_does_not_reflip() =
+        runTest {
+            val clock = MutableClock(sessionStart)
+            val reviewRepository = FakeReviewRepository()
+            val viewModel = newViewModel(cards = listOf(card(id = 1, step = null)), clock = clock, reviewRepository = reviewRepository)
+
+            viewModel.flip()
+            val answerAfterFirstFlip = viewModel.uiState.value.answer
+
+            // A second tap on the now-revealed face, ten seconds later.
+            clock.advance(Duration.ofSeconds(10))
+            viewModel.flip()
+
+            assertTrue("the card stays revealed", viewModel.uiState.value.isFlipped)
+            assertEquals("the answer is unchanged", answerAfterFirstFlip, viewModel.uiState.value.answer)
+
+            clock.advance(Duration.ofSeconds(3))
+            viewModel.rate(RATING_GOOD)
+            assertEquals(
+                "the response clock still runs from the first flip (13 s), not the second tap (3 s)",
+                13_000L,
+                reviewRepository.ratings.single().responseMs,
+            )
+        }
+
     // --- fakes and fixtures ---
 
     private fun newViewModel(
