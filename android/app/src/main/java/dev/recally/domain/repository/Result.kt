@@ -32,4 +32,23 @@ sealed interface Result<out T> {
     data class NetworkError(
         val cause: IOException,
     ) : Result<Nothing>
+
+    /**
+     * A fault that is not the network: a malformed or unexpected payload, a
+     * mapping failure, anything a repository did not anticipate. Distinct from
+     * [NetworkError] because the UI reads that case as "offline" — relabelling
+     * a decoding fault as a connectivity failure told the human the device was
+     * offline while it was plainly connected (issue #188).
+     */
+    data class UnexpectedError(
+        val cause: Throwable,
+    ) : Result<Nothing>
 }
+
+/**
+ * What a screen shows for an [Result.UnexpectedError]. The cause is a
+ * programming-level fault the human can do nothing about, so the banner names
+ * the shape of it and the log carries the detail — never the offline bar,
+ * which would claim a connectivity problem that does not exist (issue #188).
+ */
+fun Result.UnexpectedError.displayMessage(): String = "Unexpected response from the server (${cause::class.simpleName ?: "error"})"
