@@ -30,7 +30,12 @@ interface SettingsCipher {
  * Format: Base64(iv ‖ ciphertext ‖ GCM tag), one string per value.
  */
 class KeystoreSettingsCipher : SettingsCipher {
-    private val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
+    // Lazy: the AndroidKeyStore provider does not exist on the JVM, so an
+    // eager lookup crashes any Robolectric test that boots the Hilt
+    // application (RecallyApplication injects SettingsStore at onCreate).
+    // On a device the provider always exists, so first-use behaviour is
+    // unchanged.
+    private val keyStore by lazy { KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) } }
 
     private fun secretKey(): SecretKey {
         (keyStore.getEntry(KEY_ALIAS, null) as? KeyStore.SecretKeyEntry)?.let { return it.secretKey }
