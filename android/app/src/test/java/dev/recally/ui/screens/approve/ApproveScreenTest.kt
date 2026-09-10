@@ -70,6 +70,7 @@ class ApproveScreenTest {
                     onOpenSettings = {},
                     onNavigateBack = {},
                     onRetry = {},
+                    onApproveAllClean = {},
                 )
             }
         }

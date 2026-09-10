@@ -202,11 +202,10 @@ From `AGENTS.md` hard rules — the design is bound by these, not merely aware o
 
 Audited against `docs/api-spec.md` on 2026-09-07. Each item is data the design displays that no documented endpoint returns. These are **kept in the design deliberately** — the screens are built as intended and the endpoints catch up.
 
-Tracked as **G4** in [`docs/roadmap.md`](../roadmap.md) → *Feature gaps*, which carries the proposed field shapes and test gates. Resolve them before the step 4 gate passes. G5–G6 were added by a second audit on 2026-09-07 covering Decks, Book, Stats, Settings and States. The pending-counts gap was closed in issue #132 (`counts` on `GET /cards/pending` backs the tiles and the Approve header), per-book progress in issue #133 (`progress` on `GET /decks`), and the next-due timestamp in issue #134 (`next_due_at` on `GET /stats`).
+Tracked in [`docs/roadmap.md`](../roadmap.md) → *Feature gaps*, which carries the proposed field shapes and test gates. Resolve them before the step 4 gate passes. G5–G6 were added by a second audit on 2026-09-07 covering Decks, Book, Stats, Settings and States. The pending-counts gap was closed in issue #132 (`counts` on `GET /cards/pending` backs the tiles and the Approve header), per-book progress in issue #133 (`progress` on `GET /decks`), and the next-due timestamp in issue #134 (`next_due_at` on `GET /stats`), and bulk approve in issue #168 (`POST /cards/approve-batch`).
 
 | # | Design element | Needs | Where |
 |---|---|---|---|
-| G4 | "Approve 5 ready" bulk action | A batch endpoint, or a recorded decision that the client fans out. `needs_human` cards excluded either way. | Approve |
 | G5 | Per-card due dates and state; chapter counts | `GET /decks/{book_id}/cards` has no documented response at all. Needs `state` + `due` per card, and a `chapters` count on `GET /decks`. | Book, Decks |
 | G6 | "2 TRUNCATED" per book | A truncated count on `GET /decks`, or drop the badge. | Decks |
 

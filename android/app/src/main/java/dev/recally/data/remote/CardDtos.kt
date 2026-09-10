@@ -89,3 +89,29 @@ data class CardDto(
 data class SuspendedUntilResponse(
     @SerialName("suspended_until") val suspendedUntil: String?,
 )
+
+/** The bulk-approve body (issue #168, docs/api-spec.md, `POST /cards/approve-batch`). */
+@Serializable
+data class ApproveBatchRequest(
+    @SerialName("card_ids") val cardIds: List<Long>,
+)
+
+/**
+ * One card's outcome. `ok` false carries the status the single-card route
+ * would have raised, so a `needs_human` refusal (409) is distinguishable from
+ * an unknown id (404).
+ */
+@Serializable
+data class ApproveBatchResultDto(
+    @SerialName("card_id") val cardId: Long,
+    @SerialName("ok") val ok: Boolean,
+    @SerialName("status") val status: String? = null,
+    @SerialName("error_status") val errorStatus: Int? = null,
+    @SerialName("detail") val detail: String? = null,
+)
+
+/** Exactly one entry per request id, in request order (docs/api-spec.md). */
+@Serializable
+data class ApproveBatchResponseDto(
+    @SerialName("results") val results: List<ApproveBatchResultDto>,
+)

@@ -6,6 +6,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.createGraph
 import androidx.navigation.testing.TestNavHostController
 import androidx.test.core.app.ApplicationProvider
+import dev.recally.domain.model.ApproveBatchResult
 import dev.recally.domain.model.Deck
 import dev.recally.domain.model.DeckCard
 import dev.recally.domain.model.DueSummary
@@ -157,6 +158,9 @@ class PushDeepLinkTest {
             cardId: Long,
             reason: String?,
         ): Result<Unit> = throw UnsupportedOperationException("Today never rejects cards")
+
+        override suspend fun approveBatch(cardIds: List<Long>): Result<List<ApproveBatchResult>> =
+            throw UnsupportedOperationException("Today never bulk-approves")
     }
 
     /** Decks are remote-only; the rail stays empty when /decks is unreachable. */

@@ -41,7 +41,7 @@ Use the backend through the CLI for ~14 days. Before starting, write down the nu
 - Settings (base URL + API key + connection test), Today, Review, Approval Queue screens; Retrofit client; Room cache; LAN cleartext network security config.
 - Card controls in the UI: bury and edit from the review session, edit/suspend/unsuspend from Decks (ADR-008).
 - Tooling per android.md: Gradle Kotlin DSL + `gradle/libs.versions.toml` version catalog; JDK 17; ktlint via `ktlint-gradle`; the ktlint hook in the repo-root `.pre-commit-config.yaml`; the `android` job in `.github/workflows/ci.yml` running ktlint, Android Lint, `:app:testDebugUnitTest` and `:app:assembleDebug` on every PR. The `continue-on-error` on the two lint steps comes off once the module is clean.
-- Build to [design-system.md](design/design-system.md) — colour tokens (light and dark), type scale, component specs and the required states are settled there. Resolve **G4–G6** in *Feature gaps* below first, or drop the elements that depend on them.
+- Build to [design-system.md](design/design-system.md) — colour tokens (light and dark), type scale, component specs and the required states are settled there. Resolve **G5–G6** in *Feature gaps* below first, or drop the elements that depend on them.
 - **Tests**: unit tests for the sync queue (ratings stored with the client `rated_at` and `device_id`, flushed via `rate-batch`, a retried flush sends the same payload, results matched by position, items returning `ok: true` or a 4xx `status` dequeued while 5xx items are kept) and for same-session re-queueing from `learning_steps_minutes` (a card at `step` 1 waits the step-1 interval, not step 0; offline, the local step counter advances without a rate response and stops re-queueing past the last step).
 - **You verify**: enter the Mac's LAN URL and key in Settings; the connection test passes. Put the phone in aeroplane mode, review five cards, reconnect. `review_logs` has five rows with the phone's `device_id` and the offline `rated_at` values, and the app's next due matches `GET /reviews/due`.
 
@@ -65,14 +65,6 @@ Use the backend through the CLI for ~14 days. Before starting, write down the nu
 The Android design ([design-system.md](design/design-system.md)) displays three things no documented endpoint returns. They were found by auditing the mockups against [api-spec.md](api-spec.md) on 2026-09-07 and are **kept in the design deliberately** — the screens are built as intended and these endpoints catch up. Each must be resolved before the step 4 gate passes, either by extending the endpoint or by removing the element. Pending counts were resolved as `counts` on `GET /cards/pending` in #132, per-book progress as `progress` on `GET /decks` in #133, and the next-due timestamp as `next_due_at` on `GET /stats` in #134.
 
 Ordered by how much depends on it.
-
-### G4. Bulk approve
-The Approve screen's "Approve 5 ready" acts on several cards at once. `POST /cards/{id}/approve` is single-card; no batch endpoint exists.
-
-Not a hard-rule-1 problem — a human tapping the button is human approval, and it is unrelated to `AUTO_APPROVE_ROUND1_ACCEPT`. But the client should not silently fan out N calls without that being a decision. **Either** add `POST /cards/approve-batch` taking `card_ids`, **or** record in `api-spec.md` that the client fans out and how it handles a partial failure.
-
-**Whichever is chosen, `needs_human` cards must be excluded from any bulk path** and opened individually (hard rule 1).
-- **Tests**: a batch containing a `needs_human` id is rejected or skips that card, and never sets it `approved`. A partially-failing batch leaves no card in an inconsistent state.
 
 ### G5. `GET /decks/{book_id}/cards` has no documented response
 [api-spec.md](api-spec.md) names the endpoint and its `?chapter=` filter but never gives a response shape. The book-detail screen needs, per card: `id`, `type`, `front`, `back`, `chapter`, and the FSRS `state` and `due` from `card_state`.

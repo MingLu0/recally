@@ -17,7 +17,7 @@ Two pages: *Dark* and *Recally — white + teal*. Superseded directions moved to
 | | |
 |---|---|
 | `design-system.md` | The implementable spec. Start here. |
-| `issue-context.md` | A block to paste into Android GitHub issues — points a plan agent at the spec, the right artboards, and the remaining G4–G6 blockers. |
+| `issue-context.md` | A block to paste into Android GitHub issues — points a plan agent at the spec, the right artboards, and the remaining G5–G6 blockers. |
 | `canvas.json` | Artboard positions, pages, and the sticky notes. |
 | `_archive/` | Superseded exploration. **Not the spec** — see its README. |
 
@@ -61,6 +61,6 @@ Publishing the result to the artifact URL above keeps that link working; publish
 
 `design-system.md` ends with one list that matters before anyone builds:
 
-- **API gaps G4–G6** — data the designs show that no documented endpoint returns. Tracked with proposed field shapes and test gates in [`../roadmap.md`](../roadmap.md) under *Feature gaps*. (The pending-counts gap was closed in issue #132.)
+- **API gaps G5–G6** — data the designs show that no documented endpoint returns. Tracked with proposed field shapes and test gates in [`../roadmap.md`](../roadmap.md) under *Feature gaps*. (Pending counts closed in #132, per-book progress in #133, `next_due_at` in #134, bulk approve in #168.)
 
 The former *Open decisions* (bottom navigation, session progress indicator, the "needs you" filter, the summary sheet's rating buckets, theme switching) were adopted into [`../android.md`](../android.md) and are no longer open.

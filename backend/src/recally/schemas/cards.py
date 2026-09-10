@@ -132,3 +132,31 @@ class CardResponse(BaseModel):
             approved_at=card.approved_at,
             edited_at=card.edited_at,
         )
+
+
+class ApproveBatchRequest(BaseModel):
+    """The bulk-approve body (issue #168). `card_ids` is required and typed —
+    unlike `rate-batch`, whose items are validated individually because they
+    arrive from an offline queue that must not be rejected wholesale. Here a
+    malformed body is a caller bug, not a stale client, so it is a 422."""
+
+    card_ids: list[int]
+
+
+class ApproveBatchResultResponse(BaseModel):
+    """One card's outcome. `ok` false carries the problem+json `status` and
+    `detail` the single-card route would have raised, so the client can tell a
+    `needs_human` refusal (409) from an unknown id (404)."""
+
+    card_id: int
+    ok: bool
+    status: str | None = None
+    error_status: int | None = None
+    detail: str | None = None
+
+
+class ApproveBatchResponse(BaseModel):
+    """Exactly one entry per request item, in request order — the client matches
+    by position, as it does for `rate-batch`."""
+
+    results: list[ApproveBatchResultResponse]

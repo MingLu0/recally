@@ -23,8 +23,9 @@ import javax.inject.Inject
  * Requires connectivity: a network failure on load is the offline state, and
  * offline (or mid-action) approve/reject/edit are no-ops — those writes are
  * never queued, ratings are the only queued write (docs/android.md,
- * "Offline-first sync"). Cards are approved individually; there is no bulk
- * path (G4, scoped out in issue #59).
+ * "Offline-first sync"). [approveAllClean] adds a bulk path (issue #168); it
+ * sends only `pending_review` ids, and the server refuses `needs_human`
+ * per card besides (hard rule 1).
  */
 @HiltViewModel
 class ApproveViewModel
@@ -56,6 +57,7 @@ class ApproveViewModel
                             it.copy(
                                 groups = groupIntoChapters(result.data.cards),
                                 pendingCount = result.data.counts.total,
+                                bulkApprovableCount = result.data.counts.pendingReview,
                                 isLoading = false,
                                 isOffline = false,
                                 isUnauthorized = false,
@@ -116,6 +118,63 @@ class ApproveViewModel
             cardId: Long,
             reason: String? = null,
         ) = actOnCard(cardId) { approvalRepository.rejectCard(cardId, reason) }
+
+        /**
+         * Bulk approve every clean card in the collection (issue #168).
+         *
+         * Sends only `pending_review` ids: `needs_human` cards are opened
+         * individually (hard rule 1). The server refuses them per card as
+         * well, so the rule holds even if a client ever gets this wrong — but
+         * the client does not ask in the first place.
+         *
+         * A partial failure is not an error for the action: entries that come
+         * back `ok = false` stay in the queue, so one stale id cannot defeat
+         * clearing the backlog.
+         */
+        fun approveAllClean() {
+            val snapshot = mutableUiState.value
+            if (snapshot.isOffline || snapshot.isBulkApproving || snapshot.busyCardId != null) return
+            val cleanIds =
+                snapshot.groups
+                    .flatMap { group -> group.cards }
+                    .filterNot { it.isNeedsHuman }
+                    .map { it.id }
+            if (cleanIds.isEmpty()) return
+            viewModelScope.launch(exceptionHandler) {
+                mutableUiState.update { it.copy(isBulkApproving = true, errorMessage = null) }
+                val result = withContext(ioDispatcher) { approvalRepository.approveBatch(cleanIds) }
+                mutableUiState.update { state ->
+                    when (result) {
+                        is Result.Success -> {
+                            val approved =
+                                result.data
+                                    .filter { it.ok }
+                                    .map { it.cardId }
+                                    .toSet()
+                            val failed = result.data.count { !it.ok }
+                            state.copy(
+                                groups = approved.fold(state.groups) { groups, id -> removeCard(groups, id) },
+                                pendingCount =
+                                    state.pendingCount?.let { (it - approved.size).coerceAtLeast(0) },
+                                bulkApprovableCount =
+                                    state.bulkApprovableCount?.let { (it - approved.size).coerceAtLeast(0) },
+                                expandedHighlightCardIds = state.expandedHighlightCardIds - approved,
+                                isBulkApproving = false,
+                                errorMessage =
+                                    if (failed > 0) "$failed card${if (failed == 1) "" else "s"} could not be approved." else null,
+                            )
+                        }
+                        Result.Unauthorized -> state.copy(isBulkApproving = false, isUnauthorized = true)
+                        is Result.NetworkError -> state.copy(isBulkApproving = false, isOffline = true)
+                        is Result.HttpError ->
+                            state.copy(
+                                isBulkApproving = false,
+                                errorMessage = result.detail ?: MESSAGE_GENERIC,
+                            )
+                    }
+                }
+            }
+        }
 
         /**
          * Runs one card action. A success drops the card from the queue

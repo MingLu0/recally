@@ -1,5 +1,6 @@
 package dev.recally.ui.screens.approve
 
+import dev.recally.domain.model.ApproveBatchResult
 import dev.recally.domain.model.PendingCard
 import dev.recally.domain.model.PendingCounts
 import dev.recally.domain.model.PendingQueue
@@ -83,6 +84,16 @@ class ApproveViewModelTest {
             rejectCalls += RejectCall(cardId, reason)
             return Result.Success(Unit)
         }
+
+        val batchCalls = mutableListOf<List<Long>>()
+        var batchResult: (List<Long>) -> Result<List<ApproveBatchResult>> = { ids ->
+            Result.Success(ids.map { ApproveBatchResult(cardId = it, ok = true) })
+        }
+
+        override suspend fun approveBatch(cardIds: List<Long>): Result<List<ApproveBatchResult>> {
+            batchCalls += cardIds
+            return batchResult(cardIds)
+        }
     }
 
     private fun viewModelWith(repository: FakeApprovalRepository): ApproveViewModel =
@@ -102,6 +113,64 @@ class ApproveViewModelTest {
         val repository = FakeApprovalRepository(Result.Success(PendingQueue(cards, counts)))
         return viewModelWith(repository) to repository
     }
+
+    @Test
+    fun test_bulk_approve_sends_only_pending_review_ids() =
+        runTest {
+            // Hard rule 1: needs_human never enters FSRS via a bulk path. The
+            // server refuses them too, but the client must not even ask.
+            val (viewModel, repository) =
+                loadedViewModel(
+                    listOf(
+                        pendingCard(id = 1),
+                        pendingCard(id = 2, status = PendingCard.STATUS_NEEDS_HUMAN),
+                        pendingCard(id = 3),
+                    ),
+                )
+            advanceUntilIdle()
+
+            viewModel.approveAllClean()
+            advanceUntilIdle()
+
+            assertEquals(listOf(listOf(1L, 3L)), repository.batchCalls)
+            assertEquals(false, repository.batchCalls.single().contains(2L))
+        }
+
+    @Test
+    fun test_bulk_approve_count_comes_from_counts_not_list_size() =
+        runTest {
+            // The queue is served whole today, but the count must come from
+            // `counts` so a future paginated list cannot silently shrink it.
+            val (viewModel, _) =
+                loadedViewModel(
+                    cards = listOf(pendingCard(id = 1), pendingCard(id = 2)),
+                    counts = PendingCounts(pendingReview = 122, needsHuman = 4),
+                )
+            advanceUntilIdle()
+
+            assertEquals(122, viewModel.uiState.value.bulkApprovableCount)
+        }
+
+    @Test
+    fun test_bulk_approve_partial_failure_keeps_failed_cards_in_the_queue() =
+        runTest {
+            val (viewModel, repository) =
+                loadedViewModel(listOf(pendingCard(id = 1), pendingCard(id = 2)))
+            advanceUntilIdle()
+            repository.batchResult = { ids ->
+                Result.Success(
+                    ids.map { ApproveBatchResult(cardId = it, ok = it != 2L, detail = null) },
+                )
+            }
+
+            viewModel.approveAllClean()
+            advanceUntilIdle()
+
+            val remaining =
+                viewModel.uiState.value.groups
+                    .flatMap { group -> group.cards.map { it.id } }
+            assertEquals(listOf(2L), remaining)
+        }
 
     @Test
     fun test_flat_list_groups_by_book_then_chapter() =
@@ -173,17 +242,22 @@ class ApproveViewModelTest {
 
     @Test
     fun test_no_bulk_approve_affordance() {
-        // G4 is scoped out: cards are approved individually, so no public
-        // ViewModel method may take a collection of card ids or read as a
-        // bulk action. (Synthetic default-arg methods are excluded.)
+        // Bulk approve landed in #168: bulk approve exists, and takes no card ids from
+        // the caller — the ViewModel derives the clean set itself, so no
+        // screen can hand it a needs_human id (hard rule 1). This replaces the
+        // pre-#168 guard that forbade a bulk path outright.
         val methods = ApproveViewModel::class.java.declaredMethods.filter { !it.isSynthetic }
+        val bulk = methods.singleOrNull { it.name == "approveAllClean" }
+        assertTrue("a single bulk-approve entry point exists: $methods", bulk != null)
         assertTrue(
-            "no method may take a collection of card ids: $methods",
-            methods.none { method -> method.parameterTypes.any { java.util.Collection::class.java.isAssignableFrom(it) } },
+            "the bulk entry point takes no arguments: ${bulk?.parameterTypes?.toList()}",
+            bulk!!.parameterTypes.isEmpty(),
         )
         assertTrue(
-            "no bulk/approve-all/approve-ready method: $methods",
-            methods.none { Regex("bulk|approveall|approveready", RegexOption.IGNORE_CASE).containsMatchIn(it.name) },
+            "no other method may take a collection of card ids: $methods",
+            methods.filter { it.name != "approveAllClean" }.none { method ->
+                method.parameterTypes.any { java.util.Collection::class.java.isAssignableFrom(it) }
+            },
         )
         // The UiState carries data only — no callback fields at all, so there
         // is nowhere a multi-card approve affordance could hide.
@@ -200,17 +274,16 @@ class ApproveViewModelTest {
         runTest {
             // G1 (issue #132): the header count is a named field fed by the
             // response `counts` (both buckets — "8 pending" is the whole
-            // queue), and G4 stays scoped out: no bulk-approve field may join
-            // it. (Synthetic fields — e.g. the Compose compiler's `$stable` —
-            // are excluded.)
+            // queue). Since #168 the bulk count sits beside it and is fed by
+            // the `pending_review` bucket alone — needs_human is never in the
+            // bulk N (hard rule 1). (Synthetic fields — e.g. the Compose
+            // compiler's `$stable` — are excluded.)
             val fields =
                 ApproveUiState::class.java.declaredFields.filter { !it.isSynthetic && !it.name.startsWith("$") }
             val headerCount = fields.singleOrNull { it.name == "pendingCount" }
             assertTrue("ApproveUiState carries the header count as `pendingCount`: $fields", headerCount != null)
-            assertTrue(
-                "no bulk/batch approve field: $fields",
-                fields.none { Regex("bulk|batch|approveall", RegexOption.IGNORE_CASE).containsMatchIn(it.name) },
-            )
+            val bulkCount = fields.singleOrNull { it.name == "bulkApprovableCount" }
+            assertTrue("the bulk count is its own named field: $fields", bulkCount != null)
 
             val (viewModel, _) =
                 loadedViewModel(
@@ -219,6 +292,11 @@ class ApproveViewModelTest {
                 )
             advanceUntilIdle()
             assertEquals("the header count is the whole queue, not the list length", 8, viewModel.uiState.value.pendingCount)
+            assertEquals(
+                "the bulk count is the pending_review bucket only, never including needs_human",
+                5,
+                viewModel.uiState.value.bulkApprovableCount,
+            )
         }
 
     @Test

@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import dev.recally.domain.model.PendingCard
 import dev.recally.ui.components.ClozeText
 import dev.recally.ui.theme.CombinedPreviews
+import dev.recally.ui.theme.RecallyBottomInset
 import dev.recally.ui.theme.RecallyRadius
 import dev.recally.ui.theme.RecallySpacing
 import dev.recally.ui.theme.RecallyTheme
@@ -61,9 +62,10 @@ import dev.recally.ui.theme.recallyColors
  * out — the ViewModel lives at the route entry.
  *
  * The header carries the collection-wide "N pending" from `GET
- * /cards/pending`'s `counts` (G1, issue #132). Still scoped out: the bulk
- * "Approve N ready" bar (G4) — cards are approved individually, and
- * `needs_human` cards are opened individually regardless (hard rule 1).
+ * /cards/pending`'s `counts` (G1, issue #132), and the sticky "Approve N
+ * ready" bar acts on every clean card in the collection (issue #168).
+ * `needs_human` cards are excluded from it and opened individually
+ * (hard rule 1).
  */
 @Composable
 fun ApproveScreen(
@@ -78,6 +80,7 @@ fun ApproveScreen(
     onOpenSettings: () -> Unit,
     onNavigateBack: () -> Unit,
     onRetry: () -> Unit,
+    onApproveAllClean: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier.fillMaxSize()) {
@@ -92,19 +95,21 @@ fun ApproveScreen(
             OfflineRow(onRetry = onRetry)
         }
 
-        when {
-            uiState.isLoading -> LoadingSkeletons()
-            uiState.isQueueClear && !uiState.isOffline -> QueueClear()
-            else ->
-                QueueList(
-                    uiState = uiState,
-                    onToggleHighlights = onToggleHighlights,
-                    onApproveCard = onApproveCard,
-                    onStartEdit = onStartEdit,
-                    onDismissEdit = onDismissEdit,
-                    onEditCard = onEditCard,
-                    onRejectCard = onRejectCard,
-                )
+        Box(modifier = Modifier.weight(1f)) {
+            when {
+                uiState.isLoading -> LoadingSkeletons()
+                uiState.isQueueClear && !uiState.isOffline -> QueueClear()
+                else ->
+                    QueueList(
+                        uiState = uiState,
+                        onToggleHighlights = onToggleHighlights,
+                        onApproveCard = onApproveCard,
+                        onStartEdit = onStartEdit,
+                        onDismissEdit = onDismissEdit,
+                        onEditCard = onEditCard,
+                        onRejectCard = onRejectCard,
+                    )
+            }
         }
 
         uiState.errorMessage?.let { message ->
@@ -113,6 +118,62 @@ fun ApproveScreen(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.recallyColors.danger,
                 modifier = Modifier.padding(horizontal = RecallySpacing.screenPadding),
+            )
+        }
+
+        if (uiState.showBulkApprove) {
+            BulkApproveBar(
+                count = uiState.bulkApprovableCount ?: 0,
+                enabled = !uiState.isOffline && !uiState.isBulkApproving && uiState.busyCardId == null,
+                onApproveAllClean = onApproveAllClean,
+            )
+        }
+    }
+}
+
+/**
+ * The sticky bulk bar (artboard `RcApprove.dc.html`): a `line-soft` top border
+ * over a full-width `primary` action. It is the screen's one filled button
+ * besides the per-card Approve, and it acts on **every** clean card in the
+ * collection, not just the filtered view — clearing the backlog is the point.
+ *
+ * The artboard pairs it with a "Skip" button; that is not built here, having
+ * no defined behaviour in docs/android.md.
+ */
+@Composable
+private fun BulkApproveBar(
+    count: Int,
+    enabled: Boolean,
+    onApproveAllClean: () -> Unit,
+) {
+    val colors = MaterialTheme.recallyColors
+    Column(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .border(width = 1.dp, color = colors.lineSoft)
+                .padding(
+                    start = RecallySpacing.screenPadding,
+                    end = RecallySpacing.screenPadding,
+                    top = RecallySpacing.md,
+                    bottom = RecallyBottomInset,
+                ),
+    ) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .height(50.dp)
+                    .clip(RoundedCornerShape(RecallyRadius.md))
+                    .background(if (enabled) colors.primary else colors.primaryMuted)
+                    .clickable(enabled = enabled, onClick = onApproveAllClean),
+        ) {
+            Text(
+                text = "Approve $count ready",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
             )
         }
     }
@@ -747,6 +808,7 @@ private fun ApproveScreenPreviewHost(uiState: ApproveUiState) {
             onOpenSettings = {},
             onNavigateBack = {},
             onRetry = {},
+            onApproveAllClean = {},
         )
     }
 }

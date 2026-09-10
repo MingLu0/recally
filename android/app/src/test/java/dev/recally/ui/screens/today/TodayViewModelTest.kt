@@ -1,5 +1,6 @@
 package dev.recally.ui.screens.today
 
+import dev.recally.domain.model.ApproveBatchResult
 import dev.recally.domain.model.Deck
 import dev.recally.domain.model.DeckCard
 import dev.recally.domain.model.DueSummary
@@ -108,6 +109,9 @@ class TodayViewModelTest {
             cardId: Long,
             reason: String?,
         ): Result<Unit> = throw UnsupportedOperationException("Today never rejects cards")
+
+        override suspend fun approveBatch(cardIds: List<Long>): Result<List<ApproveBatchResult>> =
+            throw UnsupportedOperationException("Today never bulk-approves")
     }
 
     /**
