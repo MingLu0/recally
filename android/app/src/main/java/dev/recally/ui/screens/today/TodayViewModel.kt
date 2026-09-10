@@ -6,6 +6,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.recally.di.IoDispatcher
 import dev.recally.domain.repository.ApprovalRepository
 import dev.recally.domain.repository.CardRepository
+import dev.recally.domain.repository.DeckRepository
 import dev.recally.domain.repository.Result
 import dev.recally.domain.repository.StatsRepository
 import dev.recally.ui.formatNextDueIn
@@ -28,7 +29,10 @@ import javax.inject.Inject
  * figures come from `GET /stats` via [StatsRepository]; the pending-queue
  * buckets come from the collection-wide `counts` on `GET /cards/pending` via
  * [ApprovalRepository] (G1, issue #132) — a failure there is silent, because
- * the queue requires connectivity and Today must render without it.
+ * the queue requires connectivity and Today must render without it. The
+ * "Your books" rail comes from `GET /decks` via [DeckRepository] (G2, issue
+ * #133; rail built in #154) — likewise silent on failure, since decks are
+ * remote-only and the rail never blanks the rest of the screen.
  * Instantiated at the Today `NavHost` route entry.
  */
 @HiltViewModel
@@ -38,6 +42,7 @@ class TodayViewModel
         private val cardRepository: CardRepository,
         private val statsRepository: StatsRepository,
         private val approvalRepository: ApprovalRepository,
+        private val deckRepository: DeckRepository,
         @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
         private val clock: Clock,
     ) : ViewModel() {
@@ -61,6 +66,7 @@ class TodayViewModel
                 loadDueCounts()
                 loadStats()
                 loadPendingCounts()
+                loadDecks()
             }
         }
 
@@ -144,6 +150,24 @@ class TodayViewModel
                             needsHumanCount = result.data.counts.needsHuman,
                         )
                     }
+                Result.Unauthorized,
+                is Result.HttpError,
+                is Result.NetworkError,
+                -> Unit
+            }
+        }
+
+        /**
+         * The "Your books" rail (G2, issue #133; rail built in #154). The
+         * served `progress` is written into the state unmodified — never
+         * recomputed client-side from `total`/`due`. Decks are remote-only
+         * (docs/android.md, "Offline-first sync"), so any failure keeps the
+         * last-known books and shows nothing rather than an error.
+         */
+        private suspend fun loadDecks() {
+            when (val result = withContext(ioDispatcher) { deckRepository.decks() }) {
+                is Result.Success ->
+                    mutableUiState.update { it.copy(books = result.data) }
                 Result.Unauthorized,
                 is Result.HttpError,
                 is Result.NetworkError,

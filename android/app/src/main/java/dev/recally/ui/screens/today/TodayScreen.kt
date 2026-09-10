@@ -8,11 +8,18 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -25,7 +32,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.addPathNodes
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import dev.recally.domain.model.Deck
+import dev.recally.ui.screens.decks.BookSpineChip
+import dev.recally.ui.screens.decks.DeckProgressBar
 import dev.recally.ui.theme.CombinedPreviews
 import dev.recally.ui.theme.RecallyRadius
 import dev.recally.ui.theme.RecallySpacing
@@ -38,11 +49,11 @@ import dev.recally.ui.theme.recallyColors
  * callbacks out — the ViewModel lives at the route entry.
  *
  * The "N to approve" / "N need you" tiles read the collection-wide `counts`
- * of `GET /cards/pending` (G1, issue #132). G2 (per-book progress) stays
- * scoped out, so the book rail from the artboard is not built. Today works
- * having never received a push: everything else it renders comes from
- * `GET /reviews/due` and `GET /stats` (docs/android.md, "Push
- * notifications").
+ * of `GET /cards/pending` (G1, issue #132). The "Your books" rail below them
+ * renders `GET /decks` (G2, issue #133; rail built in #154) with the same
+ * spine chip and progress bar Decks uses. Today works having never received
+ * a push: everything else it renders comes from `GET /reviews/due` and
+ * `GET /stats` (docs/android.md, "Push notifications").
  */
 @Composable
 fun TodayScreen(
@@ -69,6 +80,9 @@ fun TodayScreen(
             modifier =
                 Modifier
                     .fillMaxWidth()
+                    // The book rail can push the lower content past a small
+                    // display; Today scrolls rather than clipping it.
+                    .verticalScroll(rememberScrollState())
                     .padding(
                         horizontal = RecallySpacing.screenPadding,
                         vertical = RecallySpacing.lg,
@@ -93,6 +107,9 @@ fun TodayScreen(
                 needsHumanCount = uiState.needsHumanCount,
                 onOpenApprove = onOpenApprove,
             )
+            if (uiState.books.isNotEmpty()) {
+                YourBooksRail(books = uiState.books)
+            }
             if (uiState.errorMessage != null && uiState.dueCount == null && !uiState.isLoading) {
                 ErrorRow(message = uiState.errorMessage, onRetry = onRetry)
             }
@@ -207,6 +224,76 @@ private fun CountTile(
     )
 }
 
+/**
+ * The "Your books" rail (artboard `RcWhite.dc.html`; G2, issues #133/#154):
+ * section title, subtitle, and a horizontally scrolling row with one card per
+ * book — spine chip, title, card count and the server's `progress`. The row
+ * components are the ones Decks uses (`BookSpineChip`, `DeckProgressBar`), so
+ * a book reads identically on both screens. The rail is absent while
+ * `GET /decks` has never answered (decks are remote-only): an empty rail
+ * draws nothing rather than an empty section header.
+ *
+ * The artboard's "Import" tile is deliberately not built: ingestion is the
+ * watched folder on the Mac (docs/android.md) and `api-spec.md` documents no
+ * client-initiated import — the app does not invent one (issue #154).
+ */
+@Composable
+private fun YourBooksRail(books: List<Deck>) {
+    val colors = MaterialTheme.recallyColors
+    Column(verticalArrangement = Arrangement.spacedBy(RecallySpacing.xs)) {
+        Text(
+            text = "Your books",
+            style = MaterialTheme.typography.titleLarge,
+            color = colors.ink,
+        )
+        Text(
+            text = "From your O'Reilly highlights",
+            style = MaterialTheme.typography.bodyMedium,
+            color = colors.inkFaint,
+        )
+        Spacer(Modifier.height(RecallySpacing.sm))
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(RecallySpacing.md)) {
+            items(books, key = { it.bookId }) { deck ->
+                BookRailCard(deck = deck)
+            }
+        }
+    }
+}
+
+/** One book on the rail: spine chip and title, then count and progress. */
+@Composable
+private fun BookRailCard(deck: Deck) {
+    val colors = MaterialTheme.recallyColors
+    Column(
+        verticalArrangement = Arrangement.spacedBy(RecallySpacing.sm),
+        modifier =
+            Modifier
+                .width(190.dp)
+                .border(1.dp, colors.line, RoundedCornerShape(RecallyRadius.md))
+                .padding(RecallySpacing.cardPadding),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(RecallySpacing.sm),
+        ) {
+            BookSpineChip(bookId = deck.bookId, title = deck.title)
+            Text(
+                text = deck.title,
+                style = MaterialTheme.typography.labelLarge,
+                color = colors.ink,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Text(
+            text = "${deck.total} cards",
+            style = MaterialTheme.typography.labelMedium,
+            color = colors.inkFaint,
+        )
+        DeckProgressBar(progress = deck.progress)
+    }
+}
+
 /** Persistent bar below the app bar (design-system.md, "States"). */
 @Composable
 private fun OfflineBar() {
@@ -313,6 +400,35 @@ private fun TodayScreenLoadedPreview() {
                     retention30d = 0.87,
                     pendingReviewCount = 8,
                     needsHumanCount = 3,
+                    books =
+                        listOf(
+                            Deck(bookId = 1, title = "Evals for AI Engineers", total = 48, due = 6, progress = 0.62f),
+                            Deck(bookId = 2, title = "30 Agents in 30 Days", total = 83, due = 0, progress = 0.24f),
+                        ),
+                ),
+            onStartReview = {},
+            onOpenApprove = {},
+            onOpenSettings = {},
+            onRetry = {},
+        )
+    }
+}
+
+/** `GET /decks` unreachable or empty: no rail, the rest of Today renders. */
+@CombinedPreviews
+@Composable
+private fun TodayScreenEmptyBooksPreview() {
+    RecallyTheme {
+        TodayScreen(
+            uiState =
+                TodayUiState(
+                    isLoading = false,
+                    dueCount = 12,
+                    newCount = 5,
+                    streakDays = 9,
+                    reviewsToday = 23,
+                    retention30d = 0.87,
+                    books = emptyList(),
                 ),
             onStartReview = {},
             onOpenApprove = {},
@@ -356,6 +472,12 @@ private fun TodayScreenOfflinePreview() {
                     dueCount = 12,
                     newCount = 5,
                     isOffline = true,
+                    // Decks are remote-only; the rail keeps the last-known
+                    // books when a refresh fails.
+                    books =
+                        listOf(
+                            Deck(bookId = 1, title = "Evals for AI Engineers", total = 48, due = 6, progress = 0.62f),
+                        ),
                 ),
             onStartReview = {},
             onOpenApprove = {},

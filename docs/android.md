@@ -148,6 +148,8 @@ Bottom navigation with four items: **Today, Decks, Stats, Settings**. Review and
 
 ### 1. Today
 - Due count + new card count, streak, start-review button.
+- Approval-queue row with the collection-wide `GET /cards/pending` counts.
+- "Your books" rail: one card per book from `GET /decks` — spine colour, card count and the server's `progress`, rendered unmodified (never recomputed from `total`/`due`). Decks are remote-only, so an unreachable endpoint leaves the rail absent without blanking the rest of the screen. No Import affordance: ingestion is the watched folder, and `api-spec.md` documents no client-initiated import.
 - Entry point from FCM notification deep link.
 
 ### 2. Review session
@@ -181,7 +183,7 @@ Every screen and the endpoints behind it. Kept here so a gap between this doc an
 
 | Screen | Endpoints |
 |---|---|
-| Today | `GET /reviews/due` (counts), `GET /stats` (streak), `GET /cards/pending` (collection-wide queue `counts` for the approval tiles; silent when unreachable) |
+| Today | `GET /reviews/due` (counts), `GET /stats` (streak), `GET /cards/pending` (collection-wide queue `counts` for the approval tiles; silent when unreachable), `GET /decks` (the "Your books" rail; silent when unreachable) |
 | Review session | `GET /reviews/due`, `POST /reviews/{id}/rate`, `POST /reviews/rate-batch` (outbox flush), `PATCH /cards/{id}` (edit), `POST /cards/{id}/bury` |
 | Approval queue | `GET /cards/pending`, `POST /cards/{id}/approve`, `POST /cards/{id}/reject` |
 | Decks | `GET /decks`, `GET /decks/{book_id}/cards`, `PATCH /cards/{id}`, `POST /cards/{id}/suspend`, `POST /cards/{id}/unsuspend` |
