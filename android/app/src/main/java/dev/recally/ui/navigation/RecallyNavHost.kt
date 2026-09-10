@@ -54,7 +54,7 @@ fun RecallyNavHost(
             TodayScreen(
                 uiState = todayUiState,
                 onStartReview = { navController.navigate(Screen.Review.route) },
-                onOpenApprove = { navController.navigate(Screen.Approve.route) },
+                onOpenApprove = { filter -> navController.navigate(Screen.Approve.createRoute(filter)) },
                 onOpenSettings = { navController.navigate(Screen.Settings.route) },
                 onRetry = todayViewModel::refresh,
                 onBookClick = navController::openBookDetail,
@@ -79,7 +79,10 @@ fun RecallyNavHost(
             )
         }
         composable(Screen.SessionSummary.route) { }
-        composable(Screen.Approve.route) {
+        composable(
+            route = Screen.Approve.route,
+            arguments = listOf(approveFilterArgument()),
+        ) {
             val approveViewModel: ApproveViewModel = hiltViewModel()
             val approveUiState by approveViewModel.uiState.collectAsStateWithLifecycle()
 

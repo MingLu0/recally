@@ -1,11 +1,13 @@
 package dev.recally.ui.screens.approve
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.recally.di.IoDispatcher
 import dev.recally.domain.repository.ApprovalRepository
 import dev.recally.domain.repository.Result
+import dev.recally.ui.navigation.ARG_FILTER
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -33,8 +35,21 @@ class ApproveViewModel
     constructor(
         private val approvalRepository: ApprovalRepository,
         @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
+        savedStateHandle: SavedStateHandle,
     ) : ViewModel() {
-        private val mutableUiState = MutableStateFlow(ApproveUiState())
+        /**
+         * The starting filter the entry point chose (issue #178). Applied to
+         * the very first [ApproveUiState] rather than to a later update: a
+         * flash of All before the Needs-you list arrives is the bug this
+         * fixes. An absent or unrecognised argument falls back to All.
+         */
+        private val initialFilter: QueueFilter =
+            savedStateHandle
+                .get<String>(ARG_FILTER)
+                ?.let { name -> QueueFilter.entries.firstOrNull { it.name == name } }
+                ?: QueueFilter.ALL
+
+        private val mutableUiState = MutableStateFlow(ApproveUiState(filter = initialFilter))
         val uiState: StateFlow<ApproveUiState> = mutableUiState.asStateFlow()
 
         private val exceptionHandler =

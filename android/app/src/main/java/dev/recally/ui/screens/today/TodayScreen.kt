@@ -36,6 +36,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.recally.domain.model.Deck
+import dev.recally.ui.screens.approve.QueueFilter
 import dev.recally.ui.screens.decks.BookSpineChip
 import dev.recally.ui.screens.decks.DeckProgressBar
 import dev.recally.ui.theme.CombinedPreviews
@@ -60,7 +61,7 @@ import dev.recally.ui.theme.recallyColors
 fun TodayScreen(
     uiState: TodayUiState,
     onStartReview: () -> Unit,
-    onOpenApprove: () -> Unit,
+    onOpenApprove: (QueueFilter) -> Unit,
     onOpenSettings: () -> Unit,
     onRetry: () -> Unit,
     onBookClick: (Long) -> Unit,
@@ -166,12 +167,16 @@ private fun WordmarkHeader() {
  * The "need you" tile is dropped at zero — `needs_human` is an exception
  * state, and a permanent "0 need you" tile makes the common case look like it
  * has an outstanding problem.
+ *
+ * Each tile opens Approve on the filter it counts (issue #178). A tile whose
+ * count is meaningful but whose destination is not lands the user on a list
+ * where the cards they asked for are mixed in with everything else.
  */
 @Composable
 private fun WaitingForYouSection(
     pendingReviewCount: Int?,
     needsHumanCount: Int?,
-    onOpenApprove: () -> Unit,
+    onOpenApprove: (QueueFilter) -> Unit,
 ) {
     if (pendingReviewCount == null) return
     val colors = MaterialTheme.recallyColors
@@ -186,7 +191,7 @@ private fun WaitingForYouSection(
                 count = pendingReviewCount,
                 label = "to approve",
                 accent = colors.primary,
-                onClick = onOpenApprove,
+                onClick = { onOpenApprove(QueueFilter.ALL) },
                 modifier = Modifier.weight(1f),
             )
             if (needsHumanCount != null && needsHumanCount > 0) {
@@ -194,7 +199,7 @@ private fun WaitingForYouSection(
                     count = needsHumanCount,
                     label = "need you",
                     accent = colors.danger,
-                    onClick = onOpenApprove,
+                    onClick = { onOpenApprove(QueueFilter.NEEDS_YOU) },
                     modifier = Modifier.weight(1f),
                 )
             } else {
