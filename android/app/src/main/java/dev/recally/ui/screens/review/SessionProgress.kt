@@ -39,7 +39,7 @@ fun SessionProgress(
     modifier: Modifier = Modifier,
 ) {
     val colors = MaterialTheme.recallyColors
-    val denominator = (doneCount + toRepeatCount + cardsLeft).coerceAtLeast(1)
+    val (doneWeight, repeatWeight) = sessionProgressFillWeights(doneCount, toRepeatCount, cardsLeft)
     Row(
         modifier = modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -58,7 +58,7 @@ fun SessionProgress(
                     Box(
                         modifier =
                             Modifier
-                                .weight(doneCount.toFloat() / denominator)
+                                .weight(doneWeight)
                                 .fillMaxHeight()
                                 .background(colors.success),
                     )
@@ -67,7 +67,7 @@ fun SessionProgress(
                     Box(
                         modifier =
                             Modifier
-                                .weight(toRepeatCount.toFloat() / denominator)
+                                .weight(repeatWeight)
                                 .fillMaxHeight()
                                 .background(colors.warn),
                     )
@@ -88,4 +88,19 @@ private fun SessionProgressPreview() {
     RecallyTheme {
         SessionProgress(doneCount = 6, toRepeatCount = 1, cardsLeft = 5)
     }
+}
+
+/**
+ * Bar-fill weights for the done and to-repeat segments, extracted so the
+ * fraction is unit-testable without rendering the composable. The
+ * denominator is the current remaining work: `doneCount + toRepeatCount +
+ * cardsLeft`.
+ */
+internal fun sessionProgressFillWeights(
+    doneCount: Int,
+    toRepeatCount: Int,
+    cardsLeft: Int,
+): Pair<Float, Float> {
+    val denominator = (doneCount + toRepeatCount + cardsLeft).coerceAtLeast(1)
+    return (doneCount.toFloat() / denominator) to (toRepeatCount.toFloat() / denominator)
 }
