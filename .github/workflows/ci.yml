@@ -122,14 +122,45 @@ jobs:
   # are not spammed and quota is not burned on every push. All credentials
   # come from GitHub secrets, are written to disk (gitignored filenames,
   # umask 077) at job start, and are never echoed.
+  #
+  # A `v*` tag is the ship path (#175): the tag names the version the build
+  # reports, the APK is retained for 30 days so a tester report can be traced
+  # back to the exact binary, and a GitHub Release is cut with the APK
+  # attached. A workflow_dispatch run does everything except the release, and
+  # keeps the gradle.properties version — no input required.
   distribute:
     if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
+    # Scoped to this job, not the workflow root: only the release step needs to
+    # write, so the per-PR backend/android jobs keep a read-only GITHUB_TOKEN.
+    permissions:
+      contents: write
     defaults:
       run:
         working-directory: android
     steps:
+      # Full history so the release-notes step can name the previous tag.
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # refs/tags/v0.2.0 -> 0.2.0. Left empty on a workflow_dispatch run, in
+      # which case the Gradle build keeps the gradle.properties default — this
+      # ticket makes the tag win for the build it produces, it does not bump
+      # the committed version (#175, scoped out).
+      - name: Resolve the version being shipped
+        id: version
+        working-directory: .
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            resolved_version="$(sed -n 's/^recally\.versionName=//p' android/gradle.properties)"
+            echo "from_tag=false" >> "$GITHUB_OUTPUT"
+          else
+            resolved_version="${GITHUB_REF#refs/tags/v}"
+            echo "from_tag=true" >> "$GITHUB_OUTPUT"
+          fi
+          echo "version=$resolved_version" >> "$GITHUB_OUTPUT"
+          echo "Shipping version $resolved_version (event: ${{ github.event_name }})"
 
       # Same toolchain as the per-PR android job — a mismatch fails obscurely.
       - name: Set up JDK
@@ -190,8 +221,53 @@ jobs:
           printf '%s' "$FIREBASE_SERVICE_ACCOUNT_JSON" > "$RUNNER_TEMP/firebase-service-account.json"
           echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/firebase-service-account.json" >> "$GITHUB_ENV"
 
+      # -Precally.versionName overrides the gradle.properties default through
+      # the existing findProperty lookup in app/build.gradle.kts, so a tagged
+      # build reports the tag's version instead of 0.1.0. On a dispatch run the
+      # value read back out of gradle.properties is passed, which is a no-op.
       - name: Assemble debug
-        run: ./gradlew :app:assembleDebug
+        run: ./gradlew :app:assembleDebug -Precally.versionName=${{ steps.version.outputs.version }}
+
+      # Notes name the version, the short SHA and the date so a tester can tell
+      # two builds apart. Written to a file and passed with --releaseNotesFile
+      # (a real @Option on the upload task) rather than replacing the
+      # `releaseNotes` in build.gradle.kts, so a local
+      # `./gradlew appDistributionUploadDebug` keeps working unchanged (#175).
+      - name: Generate release notes
+        id: notes
+        working-directory: .
+        env:
+          SHIPPED_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          notes_file="$RUNNER_TEMP/release-notes.txt"
+          {
+            echo "Recally $SHIPPED_VERSION (debug)"
+            echo ""
+            echo "Commit: $(git rev-parse --short HEAD)"
+            echo "Built:  $(date -u '+%Y-%m-%d %H:%M UTC')"
+          } > "$notes_file"
+          echo "path=$notes_file" >> "$GITHUB_OUTPUT"
+          echo "--- generated release notes ---"
+          cat "$notes_file"
 
       - name: Upload to Firebase App Distribution
-        run: ./gradlew :app:appDistributionUploadDebug
+        run: ./gradlew :app:appDistributionUploadDebug --releaseNotesFile="${{ steps.notes.outputs.path }}"
+
+      # Retained so the exact binary a tester reported against can be
+      # re-downloaded after the run's workspace is gone (#175).
+      - name: Retain the APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: recally-debug-${{ steps.version.outputs.version }}
+          path: android/app/build/outputs/apk/debug/*.apk
+          retention-days: 30
+          if-no-files-found: error
+
+      # Tag runs only — a dispatch run has no tag to hang a release off.
+      - name: Cut the GitHub Release
+        if: steps.version.outputs.from_tag == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Recally ${{ steps.version.outputs.version }}
+          body_path: ${{ steps.notes.outputs.path }}
+          files: android/app/build/outputs/apk/debug/*.apk
