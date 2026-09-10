@@ -73,9 +73,9 @@ class SettingsViewModelTest {
     }
 
     private class FakeConnectionTester(
-        var result: Result<Unit>,
+        var result: Result<String?>,
     ) : ConnectionTester {
-        override suspend fun test(): Result<Unit> = result
+        override suspend fun test(): Result<String?> = result
     }
 
     /**
@@ -93,7 +93,7 @@ class SettingsViewModelTest {
     }
 
     private fun viewModelWith(
-        testResult: Result<Unit>,
+        testResult: Result<String?>,
         repository: FakeSettingsRepository = FakeSettingsRepository(),
         ratingOutbox: FakeRatingOutbox = FakeRatingOutbox(0),
     ): SettingsViewModel =
@@ -109,7 +109,7 @@ class SettingsViewModelTest {
     fun test_connection_test_maps_four_outcomes() =
         runTest {
             // 200 — URL and key both right.
-            val connectedViewModel = viewModelWith(Result.Success(Unit))
+            val connectedViewModel = viewModelWith(Result.Success("0.1.0"))
             connectedViewModel.testConnection()
             advanceUntilIdle()
             val connected = connectedViewModel.uiState.value.connectionTest
@@ -168,8 +168,9 @@ class SettingsViewModelTest {
             // The result row already titles the outcome "Connected"
             // (SettingsScreen's ConnectionTestResult); the message must carry
             // only the latency — "Responded in N ms" (issue #153,
-            // docs/design/RcSettings.dc.html).
-            val viewModel = viewModelWith(Result.Success(Unit))
+            // docs/design/RcSettings.dc.html), plus the backend version the
+            // probe reported when it reported one (issue #195).
+            val viewModel = viewModelWith(Result.Success("0.1.0"))
             viewModel.testConnection()
             advanceUntilIdle()
 
@@ -181,8 +182,8 @@ class SettingsViewModelTest {
                 message.contains("Connected", ignoreCase = true),
             )
             assertTrue(
-                "the message is the latency line: $message",
-                message.matches(Regex("Responded in \\d+ ms")),
+                "the message leads with the latency line: $message",
+                message.matches(Regex("Responded in \\d+ ms( · backend .+)?")),
             )
         }
 
@@ -190,7 +191,7 @@ class SettingsViewModelTest {
     fun test_api_key_is_never_exposed_in_ui_state() =
         runTest {
             val repository = FakeSettingsRepository()
-            val viewModel = viewModelWith(Result.Success(Unit), repository)
+            val viewModel = viewModelWith(Result.Success("0.1.0"), repository)
             advanceUntilIdle()
 
             val loaded = viewModel.uiState.value
@@ -223,7 +224,7 @@ class SettingsViewModelTest {
             // The row reads the DAO's live count and nothing else, so it
             // cannot disagree with what is actually stored (issue #151).
             val ratingOutbox = FakeRatingOutbox(3)
-            val viewModel = viewModelWith(Result.Success(Unit), ratingOutbox = ratingOutbox)
+            val viewModel = viewModelWith(Result.Success("0.1.0"), ratingOutbox = ratingOutbox)
             advanceUntilIdle()
             assertEquals(3, viewModel.uiState.value.queuedRatingsCount)
 
@@ -235,7 +236,7 @@ class SettingsViewModelTest {
     @Test
     fun `empty outbox reads as all synced`() =
         runTest {
-            val viewModel = viewModelWith(Result.Success(Unit), ratingOutbox = FakeRatingOutbox(0))
+            val viewModel = viewModelWith(Result.Success("0.1.0"), ratingOutbox = FakeRatingOutbox(0))
             advanceUntilIdle()
 
             val state = viewModel.uiState.value

@@ -38,7 +38,11 @@ interface SettingsRepository {
  * The Settings connection test against `GET /health/auth`
  * (docs/api-spec.md, "Health"). Separate from [SettingsRepository] so the
  * store never depends on the Retrofit client it configures.
+ *
+ * A success carries the backend's reported version, or null from a backend too
+ * old to report one — which is itself the answer the human needs when the app
+ * is failing to decode that server's payloads (issue #195).
  */
 interface ConnectionTester {
-    suspend fun test(): Result<Unit>
+    suspend fun test(): Result<String?>
 }

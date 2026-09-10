@@ -1,5 +1,7 @@
 package dev.recally.domain.repository
 
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.MissingFieldException
 import java.io.IOException
 
 /**
@@ -50,5 +52,41 @@ sealed interface Result<out T> {
  * programming-level fault the human can do nothing about, so the banner names
  * the shape of it and the log carries the detail — never the offline bar,
  * which would claim a connectivity problem that does not exist (issue #188).
+ *
+ * A [MissingFieldException] is called out by name because it has one realistic
+ * cause: the server is running code older than the app and no longer sends a
+ * field the DTO requires. The generic wording sent a reader looking at the app
+ * for a fault that was a backend left running across a deploy (issue #195), so
+ * this case names the server and the field instead.
  */
-fun Result.UnexpectedError.displayMessage(): String = "Unexpected response from the server (${cause::class.simpleName ?: "error"})"
+@OptIn(ExperimentalSerializationApi::class)
+fun Result.UnexpectedError.displayMessage(): String =
+    when (val failure = cause) {
+        is MissingFieldException -> staleServerMessage(failure)
+        else -> "Unexpected response from the server (${cause::class.simpleName ?: "error"})"
+    }
+
+/**
+ * `MissingFieldException.missingFields` is experimental API, so the field
+ * names are read off the message instead — it is the stable surface, and a
+ * parse that finds nothing degrades to the un-named wording rather than
+ * throwing on top of an error path.
+ */
+@Suppress("MaxLineLength")
+@OptIn(ExperimentalSerializationApi::class)
+private fun staleServerMessage(failure: MissingFieldException): String {
+    val match = MISSING_FIELDS_PATTERN.find(failure.message.orEmpty())
+    val missingFields = match?.groupValues?.drop(1)?.firstOrNull { it.isNotBlank() }
+    return if (missingFields.isNullOrBlank()) {
+        "Your backend looks out of date — it is not sending fields this app needs. Restart it on the current build."
+    } else {
+        "Your backend looks out of date — it is not sending $missingFields. Restart it on the current build."
+    }
+}
+
+/**
+ * Matches both shapes kotlinx.serialization produces: `Field 'state' is
+ * required` for one missing field and `Fields [chapters, truncated] are
+ * required` for several.
+ */
+private val MISSING_FIELDS_PATTERN = Regex("""Fields? (?:\[([^\]]+)]|'([^']+)') (?:are|is) required""")
