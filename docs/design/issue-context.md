@@ -45,12 +45,8 @@ All under `docs/design/`. Canvas: https://claude.ai/code/artifact/25472047-e5cc-
 
 ### Blockers — check before planning a screen
 
-One API gap remains in [`docs/roadmap.md`](docs/roadmap.md) under *Feature gaps*. The designs show data no documented endpoint returns; this was deliberate, and the endpoints are expected to catch up. It has a proposed field shape and a test gate. Pending counts were closed in issue #132, per-book progress in #133, the next-due timestamp in #134, and the browse response shape plus per-book chapter count in #172.
+No API gaps remain. The designs once showed data no documented endpoint returned — deliberately, with the endpoints expected to catch up — and every one has landed: pending counts in issue #132, per-book progress in #133, the next-due timestamp in #134, bulk approve in #168, the browse response shape plus per-book chapter count in #172, and the per-book truncated count in #173.
 
-| | Blocks | Needs |
-|---|---|---|
-| G6 | Decks | A truncated count per book |
-
-If an issue covers a screen with an open gap, either resolve the gap in `api-spec.md` first or scope the dependent element out — do not invent a field.
+Build to `api-spec.md` as written. If a screen seems to need a field the spec does not document, that is a gap to raise — do not invent one.
 
 Navigation (bottom nav: Today, Decks, Stats, Settings; Review and Approve entered from Today), the session progress indicator, the "needs you" filter chip, the summary sheet's rating buckets, and system-theme-following are all specified in `docs/android.md` (*Design*, *Navigation*, *Screens*) — build to that doc, they are settled.

@@ -160,11 +160,13 @@ Clears `suspended_until` (whether set by bury or suspend). FSRS state is unchang
 ### GET /decks
 Books with card counts, due counts, and per-book progress.
 ```json
-{ "decks": [ { "book_id": 1, "title": "Evals for AI Engineers", "total": 48, "due": 6, "progress": 0.625, "chapters": 9 } ] }
+{ "decks": [ { "book_id": 1, "title": "Evals for AI Engineers", "total": 48, "due": 6, "progress": 0.625, "chapters": 9, "truncated": 2 } ] }
 ```
 `progress` is the share of the book's approved cards whose FSRS state is `review` (definition in docs/data-model.md, `card_state`); a book with no approved cards reports `0`.
 
 `chapters` is the count of distinct chapters among those approved cards — the "48 cards · 9 chapters" on the Decks row. It is a field rather than client arithmetic because the Decks screen never fetches a book's cards; Book detail, which does, derives its own per-chapter counts from the list below. A book with no approved cards reports `0`.
+
+`truncated` is the count of the book's clipped source highlights — the "2 TRUNCATED" badge on the Decks row. It is the one count here **not** scoped to approved cards: `truncated` is a `highlights` column and clipping is a property of the O'Reilly export, so a clipped highlight counts whether the card it produced is approved, still in the approval queue, or not yet curated at all. Counted over distinct highlights, so one highlight backing several cards counts once. A book with nothing clipped reports `0`, never `null`. The count is informational; nothing in the API or the app offers to reconstruct the lost text (AGENTS.md hard rule 7).
 
 ### GET /decks/{book_id}/cards
 `?chapter=` optional filter. Browse cards per book, ordered by chapter then the source highlight's `export_position`. Each card carries `suspended_until` (null when in rotation) so the browse view can show suspended cards and offer unsuspend; unlike `/reviews/due`, this list does not filter them out.

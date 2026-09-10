@@ -17,7 +17,7 @@ Two pages: *Dark* and *Recally — white + teal*. Superseded directions moved to
 | | |
 |---|---|
 | `design-system.md` | The implementable spec. Start here. |
-| `issue-context.md` | A block to paste into Android GitHub issues — points a plan agent at the spec, the right artboards, and the remaining G6 blocker. |
+| `issue-context.md` | A block to paste into Android GitHub issues — points a plan agent at the spec and the right artboards. |
 | `canvas.json` | Artboard positions, pages, and the sticky notes. |
 | `icon/` | The launcher icon: its own canvas, the generator, and the shipped vectors. See `icon/README.md`. |
 | `_archive/` | Superseded exploration. **Not the spec** — see its README. |
@@ -60,8 +60,6 @@ Publishing the result to the artifact URL above keeps that link working; publish
 
 ## Open items
 
-`design-system.md` ends with one list that matters before anyone builds:
-
-- **API gap G6** — data the designs show that no documented endpoint returns. Tracked with proposed field shapes and test gates in [`../roadmap.md`](../roadmap.md) under *Feature gaps*. (Pending counts closed in #132, per-book progress in #133, `next_due_at` in #134, bulk approve in #168, the browse response shape and `chapters` in #172.)
+**None.** The API gaps — data the designs showed that no documented endpoint returned — are all closed: pending counts in #132, per-book progress in #133, `next_due_at` in #134, bulk approve in #168, the browse response shape and `chapters` in #172, and the per-book truncated count in #173. `api-spec.md` now covers every field the designs display, and the closing notes in [`design-system.md`](design-system.md) record why each went the way it did.
 
 The former *Open decisions* (bottom navigation, session progress indicator, the "needs you" filter, the summary sheet's rating buckets, theme switching) were adopted into [`../android.md`](../android.md) and are no longer open.

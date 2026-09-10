@@ -21,6 +21,7 @@ class DeckSummary:
     due: int
     progress: float
     chapters: int
+    truncated: int
 
 
 @dataclass(frozen=True)
@@ -62,6 +63,13 @@ def list_decks(
     counts the same population `total` does. It cannot be derived on that screen —
     the Decks list never fetches a book's cards — which is why it is a field here
     rather than client arithmetic. An empty book reports 0.
+
+    `truncated` is the Decks row's "2 TRUNCATED" badge (G6, issue #173): the book's
+    clipped source highlights. It is the one count here that is *not* scoped to
+    approved cards — truncation is a property of the O'Reilly export, so a clipped
+    highlight is clipped whether the card it produced is approved, still in the
+    queue, or not yet curated at all. It is informational only; nothing here or on
+    the app reconstructs the lost text (hard rule 7).
     """
     as_of = now or utc_now()
 
@@ -70,7 +78,7 @@ def list_decks(
     # `GET /reviews/due` cannot drift apart.
     is_due = due_cards_predicate(as_of)
 
-    statement: Select[tuple[int, str, int, int, int, int]] = (
+    statement: Select[tuple[int, str, int, int, int, int, int]] = (
         select(
             Book.id,
             Book.title,
@@ -88,6 +96,11 @@ def list_decks(
             func.count(func.distinct(case((Card.id.isnot(None), Highlight.chapter)))).label(
                 "chapters"
             ),
+            # Counted off `Highlight` before any card filtering, unlike every
+            # count above: the badge spans all card statuses. DISTINCT over the
+            # highlight id, not the row, because the join down to `cards` fans a
+            # highlight out once per card it produced.
+            func.count(func.distinct(case((Highlight.truncated, Highlight.id)))).label("truncated"),
         )
         .select_from(Book)
         .outerjoin(Highlight, Highlight.book_id == Book.id)
@@ -108,8 +121,11 @@ def list_decks(
             due=due,
             progress=in_review / total if total else 0.0,
             chapters=chapters,
+            truncated=truncated,
         )
-        for book_id, title, total, due, in_review, chapters in session.execute(statement).all()
+        for book_id, title, total, due, in_review, chapters, truncated in session.execute(
+            statement
+        ).all()
     ]
 
 

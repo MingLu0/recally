@@ -41,7 +41,7 @@ Use the backend through the CLI for ~14 days. Before starting, write down the nu
 - Settings (base URL + API key + connection test), Today, Review, Approval Queue screens; Retrofit client; Room cache; LAN cleartext network security config.
 - Card controls in the UI: bury and edit from the review session, edit/suspend/unsuspend from Decks (ADR-008).
 - Tooling per android.md: Gradle Kotlin DSL + `gradle/libs.versions.toml` version catalog; JDK 17; ktlint via `ktlint-gradle`; the ktlint hook in the repo-root `.pre-commit-config.yaml`; the `android` job in `.github/workflows/ci.yml` running ktlint, Android Lint, `:app:testDebugUnitTest` and `:app:assembleDebug` on every PR. The `continue-on-error` on the two lint steps comes off once the module is clean.
-- Build to [design-system.md](design/design-system.md) — colour tokens (light and dark), type scale, component specs and the required states are settled there. Resolve **G6** in *Feature gaps* below first, or drop the element that depends on it.
+- Build to [design-system.md](design/design-system.md) — colour tokens (light and dark), type scale, component specs and the required states are settled there. The *Feature gaps* below are all closed, so nothing there needs deciding before building.
 - **Tests**: unit tests for the sync queue (ratings stored with the client `rated_at` and `device_id`, flushed via `rate-batch`, a retried flush sends the same payload, results matched by position, items returning `ok: true` or a 4xx `status` dequeued while 5xx items are kept) and for same-session re-queueing from `learning_steps_minutes` (a card at `step` 1 waits the step-1 interval, not step 0; offline, the local step counter advances without a rate response and stops re-queueing past the last step).
 - **You verify**: enter the Mac's LAN URL and key in Settings; the connection test passes. Put the phone in aeroplane mode, review five cards, reconnect. `review_logs` has five rows with the phone's `device_id` and the offline `rated_at` values, and the app's next due matches `GET /reviews/due`.
 
@@ -62,15 +62,12 @@ Use the backend through the CLI for ~14 days. Before starting, write down the nu
 
 ## Feature gaps — API fields the Android design needs
 
-The Android design ([design-system.md](design/design-system.md)) displays three things no documented endpoint returns. They were found by auditing the mockups against [api-spec.md](api-spec.md) on 2026-09-07 and are **kept in the design deliberately** — the screens are built as intended and these endpoints catch up. Each must be resolved before the step 4 gate passes, either by extending the endpoint or by removing the element. Pending counts were resolved as `counts` on `GET /cards/pending` in #132, per-book progress as `progress` on `GET /decks` in #133, the next-due timestamp as `next_due_at` on `GET /stats` in #134, and the browse response shape plus `chapters` on `GET /decks` in #172. The truncated count per book is the one left.
+The Android design ([design-system.md](design/design-system.md)) displayed several things no documented endpoint returned. They were found by auditing the mockups against [api-spec.md](api-spec.md) on 2026-09-07 and were **kept in the design deliberately** — the screens were built as intended and the endpoints caught up.
 
-Ordered by how much depends on it.
+**All resolved; nothing here blocks the step 4 gate.** Pending counts as `counts` on `GET /cards/pending` in #132, per-book progress as `progress` on `GET /decks` in #133, the next-due timestamp as `next_due_at` on `GET /stats` in #134, bulk approve as `POST /cards/approve-batch` in #168, the browse response shape plus `chapters` on `GET /decks` in #172, and the truncated count per book as `truncated` on `GET /decks` in #173.
 
-### G6. Truncated count per book
-Decks shows "2 TRUNCATED" per book. `truncated` is a `highlights` column and `GET /cards/pending` exposes it only for pending cards — nothing aggregates it across a whole book including approved cards.
+The last one was an either/or — build the count or drop the badge — and was **built**: `truncated` counts the book's clipped source highlights across every card status, since clipping is a property of the O'Reilly export rather than of the approved population. It is informational only; nothing offers to reconstruct the text (hard rule 7). The reasoning is recorded beside the Decks entry in [design-system.md](design/design-system.md) so a future reading of the artboard does not reopen it.
 
-**Either** add a `truncated` count to `GET /decks`, **or** drop the badge from the Decks screen. It is informational only; hard rule 7 is not at stake, since nothing in the UI offers to reconstruct the clipped text.
-- **Tests**: a book with two truncated source highlights reports 2, whether or not those cards are approved.
 
 ## Productionization phases
 

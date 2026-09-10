@@ -188,25 +188,54 @@ class DecksViewModelTest {
         }
 
     @Test
-    fun test_ui_state_carries_progress_but_no_truncated_count() {
-        val truncatedField = Regex("truncated", RegexOption.IGNORE_CASE)
-        // Meta-assertions: the check bites on both the G2 and the G6 shape.
-        assertTrue(truncatedField.containsMatchIn("truncatedCount"))
-        assertTrue(
-            "Deck must carry the G2 progress field",
-            Deck::class.java.declaredFields.any { it.name == "progress" },
-        )
+    fun test_ui_state_carries_a_server_sourced_truncated_count() =
+        runTest {
+            // Issue #173 resolved G6 by building the count rather than dropping the
+            // badge, so this replaces the #133-era guard that forbade the field. The
+            // property it now protects is the same one: nothing about truncation is
+            // computed on the phone. `truncated` is a `GET /decks` field, so the only
+            // legitimate source is the repository's `Deck`.
+            val truncatedField = Regex("truncated", RegexOption.IGNORE_CASE)
+            // Meta-assertion: the check bites on the shape it is looking for.
+            assertTrue(truncatedField.containsMatchIn("truncatedCount"))
 
-        val checkedTypes =
-            listOf(DecksUiState::class, DeckCard::class, Deck::class, ChapterSummary::class)
-        for (type in checkedTypes) {
-            val offending =
-                type.java.declaredFields
-                    .map { it.name }
-                    .filter { truncatedField.containsMatchIn(it) }
-            assertTrue("${type.simpleName} carries a G6 truncated field: $offending", offending.isEmpty())
+            // Deck is where the server's count lands, alongside the G2 progress field.
+            val deckFields = Deck::class.java.declaredFields.map { it.name }
+            assertTrue("Deck must carry the G2 progress field", deckFields.contains("progress"))
+            assertTrue(
+                "Deck must carry the G6 truncated count: $deckFields",
+                deckFields.any { truncatedField.containsMatchIn(it) },
+            )
+
+            // Nothing downstream of Deck invents or recomputes one: the per-card
+            // browse rows and the client-side chapter grouping carry no truncation,
+            // and DecksUiState holds no derived total of its own.
+            for (type in listOf(DecksUiState::class, DeckCard::class, ChapterSummary::class)) {
+                val offending =
+                    type.java.declaredFields
+                        .map { it.name }
+                        .filter { truncatedField.containsMatchIn(it) }
+                assertTrue(
+                    "${type.simpleName} must not derive a truncated count: $offending",
+                    offending.isEmpty(),
+                )
+            }
+
+            // Server-sourced end to end: a value only the fake repository could have
+            // produced arrives in the UiState unchanged.
+            deckRepository.decksResult =
+                Result.Success(
+                    listOf(Deck(BOOK_ID, "30 Agents in 30 Days", 83, 6, 0.24f, chapters = 30, truncated = 7)),
+                )
+            val viewModel = DecksViewModel(deckRepository, cardRepository, SavedStateHandle())
+
+            assertEquals(
+                7,
+                viewModel.uiState.value.decks
+                    .single()
+                    .truncated,
+            )
         }
-    }
 
     @Test
     fun test_refresh_re_queries_decks() =
@@ -214,7 +243,7 @@ class DecksViewModelTest {
             // Issue #147: refresh() on the surviving ViewModel re-queries the
             // deck list rather than serving the first load forever.
             deckRepository.decksResult =
-                Result.Success(listOf(Deck(BOOK_ID, "Evals for AI Engineers", 48, 6, 0.625f, chapters = 9)))
+                Result.Success(listOf(Deck(BOOK_ID, "Evals for AI Engineers", 48, 6, 0.625f, chapters = 9, truncated = 0)))
             val viewModel = DecksViewModel(deckRepository, cardRepository, SavedStateHandle())
             assertEquals(
                 listOf("Evals for AI Engineers"),
@@ -225,8 +254,8 @@ class DecksViewModelTest {
             deckRepository.decksResult =
                 Result.Success(
                     listOf(
-                        Deck(BOOK_ID, "Evals for AI Engineers", 48, 6, 0.625f, chapters = 9),
-                        Deck(9L, "Designing Machine Learning Systems", 100, 10, 0.5f, chapters = 12),
+                        Deck(BOOK_ID, "Evals for AI Engineers", 48, 6, 0.625f, chapters = 9, truncated = 0),
+                        Deck(9L, "Designing Machine Learning Systems", 100, 10, 0.5f, chapters = 12, truncated = 0),
                     ),
                 )
             viewModel.refresh()
@@ -241,7 +270,8 @@ class DecksViewModelTest {
         }
 
     private fun detailViewModel(): DecksViewModel {
-        deckRepository.decksResult = Result.Success(listOf(Deck(BOOK_ID, "Evals for AI Engineers", 48, 6, 0.625f, chapters = 9)))
+        deckRepository.decksResult =
+            Result.Success(listOf(Deck(BOOK_ID, "Evals for AI Engineers", 48, 6, 0.625f, chapters = 9, truncated = 0)))
         return DecksViewModel(deckRepository, cardRepository, SavedStateHandle(mapOf("bookId" to BOOK_ID)))
     }
 

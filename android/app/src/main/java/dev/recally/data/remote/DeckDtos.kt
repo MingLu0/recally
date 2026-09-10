@@ -9,7 +9,11 @@ data class DeckListResponse(
     val decks: List<DeckDto>,
 )
 
-/** One book with its card counts and progress. */
+/**
+ * One book with its card counts and progress. `truncated` is the count of the
+ * book's clipped source highlights (G6, issue #173) — counted across every card
+ * status, so unlike the other counts it is not scoped to approved cards.
+ */
 @Serializable
 data class DeckDto(
     @SerialName("book_id") val bookId: Long,
@@ -18,6 +22,7 @@ data class DeckDto(
     val due: Int,
     val progress: Float,
     val chapters: Int,
+    val truncated: Int,
 )
 
 /** `GET /decks/{book_id}/cards` response. */

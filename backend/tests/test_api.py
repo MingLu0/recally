@@ -823,3 +823,147 @@ def test_decks_chapter_count_is_zero_for_an_empty_book(
 
     assert response.status_code == 200
     assert response.json()["decks"][0]["chapters"] == 0
+
+
+# --- G6: truncated count per book (issue #173) ---
+
+
+def _book_with_truncated_highlights(
+    session: Session,
+    *,
+    truncated_flags: list[bool],
+    card_status: str = "approved",
+    title: str = "30 Agents Every AI Engineer Must Build",
+    external_id: str = "1",
+) -> Book:
+    """One card per entry in `truncated_flags`, each on its own source highlight.
+
+    The flag is the source highlight's `truncated` column — the only place it lives
+    (hard rule 7) — so a `False` entry is a clean highlight and a `True` one a clipped
+    export row. `card_status` lets a test seed the same book entirely unapproved.
+    """
+    book = _book(title=title, external_id=external_id)
+    session.add(book)
+    session.flush()
+    run = IngestRun(filename="g6-oreilly-annotations.csv", user_id=1)
+    session.add(run)
+    session.flush()
+    for position, is_truncated in enumerate(truncated_flags):
+        highlight = Highlight(
+            book_id=book.id,
+            chapter="3. Error Analysis",
+            raw_text="An LLM pipeline's behaviour only makes sense end-to-",
+            dedupe_key=f"g6-highlight-{position}",
+            source="oreilly",
+            highlighted_at=date(2026, 6, 19),
+            export_position=position,
+            truncated=is_truncated,
+            user_id=1,
+        )
+        unit = CuratedUnit(
+            ingest_run_id=run.id, curated_text="…", decision="keep", tags=[], user_id=1
+        )
+        session.add_all([highlight, unit])
+        session.flush()
+        session.add(CuratedUnitHighlight(unit_id=unit.id, highlight_id=highlight.id, user_id=1))
+        session.add(_card(unit.id, status=card_status))
+    session.commit()
+    return book
+
+
+def test_deck_truncated_count_includes_approved_cards(
+    client: TestClient, container: Container
+) -> None:
+    """The assertion G6 names: two truncated highlights report 2 either side of approval.
+
+    Unlike `total`, `due`, `progress` and `chapters` — all scoped to approved cards
+    (hard rule 1) — the truncated count is a property of the *export*, not of the
+    scheduling population. Clipping does not stop being true because the card it
+    produced is still in the queue, so the count spans every card status. The badge
+    is informational: nothing here or on the app reconstructs the lost text (hard
+    rule 7).
+    """
+    with container.session() as session:
+        _book_with_truncated_highlights(
+            session, truncated_flags=[True, True, False], card_status="approved"
+        )
+
+    approved_body = client.get("/decks", headers={"X-API-Key": TEST_API_KEY}).json()
+
+    assert approved_body["decks"][0]["truncated"] == 2
+
+    # The same book with none of its cards approved reports the same 2.
+    with container.session() as session:
+        session.query(Card).delete()
+        session.query(CuratedUnitHighlight).delete()
+        session.query(CuratedUnit).delete()
+        session.query(Highlight).delete()
+        session.query(Book).delete()
+        session.commit()
+    with container.session() as session:
+        _book_with_truncated_highlights(
+            session, truncated_flags=[True, True, False], card_status="pending_review"
+        )
+
+    pending_body = client.get("/decks", headers={"X-API-Key": TEST_API_KEY}).json()
+
+    assert pending_body["decks"][0]["total"] == 0, "no card is approved (hard rule 1)"
+    assert pending_body["decks"][0]["truncated"] == 2, (
+        "truncation is a property of the export, not of the approved population"
+    )
+
+
+def test_deck_truncated_count_is_zero_when_nothing_is_clipped(
+    client: TestClient, container: Container
+) -> None:
+    """A clean book reports 0, not null — the badge hides on 0 rather than on absence."""
+    with container.session() as session:
+        _book_with_truncated_highlights(session, truncated_flags=[False, False])
+
+    body = client.get("/decks", headers={"X-API-Key": TEST_API_KEY}).json()
+
+    assert body["decks"][0]["truncated"] == 0
+    assert body["decks"][0]["truncated"] is not None
+
+
+def test_deck_truncated_count_does_not_double_count_a_shared_highlight(
+    client: TestClient, container: Container
+) -> None:
+    """A highlight backing two cards counts once: the count is over highlights.
+
+    The Book → Highlight → unit → Card join fans out, so counting rows would report
+    a truncated highlight once per card it produced. `total` already guards this with
+    DISTINCT over `Card.id`; this count needs DISTINCT over `Highlight.id`.
+    """
+    with container.session() as session:
+        book = _book(title="Evals for AI Engineers", external_id="9781098188283")
+        session.add(book)
+        session.flush()
+        run = IngestRun(filename="g6-oreilly-annotations.csv", user_id=1)
+        highlight = Highlight(
+            book_id=book.id,
+            chapter="3. Error Analysis",
+            raw_text="An LLM pipeline's behaviour only makes sense end-to-",
+            dedupe_key="g6-shared-highlight",
+            source="oreilly",
+            highlighted_at=date(2026, 6, 19),
+            export_position=0,
+            truncated=True,
+            user_id=1,
+        )
+        session.add_all([run, highlight])
+        session.flush()
+        unit = CuratedUnit(
+            ingest_run_id=run.id, curated_text="…", decision="keep", tags=[], user_id=1
+        )
+        session.add(unit)
+        session.flush()
+        session.add(CuratedUnitHighlight(unit_id=unit.id, highlight_id=highlight.id, user_id=1))
+        # Two cards off the one unit, both fed by the single truncated highlight.
+        session.add_all([_card(unit.id, status="approved"), _card(unit.id, status="approved")])
+        session.commit()
+
+    body = client.get("/decks", headers={"X-API-Key": TEST_API_KEY}).json()
+
+    assert body["decks"][0]["total"] == 2, "two cards, so the join really does fan out"
+    assert body["decks"][0]["truncated"] == 1
