@@ -8,6 +8,7 @@ import dev.recally.di.IoDispatcher
 import dev.recally.domain.repository.ConnectionTester
 import dev.recally.domain.repository.Result
 import dev.recally.domain.repository.SettingsRepository
+import dev.recally.domain.repository.displayMessage
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -138,6 +139,10 @@ class SettingsViewModel
                     ConnectionTestState.Unreachable(
                         "Server answered with an error (HTTP $status) — check the URL",
                     )
+                // The server answered; its answer could not be read. That is
+                // not "unreachable", but the URL is still the thing to check.
+                is Result.UnexpectedError ->
+                    ConnectionTestState.Unreachable(displayMessage())
             }
 
         private companion object {

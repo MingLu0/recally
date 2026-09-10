@@ -99,11 +99,20 @@ class CardRepositoryImplTest {
     @Test
     fun test_repository_returns_result_and_never_throws() =
         runTest {
-            // Network failure with an empty cache: a Result failure case, not
-            // an exception. If anything threw, runTest would fail outright.
+            // A dropped connection with an empty cache: a Result failure
+            // case, not an exception. If anything threw, runTest would fail
+            // outright. Which failure case is deliberately not asserted — the
+            // socket policy can surface either as an IOException or as an
+            // empty body, and those are now distinct cases (issue #188).
+            // `test_io_exception_is_a_network_error` in DeckRepositoryImplTest
+            // pins the NetworkError classification with an injected
+            // IOException instead.
             server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AT_START))
             val networkFailure = cardRepository.dueCards(forceRefresh = true)
-            assertTrue("expected NetworkError, was $networkFailure", networkFailure is Result.NetworkError)
+            assertTrue(
+                "expected a Result failure case, was $networkFailure",
+                networkFailure is Result.NetworkError || networkFailure is Result.UnexpectedError,
+            )
 
             // HTTP 500: also a Result failure case carrying the status, not an exception.
             server.enqueue(MockResponse().setResponseCode(500).setBody("""{ "status": 500, "detail": "boom" }"""))
@@ -114,7 +123,10 @@ class CardRepositoryImplTest {
             // The same contract holds for the decks repository.
             server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AT_START))
             val decksFailure = deckRepository.decks()
-            assertTrue("expected NetworkError, was $decksFailure", decksFailure is Result.NetworkError)
+            assertTrue(
+                "expected a Result failure case, was $decksFailure",
+                decksFailure is Result.NetworkError || decksFailure is Result.UnexpectedError,
+            )
         }
 
     private fun dueSummaryResponse(cardIds: List<Long>): MockResponse {

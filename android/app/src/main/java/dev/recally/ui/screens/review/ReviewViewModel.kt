@@ -12,6 +12,7 @@ import dev.recally.domain.repository.Result
 import dev.recally.domain.repository.ReviewRepository
 import dev.recally.domain.repository.SettingsRepository
 import dev.recally.domain.repository.StatsRepository
+import dev.recally.domain.repository.displayMessage
 import dev.recally.ui.formatNextDueIn
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -105,6 +106,10 @@ class ReviewViewModel
                                 errorMessage = "Couldn't load due cards — check the connection and retry",
                             )
                         }
+                    is Result.UnexpectedError ->
+                        _uiState.update {
+                            it.copy(isLoading = false, errorMessage = result.displayMessage())
+                        }
                 }
             }
         }
@@ -190,6 +195,14 @@ class ReviewViewModel
                         _uiState.update {
                             it.copy(errorMessage = result.detail ?: "Rating failed (${result.status})")
                         }
+                    is Result.UnexpectedError -> {
+                        // The rating may or may not have landed; the response
+                        // could not be read. Queue it so the outbox replays it
+                        // (the server dedupes), but do not claim "offline" —
+                        // the server answered (issue #188).
+                        runCatching { ratingOutbox.record(reviewRating) }
+                        _uiState.update { it.copy(errorMessage = result.displayMessage()) }
+                    }
                 }
                 handleRequeue(current, rating, now)
                 showNextCard(now)
@@ -335,6 +348,8 @@ class ReviewViewModel
                         _uiState.update {
                             it.copy(errorMessage = result.detail ?: "Bury failed (${result.status})")
                         }
+                    is Result.UnexpectedError ->
+                        _uiState.update { it.copy(errorMessage = result.displayMessage()) }
                 }
             }
         }
@@ -368,6 +383,10 @@ class ReviewViewModel
                     is Result.HttpError ->
                         _uiState.update {
                             it.copy(isEditing = false, errorMessage = result.detail ?: "Edit failed (${result.status})")
+                        }
+                    is Result.UnexpectedError ->
+                        _uiState.update {
+                            it.copy(isEditing = false, errorMessage = result.displayMessage())
                         }
                 }
             }

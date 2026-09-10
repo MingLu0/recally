@@ -8,7 +8,6 @@ import dev.recally.domain.repository.Result
 import dev.recally.domain.repository.StatsRepository
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
-import java.io.IOException
 import javax.inject.Inject
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -31,11 +30,12 @@ class StatsRepositoryImpl
                         is Result.Unauthorized -> Result.Unauthorized
                         is Result.HttpError -> result
                         is Result.NetworkError -> result
+                        is Result.UnexpectedError -> result
                     }
                 } catch (cancellation: CancellationException) {
                     throw cancellation
                 } catch (exception: Exception) {
-                    Result.NetworkError(IOException("failed to load stats", exception))
+                    Result.UnexpectedError(exception)
                 }
             }
     }

@@ -50,6 +50,7 @@ class ReviewRepositoryImpl
                     is Result.Unauthorized -> Result.Unauthorized
                     is Result.HttpError -> result
                     is Result.NetworkError -> result
+                    is Result.UnexpectedError -> result
                 }
             }
 
@@ -64,6 +65,7 @@ class ReviewRepositoryImpl
                     is Result.Unauthorized -> Result.Unauthorized
                     is Result.HttpError -> result
                     is Result.NetworkError -> result
+                    is Result.UnexpectedError -> result
                 }
             }
     }
