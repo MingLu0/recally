@@ -9,9 +9,10 @@ import dev.recally.domain.model.DeckCard
  * `decks` route fills [decks]; the parameterised `decks/{bookId}` route fills
  * [bookTitle], [chapters] and [expandedCards].
  *
- * Deliberately absent: per-card FSRS state/due and chapter counts from the
- * server (G5), truncated counts (G6) — the endpoints document none of them
- * and the tickets scope them out. G2 per-book progress landed on `Deck`.
+ * Deliberately absent: truncated counts (G6) — the endpoints document none
+ * and that ticket scopes them out. Per-book progress landed on `Deck`, and so
+ * did the server's `chapters` count; per-card FSRS `state`/`due` landed on
+ * `DeckCard` (issue #172), both rendered from the response, never computed.
  */
 data class DecksUiState(
     val isBookDetail: Boolean = false,

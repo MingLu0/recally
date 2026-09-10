@@ -19,6 +19,8 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import java.time.Instant
+import java.time.ZoneOffset
 
 /**
  * Book-detail header gate for issue #152: the header renders the same spine
@@ -132,6 +134,79 @@ class BookDetailScreenTest {
         composeTestRule.onNodeWithText("8 cards · 2 due").assertIsDisplayed()
     }
 
+    /**
+     * G5 gate (issue #172), **negative**: the due label is the server's
+     * `card_state.due` rendered, never a date the client invented. A card whose
+     * response carries no `due` — a fresh card at `learning` step 0 — shows no
+     * date at all rather than one derived from its state (hard rule 5, ADR-005).
+     */
+    @Test
+    fun `card row shows state and due from the server`() {
+        val scheduledDue = Instant.parse("2026-09-09T08:00:00Z")
+        setDetailContent(
+            DecksUiState(
+                isBookDetail = true,
+                bookId = 2,
+                bookTitle = "Evals for AI Engineers",
+                chapters = listOf(ChapterSummary(name = "3. Error Analysis", cardCount = 2)),
+                expandedChapter = "3. Error Analysis",
+                expandedCards =
+                    listOf(
+                        card(1, state = "review", due = scheduledDue),
+                        card(2, state = "learning", due = null),
+                    ),
+            ),
+        )
+
+        // The label is a pure function of the server's instant: with `now` fixed
+        // days earlier, the rendered text is that date and nothing else. No
+        // client-side arithmetic invents it (hard rule 5).
+        val fixedNow = Instant.parse("2026-09-04T08:00:00Z")
+        assertEquals(
+            "9 Sep",
+            deckCardDueLabel(due = scheduledDue, now = fixedNow, zone = ZoneOffset.UTC),
+        )
+        // The screen shows a label for the scheduled card…
+        composeTestRule.onAllNodesWithText("Due", substring = true).assertCountEquals(1)
+        // …and the unscheduled card is labelled by its state, with no date at all.
+        composeTestRule.onNodeWithText("LEARNING").assertIsDisplayed()
+        assertEquals(
+            "no `due` from the server means no date on screen",
+            null,
+            deckCardDueLabel(due = null, now = fixedNow, zone = ZoneOffset.UTC),
+        )
+    }
+
+    /**
+     * G5 gate (issue #172): the server orders `GET /decks/{book_id}/cards` by
+     * chapter then `export_position`, and the client's grouping must not reorder
+     * it — a book's chapters are not alphabetical, so a sort here would scramble
+     * the reading order.
+     */
+    @Test
+    fun `chapter grouping reproduces export position order`() {
+        val serverOrder =
+            listOf("10. Scaling", "2. Getting Started", "Appendix A", "1. Introduction")
+        setDetailContent(
+            DecksUiState(
+                isBookDetail = true,
+                bookId = 2,
+                bookTitle = "Evals for AI Engineers",
+                chapters = serverOrder.map { ChapterSummary(name = it, cardCount = 1) },
+            ),
+        )
+
+        val rendered =
+            serverOrder.map { name ->
+                composeTestRule.onNodeWithText(name).assertIsDisplayed()
+                composeTestRule
+                    .onNodeWithText(name)
+                    .fetchSemanticsNode()
+                    .positionInRoot.y
+            }
+        assertEquals(rendered.sorted(), rendered)
+    }
+
     private fun setDetailContent(uiState: DecksUiState) {
         composeTestRule.setContent {
             RecallyTheme {
@@ -189,14 +264,19 @@ class BookDetailScreenTest {
             expandedCards = listOf(card(1), card(2)),
         )
 
-    private fun card(id: Long) =
-        DeckCard(
-            id = id,
-            type = "qa",
-            front = "Why evaluate traces rather than individual steps? ($id)",
-            back = "An LLM pipeline's behavior only makes sense end-to-end.",
-            chapter = "2. Getting Started with FastAPI",
-            tags = emptyList(),
-            suspendedUntil = null,
-        )
+    private fun card(
+        id: Long,
+        state: String = "review",
+        due: Instant? = Instant.parse("2026-09-09T08:00:00Z"),
+    ) = DeckCard(
+        id = id,
+        type = "qa",
+        front = "Why evaluate traces rather than individual steps? ($id)",
+        back = "An LLM pipeline's behavior only makes sense end-to-end.",
+        chapter = "2. Getting Started with FastAPI",
+        tags = emptyList(),
+        suspendedUntil = null,
+        state = state,
+        due = due,
+    )
 }

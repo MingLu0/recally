@@ -15,6 +15,10 @@ class Deck(BaseModel):
     total: int
     due: int
     progress: float
+    # Distinct chapters among the book's approved cards, behind the Decks row's
+    # "48 cards · 9 chapters" (issue #172). The Decks screen never fetches a
+    # book's cards, so it cannot derive this the way Book detail can.
+    chapters: int
 
     @classmethod
     def from_summary(cls, summary: DeckSummary) -> "Deck":
@@ -24,6 +28,7 @@ class Deck(BaseModel):
             total=summary.total,
             due=summary.due,
             progress=summary.progress,
+            chapters=summary.chapters,
         )
 
 
@@ -37,6 +42,10 @@ class DeckCard(BaseModel):
     Suspended cards stay in this list — it is where unsuspend is reached — so each
     card carries `suspended_until` (null when in rotation), unlike `/reviews/due`
     (ADR-008).
+
+    `state` and `due` are the card's server-side FSRS position (issue #172). `due` is
+    null for a card FSRS has never scheduled — a fresh `learning` step-0 card holds
+    an approval-time marker, not a schedule, and browse must not present it as one.
     """
 
     id: int
@@ -46,6 +55,8 @@ class DeckCard(BaseModel):
     chapter: str | None
     tags: list[str]
     suspended_until: UtcDatetime | None
+    state: str
+    due: UtcDatetime | None
 
     @classmethod
     def from_record(cls, record: DeckCardRecord) -> "DeckCard":
@@ -57,6 +68,8 @@ class DeckCard(BaseModel):
             chapter=record.chapter,
             tags=record.tags,
             suspended_until=record.suspended_until,
+            state=record.state,
+            due=record.due,
         )
 
 

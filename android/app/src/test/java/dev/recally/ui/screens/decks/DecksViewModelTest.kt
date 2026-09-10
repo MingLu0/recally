@@ -65,8 +65,8 @@ class DecksViewModelTest {
     @Test
     fun test_unsuspend_restores_the_card() =
         runTest {
-            deckRepository.deckCardsResult =
-                Result.Success(listOf(browseCard(id = 55, suspendedUntil = FAR_FUTURE)))
+            val served = browseCard(id = 55, suspendedUntil = FAR_FUTURE)
+            deckRepository.deckCardsResult = Result.Success(listOf(served))
             val viewModel = detailViewModel()
             viewModel.toggleChapter(CHAPTER)
             val fetchesBeforeUnsuspend = deckRepository.deckCardsCalls.size
@@ -82,14 +82,14 @@ class DecksViewModelTest {
             // No client-side recomputation: the restore is the server's null
             // written into the row, not a refetch and not a new due date.
             assertEquals(fetchesBeforeUnsuspend, deckRepository.deckCardsCalls.size)
-            assertNoSchedulingFields()
+            assertSchedulingUntouched(viewModel, 55L, served)
         }
 
     @Test
     fun test_edit_leaves_scheduling_untouched() =
         runTest {
-            deckRepository.deckCardsResult =
-                Result.Success(listOf(browseCard(id = 55, suspendedUntil = FAR_FUTURE)))
+            val served = browseCard(id = 55, suspendedUntil = FAR_FUTURE)
+            deckRepository.deckCardsResult = Result.Success(listOf(served))
             val viewModel = detailViewModel()
             viewModel.toggleChapter(CHAPTER)
             val fetchesBeforeEdit = deckRepository.deckCardsCalls.size
@@ -108,9 +108,9 @@ class DecksViewModelTest {
             assertEquals("edited back", edited.back)
             assertEquals("suspend state is not an edit's business", FAR_FUTURE, edited.suspendedUntil)
             // ADR-008: an edit carries no rescheduling — no refetch, and the
-            // browse card has no scheduling field to mutate in the first place.
+            // server's state/due survive the edit byte for byte.
             assertEquals(fetchesBeforeEdit, deckRepository.deckCardsCalls.size)
-            assertNoSchedulingFields()
+            assertSchedulingUntouched(viewModel, 55L, served)
         }
 
     @Test
@@ -214,7 +214,7 @@ class DecksViewModelTest {
             // Issue #147: refresh() on the surviving ViewModel re-queries the
             // deck list rather than serving the first load forever.
             deckRepository.decksResult =
-                Result.Success(listOf(Deck(BOOK_ID, "Evals for AI Engineers", 48, 6, 0.625f)))
+                Result.Success(listOf(Deck(BOOK_ID, "Evals for AI Engineers", 48, 6, 0.625f, chapters = 9)))
             val viewModel = DecksViewModel(deckRepository, cardRepository, SavedStateHandle())
             assertEquals(
                 listOf("Evals for AI Engineers"),
@@ -225,8 +225,8 @@ class DecksViewModelTest {
             deckRepository.decksResult =
                 Result.Success(
                     listOf(
-                        Deck(BOOK_ID, "Evals for AI Engineers", 48, 6, 0.625f),
-                        Deck(9L, "Designing Machine Learning Systems", 100, 10, 0.5f),
+                        Deck(BOOK_ID, "Evals for AI Engineers", 48, 6, 0.625f, chapters = 9),
+                        Deck(9L, "Designing Machine Learning Systems", 100, 10, 0.5f, chapters = 12),
                     ),
                 )
             viewModel.refresh()
@@ -241,22 +241,39 @@ class DecksViewModelTest {
         }
 
     private fun detailViewModel(): DecksViewModel {
-        deckRepository.decksResult = Result.Success(listOf(Deck(BOOK_ID, "Evals for AI Engineers", 48, 6, 0.625f)))
+        deckRepository.decksResult = Result.Success(listOf(Deck(BOOK_ID, "Evals for AI Engineers", 48, 6, 0.625f, chapters = 9)))
         return DecksViewModel(deckRepository, cardRepository, SavedStateHandle(mapOf("bookId" to BOOK_ID)))
     }
 
-    private fun assertNoSchedulingFields() {
-        val schedulingFields =
-            DeckCard::class.java.declaredFields
-                .map { it.name }
-                .filter { it in setOf("due", "state", "step") }
-        assertTrue("browse cards carry no FSRS field: $schedulingFields", schedulingFields.isEmpty())
+    /**
+     * ADR-008 / hard rule 5, restated for the post-#172 shape. `state` and `due`
+     * are now on the browse card, carried from the server — so the invariant is
+     * no longer "no such field exists" but "nothing on the client writes one".
+     * Edit and unsuspend must leave both exactly as the response delivered them.
+     */
+    private fun assertSchedulingUntouched(
+        viewModel: DecksViewModel,
+        cardId: Long,
+        served: DeckCard,
+    ) {
+        val onScreen =
+            viewModel.uiState.value.expandedCards
+                .first { it.id == cardId }
+        assertEquals("state is the server's, unchanged", served.state, onScreen.state)
+        assertEquals("due is the server's, unchanged", served.due, onScreen.due)
+        // Nothing recomputes a schedule: the client owns no FSRS step counter.
+        assertTrue(
+            "browse cards hold no client-side FSRS step",
+            DeckCard::class.java.declaredFields.none { it.name == "step" },
+        )
     }
 
     private fun browseCard(
         id: Long,
         chapter: String = CHAPTER,
         suspendedUntil: Instant? = null,
+        state: String = "review",
+        due: Instant? = Instant.parse("2026-09-09T08:00:00Z"),
     ) = DeckCard(
         id = id,
         type = "qa",
@@ -265,6 +282,8 @@ class DecksViewModelTest {
         chapter = chapter,
         tags = emptyList(),
         suspendedUntil = suspendedUntil,
+        state = state,
+        due = due,
     )
 
     private data class EditCall(

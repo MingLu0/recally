@@ -427,8 +427,8 @@ private fun TodayScreenLoadedPreview() {
                     needsHumanCount = 3,
                     books =
                         listOf(
-                            Deck(bookId = 1, title = "Evals for AI Engineers", total = 48, due = 6, progress = 0.62f),
-                            Deck(bookId = 2, title = "30 Agents in 30 Days", total = 83, due = 0, progress = 0.24f),
+                            Deck(bookId = 1, title = "Evals for AI Engineers", total = 48, due = 6, progress = 0.62f, chapters = 9),
+                            Deck(bookId = 2, title = "30 Agents in 30 Days", total = 83, due = 0, progress = 0.24f, chapters = 9),
                         ),
                 ),
             onStartReview = {},
@@ -501,7 +501,7 @@ private fun TodayScreenOfflinePreview() {
                     // books when a refresh fails.
                     books =
                         listOf(
-                            Deck(bookId = 1, title = "Evals for AI Engineers", total = 48, due = 6, progress = 0.62f),
+                            Deck(bookId = 1, title = "Evals for AI Engineers", total = 48, due = 6, progress = 0.62f, chapters = 9),
                         ),
                 ),
             onStartReview = {},

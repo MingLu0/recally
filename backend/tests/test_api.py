@@ -650,3 +650,176 @@ def test_approve_batch_rejects_a_malformed_body(client: TestClient) -> None:
     )
 
     assert response.status_code == 422
+
+
+# --- G5: per-card FSRS state/due on browse, chapter count on /decks (issue #172) ---
+
+
+def _book_with_chaptered_cards(
+    session: Session,
+    *,
+    chapters: list[str | None],
+    title: str = "Evals for AI Engineers",
+    external_id: str = "9781098188283",
+) -> Book:
+    """One approved card per entry in `chapters`, each on its own source highlight.
+
+    `export_position` follows list order so a test can assert the endpoint's ordering
+    is the export's, not the chapter string's.
+    """
+    book = _book(title=title, external_id=external_id)
+    session.add(book)
+    session.flush()
+    run = IngestRun(filename="g5-oreilly-annotations.csv", user_id=1)
+    session.add(run)
+    session.flush()
+    for position, chapter in enumerate(chapters):
+        highlight = Highlight(
+            book_id=book.id,
+            chapter=chapter,
+            raw_text="An LLM pipeline's behaviour only makes sense end-to-end.",
+            dedupe_key=f"g5-highlight-{position}",
+            source="oreilly",
+            highlighted_at=date(2026, 6, 19),
+            export_position=position,
+            user_id=1,
+        )
+        unit = CuratedUnit(
+            ingest_run_id=run.id, curated_text="…", decision="keep", tags=[], user_id=1
+        )
+        session.add_all([highlight, unit])
+        session.flush()
+        session.add(CuratedUnitHighlight(unit_id=unit.id, highlight_id=highlight.id, user_id=1))
+        session.add(_card(unit.id, status="approved"))
+    session.commit()
+    return book
+
+
+def test_book_cards_include_state_and_due_for_a_scheduled_card(
+    client: TestClient, container: Container
+) -> None:
+    """A card in `review` reports its FSRS `state` and its `card_state.due`.
+
+    The book-detail row renders "Due in 4h" from this value; it is servable because
+    `card_state.due` exists, and hard rule 5 holds as long as the number comes from
+    here rather than being computed on the phone.
+    """
+    scheduled_due = datetime(2026, 9, 9, 8, 0, 0)
+    with container.session() as session:
+        book = _book_with_chaptered_cards(session, chapters=["3. Error Analysis"])
+        book_id = book.id
+        card_id = session.query(Card).one().id
+        session.add(
+            CardState(
+                card_id=card_id,
+                state="review",
+                step=None,
+                due=scheduled_due,
+                last_review=datetime(2026, 9, 4, 8, 0, 0),
+                user_id=1,
+            )
+        )
+        session.commit()
+
+    body = client.get(f"/decks/{book_id}/cards", headers={"X-API-Key": TEST_API_KEY}).json()
+
+    assert len(body["cards"]) == 1
+    card = body["cards"][0]
+    assert card["state"] == "review"
+    assert card["due"] == "2026-09-09T08:00:00Z"
+    # The documented shape is unchanged around the two new fields.
+    assert card["id"] == card_id
+    assert card["type"] == "qa"
+    assert card["chapter"] == "3. Error Analysis"
+
+
+def test_book_cards_omit_due_for_a_card_at_learning_step_zero(
+    client: TestClient, container: Container
+) -> None:
+    """A never-reviewed card reports `due: null`, not the approval timestamp.
+
+    Approval writes `card_state` at `learning` step 0 due immediately, so the stored
+    `due` for such a card is an availability marker, not an FSRS-scheduled date. The
+    browse row must show no date rather than a fabricated one.
+    """
+    with container.session() as session:
+        book = _book_with_chaptered_cards(session, chapters=["3. Error Analysis"])
+        book_id = book.id
+        card_id = session.query(Card).one().id
+        session.add(
+            CardState(
+                card_id=card_id,
+                state="learning",
+                step=0,
+                due=datetime(2026, 9, 6, 12, 0, 0),
+                last_review=None,
+                user_id=1,
+            )
+        )
+        session.commit()
+
+    body = client.get(f"/decks/{book_id}/cards", headers={"X-API-Key": TEST_API_KEY}).json()
+
+    card = body["cards"][0]
+    assert card["state"] == "learning"
+    assert card["due"] is None, "a fresh card has no scheduled due date to report"
+
+
+def test_book_cards_respect_the_chapter_filter(client: TestClient, container: Container) -> None:
+    """`?chapter=` narrows the list without changing any card's shape."""
+    with container.session() as session:
+        book = _book_with_chaptered_cards(
+            session, chapters=["3. Error Analysis", "4. Evaluators", "3. Error Analysis"]
+        )
+        book_id = book.id
+        for card in session.query(Card).order_by(Card.id).all():
+            session.add(
+                CardState(
+                    card_id=card.id,
+                    state="review",
+                    due=datetime(2026, 9, 9, 8, 0, 0),
+                    last_review=datetime(2026, 9, 4, 8, 0, 0),
+                    user_id=1,
+                )
+            )
+        session.commit()
+
+    unfiltered = client.get(f"/decks/{book_id}/cards", headers={"X-API-Key": TEST_API_KEY}).json()
+    filtered = client.get(
+        f"/decks/{book_id}/cards",
+        params={"chapter": "3. Error Analysis"},
+        headers={"X-API-Key": TEST_API_KEY},
+    ).json()
+
+    assert len(unfiltered["cards"]) == 3
+    assert len(filtered["cards"]) == 2
+    assert {card["chapter"] for card in filtered["cards"]} == {"3. Error Analysis"}
+    # Same keys, same values per card — the filter selects rows, it does not reshape them.
+    assert sorted(filtered["cards"][0]) == sorted(unfiltered["cards"][0])
+    by_id = {card["id"]: card for card in unfiltered["cards"]}
+    assert all(card == by_id[card["id"]] for card in filtered["cards"])
+
+
+def test_decks_report_a_chapter_count(client: TestClient, container: Container) -> None:
+    """The Decks row's "48 cards · 9 chapters": distinct chapters over approved cards."""
+    with container.session() as session:
+        _book_with_chaptered_cards(session, chapters=[f"{n}. Chapter" for n in range(1, 10)])
+
+    body = client.get("/decks", headers={"X-API-Key": TEST_API_KEY}).json()
+
+    assert body["decks"][0]["total"] == 9
+    assert body["decks"][0]["chapters"] == 9
+
+
+def test_decks_chapter_count_is_zero_for_an_empty_book(
+    client: TestClient, container: Container
+) -> None:
+    """A book with no approved cards reports 0 chapters, as `progress` reports 0.0."""
+    with container.session() as session:
+        session.add(_book(title="Evals for AI Engineers", external_id="9781098188283"))
+        session.commit()
+
+    response = client.get("/decks", headers={"X-API-Key": TEST_API_KEY})
+
+    assert response.status_code == 200
+    assert response.json()["decks"][0]["chapters"] == 0
