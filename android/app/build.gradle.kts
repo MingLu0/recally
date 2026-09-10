@@ -93,9 +93,8 @@ android {
 
     testOptions {
         unitTests {
-            // Robolectric compose tests (ChapterHeaderTest, the approve-screen
-            // tests) need the merged resources, the manifest and the
-            // ui-test-manifest ComponentActivity on the unit-test classpath.
+            // Robolectric compose tests (ChapterHeaderTest) need the merged
+            // resources and manifest on the unit-test classpath.
             isIncludeAndroidResources = true
         }
     }
