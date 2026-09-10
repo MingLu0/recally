@@ -216,9 +216,10 @@ class DecksViewModel
         private fun refreshBook(currentBookId: Long) {
             viewModelScope.launch {
                 mutableUiState.update { it.copy(isLoading = true) }
-                // The cards endpoint does not return the book's title; the
-                // documented way to name the header is the decks list.
-                resolveBookTitle(currentBookId)
+                // The cards endpoint returns neither the book's title nor its
+                // progress/due; the documented way to fill the header is the
+                // decks list (issue #152).
+                resolveBookHeader(currentBookId)
                 when (val result = deckRepository.deckCards(currentBookId, chapter = null)) {
                     is Result.Success -> {
                         val chapters =
@@ -260,12 +261,16 @@ class DecksViewModel
             }
         }
 
-        /** Best effort — a missing title never blocks the card list. */
-        private suspend fun resolveBookTitle(currentBookId: Long) {
+        /** Best effort — a missing header never blocks the card list. */
+        private suspend fun resolveBookHeader(currentBookId: Long) {
             val result = deckRepository.decks()
             if (result is Result.Success) {
-                val title = result.data.firstOrNull { it.bookId == currentBookId }?.title
-                if (title != null) mutableUiState.update { it.copy(bookTitle = title) }
+                val deck = result.data.firstOrNull { it.bookId == currentBookId }
+                if (deck != null) {
+                    mutableUiState.update {
+                        it.copy(bookTitle = deck.title, bookDue = deck.due, bookProgress = deck.progress)
+                    }
+                }
             }
         }
     }
