@@ -1,11 +1,15 @@
 package dev.recally.ui.screens.settings
 
+import dev.recally.data.sync.RatingOutbox
+import dev.recally.domain.model.ReviewRating
 import dev.recally.domain.repository.ConnectionTester
 import dev.recally.domain.repository.Result
 import dev.recally.domain.repository.SettingsRepository
 import dev.recally.domain.repository.StoredConnection
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -74,13 +78,29 @@ class SettingsViewModelTest {
         override suspend fun test(): Result<Unit> = result
     }
 
+    /**
+     * In-memory [RatingOutbox]; [queuedCountFlow] stands in for the DAO's
+     * live count, the same seam the review session's tests use (#115).
+     */
+    private class FakeRatingOutbox(
+        initialCount: Int,
+    ) : RatingOutbox {
+        val queuedCountFlow = MutableStateFlow(initialCount)
+
+        override suspend fun record(rating: ReviewRating) = Unit
+
+        override fun queuedCount(): Flow<Int> = queuedCountFlow
+    }
+
     private fun viewModelWith(
         testResult: Result<Unit>,
         repository: FakeSettingsRepository = FakeSettingsRepository(),
+        ratingOutbox: FakeRatingOutbox = FakeRatingOutbox(0),
     ): SettingsViewModel =
         SettingsViewModel(
             settings = repository,
             connectionTester = FakeConnectionTester(testResult),
+            ratingOutbox = ratingOutbox,
             appVersion = "0.1.0-test",
             ioDispatcher = testDispatcher,
         )
@@ -195,6 +215,32 @@ class SettingsViewModelTest {
             viewModel.testConnection()
             advanceUntilIdle()
             assertNull("the mask sentinel is never saved as the key", repository.savedApiKey)
+        }
+
+    @Test
+    fun `queued ratings count reflects the outbox`() =
+        runTest {
+            // The row reads the DAO's live count and nothing else, so it
+            // cannot disagree with what is actually stored (issue #151).
+            val ratingOutbox = FakeRatingOutbox(3)
+            val viewModel = viewModelWith(Result.Success(Unit), ratingOutbox = ratingOutbox)
+            advanceUntilIdle()
+            assertEquals(3, viewModel.uiState.value.queuedRatingsCount)
+
+            ratingOutbox.queuedCountFlow.value = 1
+            advanceUntilIdle()
+            assertEquals(1, viewModel.uiState.value.queuedRatingsCount)
+        }
+
+    @Test
+    fun `empty outbox reads as all synced`() =
+        runTest {
+            val viewModel = viewModelWith(Result.Success(Unit), ratingOutbox = FakeRatingOutbox(0))
+            advanceUntilIdle()
+
+            val state = viewModel.uiState.value
+            assertEquals(0, state.queuedRatingsCount)
+            assertEquals("All synced", state.queuedRatingsSummary)
         }
 
     @Test
