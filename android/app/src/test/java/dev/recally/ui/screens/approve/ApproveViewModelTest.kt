@@ -1,11 +1,13 @@
 package dev.recally.ui.screens.approve
 
+import androidx.lifecycle.SavedStateHandle
 import dev.recally.domain.model.ApproveBatchResult
 import dev.recally.domain.model.PendingCard
 import dev.recally.domain.model.PendingCounts
 import dev.recally.domain.model.PendingQueue
 import dev.recally.domain.repository.ApprovalRepository
 import dev.recally.domain.repository.Result
+import dev.recally.ui.navigation.ARG_FILTER
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -96,11 +98,40 @@ class ApproveViewModelTest {
         }
     }
 
-    private fun viewModelWith(repository: FakeApprovalRepository): ApproveViewModel =
+    private fun viewModelWith(
+        repository: FakeApprovalRepository,
+        savedStateHandle: SavedStateHandle = SavedStateHandle(),
+    ): ApproveViewModel =
         ApproveViewModel(
             approvalRepository = repository,
             ioDispatcher = testDispatcher,
+            savedStateHandle = savedStateHandle,
         )
+
+    @Test
+    fun test_initial_filter_defaults_to_all() =
+        runTest {
+            // Every existing entry point navigates to Approve with no filter
+            // argument; those must be unchanged by issue #178.
+            val viewModel = viewModelWith(FakeApprovalRepository(Result.Success(PendingQueue(emptyList(), PendingCounts(0, 0)))))
+
+            assertEquals(QueueFilter.ALL, viewModel.uiState.value.filter)
+        }
+
+    @Test
+    fun test_initial_filter_honours_needs_you_argument() =
+        runTest {
+            // The assertion is on the FIRST emitted state, before any coroutine
+            // settles: a flash of ALL that corrects itself is the bug (#178),
+            // not the fix.
+            val viewModel =
+                viewModelWith(
+                    repository = FakeApprovalRepository(Result.Success(PendingQueue(emptyList(), PendingCounts(0, 0)))),
+                    savedStateHandle = SavedStateHandle(mapOf(ARG_FILTER to QueueFilter.NEEDS_YOU.name)),
+                )
+
+            assertEquals(QueueFilter.NEEDS_YOU, viewModel.uiState.value.filter)
+        }
 
     private fun loadedViewModel(
         cards: List<PendingCard>,
