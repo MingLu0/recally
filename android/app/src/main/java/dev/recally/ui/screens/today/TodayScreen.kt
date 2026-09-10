@@ -32,6 +32,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.addPathNodes
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.recally.domain.model.Deck
@@ -102,7 +103,7 @@ fun TodayScreen(
                         nextDueLabel = uiState.nextDueLabel,
                     )
             }
-            ApprovalQueueRow(
+            WaitingForYouSection(
                 pendingReviewCount = uiState.pendingReviewCount,
                 needsHumanCount = uiState.needsHumanCount,
                 onOpenApprove = onOpenApprove,
@@ -151,77 +152,101 @@ private fun WordmarkHeader() {
 }
 
 /**
- * Entrance to the approval queue. Approve is entered from Today rather than
- * from the bottom bar (docs/android.md, "Navigation") — it is a modal task you
- * finish and leave. The tiles carry the collection-wide `counts` of
- * `GET /cards/pending` (G1, issue #132) — never a list length, since the
- * queue requires connectivity and Today must render before it is reachable;
- * while the counts are unknown the row shows its bare label.
+ * The "Waiting for you" section (artboard `RcWhite.dc.html`): a section title
+ * over a two-column grid of queue-bucket tiles. Approve is entered from here
+ * rather than from the bottom bar (docs/android.md, "Navigation") — it is a
+ * modal task you finish and leave.
+ *
+ * The tiles carry the collection-wide `counts` of `GET /cards/pending` (G1,
+ * issue #132) — never a list length, since the queue requires connectivity and
+ * Today must render before it is reachable. While the counts are unknown the
+ * whole section is absent: a heading with nothing under it reads as an error.
+ *
+ * The "need you" tile is dropped at zero — `needs_human` is an exception
+ * state, and a permanent "0 need you" tile makes the common case look like it
+ * has an outstanding problem.
  */
 @Composable
-private fun ApprovalQueueRow(
+private fun WaitingForYouSection(
     pendingReviewCount: Int?,
     needsHumanCount: Int?,
     onOpenApprove: () -> Unit,
 ) {
+    if (pendingReviewCount == null) return
     val colors = MaterialTheme.recallyColors
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .border(1.dp, colors.line, RoundedCornerShape(RecallyRadius.md))
-                .clickable(onClick = onOpenApprove)
-                .padding(
-                    horizontal = RecallySpacing.cardPadding,
-                    vertical = RecallySpacing.lg,
-                ),
-    ) {
+    Column(verticalArrangement = Arrangement.spacedBy(RecallySpacing.md)) {
         Text(
-            text = "Approval queue",
-            style = MaterialTheme.typography.labelLarge,
+            text = "Waiting for you",
+            style = MaterialTheme.typography.titleLarge,
             color = colors.ink,
         )
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(RecallySpacing.sm),
-        ) {
-            if (pendingReviewCount != null) {
-                CountTile(
-                    text = "$pendingReviewCount to approve",
-                    textColor = colors.primary,
-                    fill = colors.primaryWash,
-                )
-            }
+        Row(horizontalArrangement = Arrangement.spacedBy(RecallySpacing.md)) {
+            QueueCountTile(
+                count = pendingReviewCount,
+                label = "to approve",
+                accent = colors.primary,
+                onClick = onOpenApprove,
+                modifier = Modifier.weight(1f),
+            )
             if (needsHumanCount != null && needsHumanCount > 0) {
-                CountTile(
-                    text = "$needsHumanCount need you",
-                    textColor = colors.danger,
-                    fill = colors.dangerWash,
+                QueueCountTile(
+                    count = needsHumanCount,
+                    label = "need you",
+                    accent = colors.danger,
+                    onClick = onOpenApprove,
+                    modifier = Modifier.weight(1f),
                 )
+            } else {
+                Spacer(Modifier.weight(1f))
             }
-            Text(text = "›", style = MaterialTheme.typography.labelLarge, color = colors.inkFaint)
         }
     }
 }
 
-/** One queue-bucket tile on the approval-queue row (design-system.md, Today). */
+/**
+ * One queue-bucket tile: a colour-washed dot, then the metric stacked over its
+ * label. The number is `ink` and the label `ink-soft` — colour lands on the
+ * mark, not the figure, because both tiles are counts of the same kind and a
+ * coloured number would read as a status (design-system.md, "Rules").
+ */
 @Composable
-private fun CountTile(
-    text: String,
-    textColor: Color,
-    fill: Color,
+private fun QueueCountTile(
+    count: Int,
+    label: String,
+    accent: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.labelSmall,
-        color = textColor,
+    val colors = MaterialTheme.recallyColors
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(RecallySpacing.md),
         modifier =
-            Modifier
-                .background(fill, RoundedCornerShape(RecallyRadius.sm))
-                .padding(horizontal = RecallySpacing.sm, vertical = RecallySpacing.xs),
-    )
+            modifier
+                .border(1.dp, colors.line, RoundedCornerShape(RecallyRadius.md))
+                .clickable(onClick = onClick)
+                .padding(RecallySpacing.cardPadding),
+    ) {
+        Box(
+            modifier =
+                Modifier
+                    .size(10.dp)
+                    .background(accent, RoundedCornerShape(RecallyRadius.pill)),
+        )
+        Column {
+            Text(
+                text = "$count",
+                style = MaterialTheme.typography.titleMedium,
+                color = colors.ink,
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Normal,
+                color = colors.inkSoft,
+            )
+        }
+    }
 }
 
 /**
