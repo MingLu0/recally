@@ -114,6 +114,7 @@ fun TodayScreen(
                 YourBooksRail(
                     books = uiState.books,
                     failedToLoad = uiState.booksFailedToLoad,
+                    failureMessage = uiState.booksFailureMessage,
                     onBookClick = onBookClick,
                     onRetry = onRetry,
                 )
@@ -283,6 +284,7 @@ private fun QueueCountTile(
 private fun YourBooksRail(
     books: List<Deck>,
     failedToLoad: Boolean,
+    failureMessage: String? = null,
     onBookClick: (Long) -> Unit,
     onRetry: () -> Unit,
 ) {
@@ -300,7 +302,7 @@ private fun YourBooksRail(
         )
         Spacer(Modifier.height(RecallySpacing.sm))
         if (books.isEmpty() && failedToLoad) {
-            BooksFailureStrip(onRetry = onRetry)
+            BooksFailureStrip(message = failureMessage, onRetry = onRetry)
         } else {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(RecallySpacing.md)) {
                 items(books, key = { it.bookId }) { deck ->
@@ -315,10 +317,15 @@ private fun YourBooksRail(
  * The rail's own failure state (design-system.md, "Your books rail"): a muted
  * line inside the section with a quiet retry, never a screen-level error
  * banner. `onRetry` is Today's existing refresh — the rail has no fetch of
- * its own.
+ * its own. [message] replaces the generic line when the failure can explain
+ * itself — a version-skewed backend names the fields it stopped sending
+ * (issue #195) — and is null for one that cannot.
  */
 @Composable
-private fun BooksFailureStrip(onRetry: () -> Unit) {
+private fun BooksFailureStrip(
+    message: String?,
+    onRetry: () -> Unit,
+) {
     val colors = MaterialTheme.recallyColors
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -330,7 +337,7 @@ private fun BooksFailureStrip(onRetry: () -> Unit) {
                 .padding(RecallySpacing.cardPadding),
     ) {
         Text(
-            text = "Couldn't load your books",
+            text = message ?: "Couldn't load your books",
             style = MaterialTheme.typography.bodyMedium,
             color = colors.inkMuted,
             modifier = Modifier.weight(1f),
