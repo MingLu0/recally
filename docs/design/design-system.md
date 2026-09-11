@@ -141,7 +141,9 @@ A single 6dp `pill` bar with proportional fills — `success` for cards answered
 **Not a fixed segment-per-card bar.** `docs/android.md` (*Screens → 2. Review session*) re-queues Again/Hard cards inside the session, so a 12-card session produces more than 12 presentations. A fixed denominator would either jump backwards mid-session or silently drop the repeat. The header reads "6 done · 1 to repeat" rather than "7 of 12" for the same reason: **cards remaining, never a fixed total.** Derived from local session state; the server owns the real schedule.
 
 ### Chapter group header (`ui/screens/approve/ChapterHeader.kt`)
-15×20dp book-colour spine chip, then book title (`label`, 700 `ink`), then `· chapter` (`label`, 400 `ink-faint`). Groups a run of cards; the flat list from `GET /cards/pending` is grouped client-side, ordered by book, chapter, `export_position`.
+15×20dp book-colour spine chip, vertically centred against a **two-line** text column: book title on line 1 (`label`, 700 `ink`), chapter on line 2 (`label`, 400 `ink-faint`, no leading separator). Groups a run of cards; the flat list from `GET /cards/pending` is grouped client-side, ordered by book, chapter, `export_position`. An empty chapter renders the title alone, spine centred against the single line.
+
+**Two lines, decided 2026-09-11, superseding issue #146's one-line rule.** #146 put both strings on one line sharing width via `weight`, trading a ragged three-line wrap for truncation — on a long title + long chapter pair both strings hit the ellipsis and neither was readable. Each string now gets the full row width on its own line; a title longer than that still ellipsises, but only after using the whole width.
 
 ### Critique block (`ui/screens/approve/CritiqueBlock.kt`)
 `#FDF6F3` fill, 3dp `accent` left rule, radius `0 8 8 0`. Label "CRITIC" in `badge`/`warn`, body in `body-sm`/`#6B5A4F`. Visually subordinate to the card text — it is context, not content.
@@ -228,7 +230,7 @@ All ten screens are drawn. Two notes on the later ones:
 
 Three rules, all three implemented on Stats and on Today's strip:
 
-- **The caption states what it counts.** "retention 30d" alone gives the reader no way to know an `Again` from learning does not count, which is precisely why the figure reads 100% on a young collection — a card has to graduate before it can lapse. The label is **"recall"** with the qualifier **"cards you'd already learned · 30d"**. Never present the bare percentage under a bare "retention" label.
+- **The label is "retention 30d", with no qualifier on a confident sample.** Decided 2026-09-11, superseding the qualifier this section previously required. Ming's call in triage: the shorter label wins over #190's explanatory qualifier ("cards you'd already learned · 30d"), even though the figure can still read 100% on a young collection before any card has graduated to a state where it can lapse. The no-data and small-sample treatments below are unaffected — they still qualify the figure when it would otherwise mislead.
 - **No data is not zero.** Null `retention_30d` renders the no-data treatment, never "0%" (see *States* below).
 - **A small sample is qualified, not hidden.** Below `RETENTION_CONFIDENT_REVIEWS` = **20** reviews in the window the figure still renders — it is the honest number — but the qualifier is replaced with **"from N reviews · too few to read"** in `ink-faint`. One lapse in three is 67%, and 67% presented like a figure computed over hundreds reads as a trend when it is noise. The threshold is a judgement, not a statistic: 20 is where a single lapse moves the figure by 5 points rather than 33.
 

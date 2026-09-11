@@ -21,6 +21,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import kotlinx.serialization.MissingFieldException
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -543,6 +544,58 @@ class TodayViewModelTest {
             assertFalse(
                 "a loaded-but-empty library never sets the not-loaded flag",
                 emptyState.booksFailedToLoad,
+            )
+        }
+
+    @Test
+    fun test_deck_failure_message_names_a_stale_backend() =
+        runTest {
+            // Decks already explains a version-skewed backend by name (issue
+            // #195). Today's rail read the same failure as the generic
+            // "Couldn't load your books", so the one screen a human opens
+            // first said the least — it must carry the cause through too.
+            val staleBackendFailure =
+                MissingFieldException(
+                    missingFields = listOf("chapters", "truncated"),
+                    serialName = "dev.recally.data.remote.DeckDto",
+                )
+            val viewModel =
+                viewModelWith(
+                    dueResult = Result.Success(emptyDueSummary()),
+                    decksResult = Result.UnexpectedError(staleBackendFailure),
+                )
+            advanceUntilIdle()
+
+            val state = viewModel.uiState.value
+            assertTrue("a failing /decks still sets the flag", state.booksFailedToLoad)
+
+            val message =
+                requireNotNull(state.booksFailureMessage) {
+                    "a stale backend must give the rail a message, not just a flag"
+                }
+            assertTrue(
+                "the rail must name the server as out of date, got: $message",
+                message.contains("out of date", ignoreCase = true),
+            )
+            assertTrue(
+                "the rail should name the missing fields, got: $message",
+                message.contains("chapters"),
+            )
+
+            // A plain connectivity failure has no such explanation to offer and
+            // must keep the rail's own generic wording.
+            val offlineViewModel =
+                viewModelWith(
+                    dueResult = Result.Success(emptyDueSummary()),
+                    decksResult = Result.NetworkError(IOException("no route to host")),
+                )
+            advanceUntilIdle()
+
+            val offlineState = offlineViewModel.uiState.value
+            assertTrue("a network failure still sets the flag", offlineState.booksFailedToLoad)
+            assertNull(
+                "a network failure carries no stale-backend message",
+                offlineState.booksFailureMessage,
             )
         }
 

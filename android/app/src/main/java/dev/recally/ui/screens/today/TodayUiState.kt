@@ -35,6 +35,14 @@ data class TodayUiState(
      * untouched. Cleared by any successful load, empty list included.
      */
     val booksFailedToLoad: Boolean = false,
+    /**
+     * Why the rail failed, when the failure has an explanation worth showing —
+     * today only a version-skewed backend, which names itself and the fields
+     * it stopped sending (issue #195). Null for a failure with nothing useful
+     * to add, such as plain connectivity, where the rail keeps its own
+     * wording. Only ever read while [booksFailedToLoad] is true.
+     */
+    val booksFailureMessage: String? = null,
     val isOffline: Boolean = false,
     val showCheckSettingsBanner: Boolean = false,
     val errorMessage: String? = null,

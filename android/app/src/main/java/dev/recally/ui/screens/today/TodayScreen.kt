@@ -28,10 +28,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.addPathNodes
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -114,6 +116,7 @@ fun TodayScreen(
                 YourBooksRail(
                     books = uiState.books,
                     failedToLoad = uiState.booksFailedToLoad,
+                    failureMessage = uiState.booksFailureMessage,
                     onBookClick = onBookClick,
                     onRetry = onRetry,
                 )
@@ -195,7 +198,7 @@ private fun WaitingForYouSection(
             QueueCountTile(
                 count = pendingReviewCount,
                 label = "to approve",
-                accent = colors.primary,
+                icon = QueueTileIcon.TO_APPROVE,
                 onClick = { onOpenApprove(QueueFilter.ALL) },
                 modifier = Modifier.weight(1f),
             )
@@ -203,7 +206,7 @@ private fun WaitingForYouSection(
                 QueueCountTile(
                     count = needsHumanCount,
                     label = "need you",
-                    accent = colors.danger,
+                    icon = QueueTileIcon.NEEDS_HUMAN,
                     onClick = { onOpenApprove(QueueFilter.NEEDS_YOU) },
                     modifier = Modifier.weight(1f),
                 )
@@ -214,17 +217,22 @@ private fun WaitingForYouSection(
     }
 }
 
+/** Test-only hook onto the pending/needs-human tiles (issue #199). */
+internal const val QUEUE_COUNT_TILE_TAG = "queueCountTile"
+
 /**
- * One queue-bucket tile: a colour-washed dot, then the metric stacked over its
- * label. The number is `ink` and the label `ink-soft` — colour lands on the
- * mark, not the figure, because both tiles are counts of the same kind and a
- * coloured number would read as a status (design-system.md, "Rules").
+ * One queue-bucket tile: a 26dp composite icon, then the metric stacked over
+ * its label. The number is `ink` and the label `ink-soft` — colour lands on
+ * the icon, not the figure, because both tiles are counts of the same kind
+ * and a coloured number would read as a status (design-system.md, "Rules").
+ * The icon is multi-colour (issue #198), so it renders via [Image], never a
+ * single-tint [androidx.compose.material3.Icon].
  */
 @Composable
-private fun QueueCountTile(
+internal fun QueueCountTile(
     count: Int,
     label: String,
-    accent: Color,
+    icon: QueueTileIcon,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -234,15 +242,21 @@ private fun QueueCountTile(
         horizontalArrangement = Arrangement.spacedBy(RecallySpacing.md),
         modifier =
             modifier
+                .testTag(QUEUE_COUNT_TILE_TAG)
+                .clip(RoundedCornerShape(RecallyRadius.md))
                 .border(1.dp, colors.line, RoundedCornerShape(RecallyRadius.md))
                 .clickable(onClick = onClick)
                 .padding(RecallySpacing.cardPadding),
     ) {
-        Box(
-            modifier =
-                Modifier
-                    .size(10.dp)
-                    .background(accent, RoundedCornerShape(RecallyRadius.pill)),
+        val iconVector =
+            when (icon) {
+                QueueTileIcon.TO_APPROVE -> toApproveTileIcon()
+                QueueTileIcon.NEEDS_HUMAN -> needsHumanTileIcon(discFill = colors.warnWash, strokeColor = colors.warn)
+            }
+        Image(
+            imageVector = iconVector,
+            contentDescription = "$label icon",
+            modifier = Modifier.size(26.dp),
         )
         Column {
             Text(
@@ -283,6 +297,7 @@ private fun QueueCountTile(
 private fun YourBooksRail(
     books: List<Deck>,
     failedToLoad: Boolean,
+    failureMessage: String? = null,
     onBookClick: (Long) -> Unit,
     onRetry: () -> Unit,
 ) {
@@ -300,7 +315,7 @@ private fun YourBooksRail(
         )
         Spacer(Modifier.height(RecallySpacing.sm))
         if (books.isEmpty() && failedToLoad) {
-            BooksFailureStrip(onRetry = onRetry)
+            BooksFailureStrip(message = failureMessage, onRetry = onRetry)
         } else {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(RecallySpacing.md)) {
                 items(books, key = { it.bookId }) { deck ->
@@ -315,10 +330,15 @@ private fun YourBooksRail(
  * The rail's own failure state (design-system.md, "Your books rail"): a muted
  * line inside the section with a quiet retry, never a screen-level error
  * banner. `onRetry` is Today's existing refresh — the rail has no fetch of
- * its own.
+ * its own. [message] replaces the generic line when the failure can explain
+ * itself — a version-skewed backend names the fields it stopped sending
+ * (issue #195) — and is null for one that cannot.
  */
 @Composable
-private fun BooksFailureStrip(onRetry: () -> Unit) {
+private fun BooksFailureStrip(
+    message: String?,
+    onRetry: () -> Unit,
+) {
     val colors = MaterialTheme.recallyColors
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -330,7 +350,7 @@ private fun BooksFailureStrip(onRetry: () -> Unit) {
                 .padding(RecallySpacing.cardPadding),
     ) {
         Text(
-            text = "Couldn't load your books",
+            text = message ?: "Couldn't load your books",
             style = MaterialTheme.typography.bodyMedium,
             color = colors.inkMuted,
             modifier = Modifier.weight(1f),
@@ -358,6 +378,7 @@ private fun BookRailCard(
         modifier =
             Modifier
                 .width(190.dp)
+                .clip(RoundedCornerShape(RecallyRadius.md))
                 .border(1.dp, colors.line, RoundedCornerShape(RecallyRadius.md))
                 .clickable(onClick = onClick)
                 .padding(RecallySpacing.cardPadding),
