@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -14,6 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import dev.recally.ui.theme.CombinedPreviews
 import dev.recally.ui.theme.RecallyRadius
@@ -53,7 +55,8 @@ fun SessionProgress(
                     .weight(1f)
                     .height(6.dp)
                     .clip(RoundedCornerShape(RecallyRadius.pill))
-                    .background(colors.track),
+                    .background(colors.track)
+                    .testTag("session_progress_track"),
         ) {
             Row(modifier = Modifier.fillMaxHeight()) {
                 if (doneCount > 0) {
@@ -62,7 +65,8 @@ fun SessionProgress(
                             Modifier
                                 .weight(doneWeight)
                                 .fillMaxHeight()
-                                .background(colors.success),
+                                .background(colors.success)
+                                .testTag("session_progress_done"),
                     )
                 }
                 if (toRepeatCount > 0) {
@@ -71,8 +75,13 @@ fun SessionProgress(
                             Modifier
                                 .weight(repeatWeight)
                                 .fillMaxHeight()
-                                .background(colors.warn),
+                                .background(colors.warn)
+                                .testTag("session_progress_repeat"),
                     )
+                }
+                val remainderWeight = (1f - doneWeight - repeatWeight).coerceAtLeast(0f)
+                if (remainderWeight > 0f) {
+                    Spacer(modifier = Modifier.weight(remainderWeight))
                 }
             }
         }
