@@ -18,8 +18,9 @@ Then claim the issue before doing anything else:
 ## Do the work
 
 1. `gh issue view <n>` and read it in full.
-2. Read `AGENTS.md` and every doc it points at for this area. The docs are the
-   spec; if the issue and a doc disagree, the doc wins.
+2. Read `AGENTS.md`, the `AGENTS.md` of the module you are touching
+   (`backend/` or `android/`), and every doc they point at for this area. The
+   docs are the spec; if the issue and a doc disagree, the doc wins.
 3. TDD against the issue's **Tests** gate. That gate is the acceptance criterion.
 4. Commit on a feature branch named per `AGENTS.md` (`feat/…`, `fix/…`, `docs/…`).
    Put `Closes #<n>` in the PR body so the issue closes on merge.

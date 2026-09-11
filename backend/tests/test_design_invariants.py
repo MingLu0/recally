@@ -1,6 +1,6 @@
-"""Design-invariant tests: the structural rules of AGENTS.md / docs/backend.md, as code.
+"""Design-invariant tests: the structural rules of backend/AGENTS.md & docs/backend.md, as code.
 
-AGENTS.md, "Design invariants" says violations of these rules are bugs, not style.
+backend/AGENTS.md, "Design invariants" says violations of these rules are bugs, not style.
 mypy strict checks that a variant satisfies its `Protocol`; it cannot check import
 direction or who writes `cards.status`. These tests walk the source tree with `ast`
 (never text search, so formatting cannot defeat a rule, and string literals and
@@ -19,8 +19,10 @@ PACKAGE_ROOT = Path(__file__).resolve().parents[1] / "src" / "recally"
 AGENT_ROLES = ("curator", "writer", "critic", "learner")
 
 # Where each rule is written down, for failure messages.
-REF_IMPORT_DIRECTION = "docs/backend.md, 'Module rules' 1; AGENTS.md, 'Design invariants'"
-REF_AGENT_SEAM = "docs/decisions/007-agent-protocol-registry.md; AGENTS.md, 'Design invariants'"
+REF_IMPORT_DIRECTION = "docs/backend.md, 'Module rules' 1; backend/AGENTS.md, 'Design invariants'"
+REF_AGENT_SEAM = (
+    "docs/decisions/007-agent-protocol-registry.md; backend/AGENTS.md, 'Design invariants'"
+)
 REF_LLM = "AGENTS.md, hard rule 3; docs/decisions/003-litellm-provider-agnostic.md"
 REF_STATUS = "AGENTS.md, hard rules 1 and 9; docs/backend.md, 'Module rules' 2"
 
