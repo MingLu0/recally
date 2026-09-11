@@ -196,7 +196,7 @@ private fun WaitingForYouSection(
             QueueCountTile(
                 count = pendingReviewCount,
                 label = "to approve",
-                accent = colors.primary,
+                icon = QueueTileIcon.TO_APPROVE,
                 onClick = { onOpenApprove(QueueFilter.ALL) },
                 modifier = Modifier.weight(1f),
             )
@@ -204,7 +204,7 @@ private fun WaitingForYouSection(
                 QueueCountTile(
                     count = needsHumanCount,
                     label = "need you",
-                    accent = colors.danger,
+                    icon = QueueTileIcon.NEEDS_HUMAN,
                     onClick = { onOpenApprove(QueueFilter.NEEDS_YOU) },
                     modifier = Modifier.weight(1f),
                 )
@@ -216,16 +216,18 @@ private fun WaitingForYouSection(
 }
 
 /**
- * One queue-bucket tile: a colour-washed dot, then the metric stacked over its
- * label. The number is `ink` and the label `ink-soft` — colour lands on the
- * mark, not the figure, because both tiles are counts of the same kind and a
- * coloured number would read as a status (design-system.md, "Rules").
+ * One queue-bucket tile: a 26dp composite icon, then the metric stacked over
+ * its label. The number is `ink` and the label `ink-soft` — colour lands on
+ * the icon, not the figure, because both tiles are counts of the same kind
+ * and a coloured number would read as a status (design-system.md, "Rules").
+ * The icon is multi-colour (issue #198), so it renders via [Image], never a
+ * single-tint [androidx.compose.material3.Icon].
  */
 @Composable
-private fun QueueCountTile(
+internal fun QueueCountTile(
     count: Int,
     label: String,
-    accent: Color,
+    icon: QueueTileIcon,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -239,11 +241,15 @@ private fun QueueCountTile(
                 .clickable(onClick = onClick)
                 .padding(RecallySpacing.cardPadding),
     ) {
-        Box(
-            modifier =
-                Modifier
-                    .size(10.dp)
-                    .background(accent, RoundedCornerShape(RecallyRadius.pill)),
+        val iconVector =
+            when (icon) {
+                QueueTileIcon.TO_APPROVE -> toApproveTileIcon()
+                QueueTileIcon.NEEDS_HUMAN -> needsHumanTileIcon(discFill = colors.warnWash, strokeColor = colors.warn)
+            }
+        Image(
+            imageVector = iconVector,
+            contentDescription = "$label icon",
+            modifier = Modifier.size(26.dp),
         )
         Column {
             Text(
