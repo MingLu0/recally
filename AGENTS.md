@@ -1,14 +1,17 @@
 # AGENTS.md
 
-Guidance for AI coding agents (Claude Code, Codex, Cursor, Copilot, etc.) working in this repo. `CLAUDE.md` imports this file, so keep everything here and do not duplicate it there.
+Guidance for AI coding agents (Claude Code, Codex, Cursor, Copilot, etc.) working in this repo. `CLAUDE.md` imports this file, so keep agent guidance in the `AGENTS.md` files and do not duplicate it there.
+
+Rules that apply to only one module live in the nested file for that module — agents read the nearest one up the tree. Put a rule here only if it is cross-cutting.
+
+- `backend/AGENTS.md` — Python, the agent pipeline, the design invariants
+- `android/AGENTS.md` — Kotlin, Compose, distribution
 
 ## What this project is
 
 Recally turns O'Reilly reading highlights into flashcards. A watched folder picks up `*oreilly-annotations*.csv` exports, an LLM pipeline (Curator → Writer ⇄ Critic) writes atomic Q&A and cloze cards, a human approval queue gates them, FSRS schedules reviews, and a native Android app delivers them with FCM push reminders. Single user (Ming) for v1, but every table carries `user_id`.
 
-## Current state
-
-**Step 1 in progress.** `backend/` has the tooling baseline (uv, ruff, mypy, pytest, CI), the SQLAlchemy models plus the initial Alembic migration for every table in `docs/data-model.md`, the FastAPI app (`container.py`, `X-API-Key` auth, problem+json errors, `GET /ingest/status` + `GET /decks`), and a debounced watchdog watcher for completed O'Reilly exports. The O'Reilly CSV adapter, the annotation-UUID dedupe and the committed fixtures are in. `android/` has the step 4a foundation: the buildable Gradle project (Compose BOM + Material 3, Hilt, Navigation Compose), Hilt wired (`RecallyApplication`, `di/DispatchersModule`), and the design system in code under `ui/theme/` (light/dark colour schemes, Inter Tight type scale, spacing/radius constants, `@CombinedPreviews`, fixed book-cover colours), with `MainActivity` + `AppScaffold` + `RecallyNavHost` wired to sealed routes. Step 4d added the data layer: `domain/model` + `domain/repository` (interfaces and the sealed `Result`), Room entities/DAOs/`RecallyDatabase` caching due cards, the minimal `RecallyApi` the repositories consume, and the Hilt network/database/repository modules (base URL is an unconfigured sentinel until 4c/4e wire settings). The screens land from step 4b onwards. Build order is in `docs/roadmap.md`. When code lands, update the *Commands* section below.
+Build order and per-step gates are in `docs/roadmap.md`; what is built is what the closed issues say. Do not restate progress here — it rots.
 
 ## Repo layout
 
@@ -19,6 +22,8 @@ data/       local SQLite db + ingest drop zone (gitignored, never commit)
 docs/       product & engineering docs (source of truth for design)
 docs/decisions/   ADRs, numbered 00N-slug.md
 ```
+
+`data/` is gitignored and absent from a fresh clone or worktree. Create it before running anything that ingests.
 
 ## Read these before designing anything
 
@@ -40,7 +45,7 @@ The docs are the spec. Do not invent behaviour that contradicts them; if a chang
 
 ## Hard rules
 
-These come from the PRD and ADRs. Do not work around them.
+These come from the PRD and ADRs. Do not work around them. Rules 2, 3, 6, 7, 9, 10 and 12 are enforced in the backend — the detail is in `backend/AGENTS.md`.
 
 1. **Nothing enters FSRS scheduling without human approval.** `cards.status` must pass through `pending_review` or `needs_human` → `approved`. The only exception is the `AUTO_APPROVE_ROUND1_ACCEPT` config flag, default **off**.
 2. **Ingestion, dedupe, FSRS and the notifier are deterministic. No LLM calls there.** Only Curator, Writer, Critic and Learner stage B use an LLM (`docs/agents.md`, "What is LLM vs deterministic").
@@ -55,37 +60,7 @@ These come from the PRD and ADRs. Do not work around them.
 11. **Plain Python, no orchestration framework** (ADR-001). Do not add LangGraph, CrewAI, etc. without a new ADR.
 12. **Watcher acts on `on_moved` (browser rename after download), not `on_created`**, with a short debounce.
 
-## Design invariants
-
-Structural rules from `docs/backend.md` and ADR-007. Verify these in any backend change; violations are bugs, not style.
-
-- Nothing below `api/` imports FastAPI. The pipeline also runs from the watcher, APScheduler, the CLI and `POST /jobs/run`.
-- Agents implement the role protocols in `agents/base.py` and hold **no DB session**; they return typed results. All persistence (statuses, `processed`, `truncated` write-backs, orphan cleanup) is done by `pipeline.py`.
-- `pipeline.py` resolves agents through `agents/registry.py` (`(role, variant)` + `AGENT_*` env vars), never by direct import.
-- `container.py` is the composition root for every entry point; `api/deps.py` only pulls from it.
-- `llm_calls.agent` records `role/variant` — the trace must name the implementation.
-- A new ingestion source is a new file in `ingest/adapters/` plus a documented dedupe-key contract, never a branch in the pipeline.
-
 ## Conventions
-
-### Backend (Python)
-- Python ≥ 3.10 (required by `py-fsrs` 6.x). FastAPI, SQLAlchemy, Alembic, `py-fsrs`, LiteLLM, APScheduler 3.x (not 4.x pre-release), `watchdog`.
-- Each agent is a module with one LLM call, a prompt file, and typed structured input/output. Keep prompts in files, not inline strings.
-- Ingestion adapters implement `BaseAdapter.parse(file) -> list[NormalizedHighlight]`. Add new sources (Kindle) as new adapters, never by special-casing the pipeline.
-- `truncated` is a property of a `highlights` row. Units and cards do not store it; derive "any source highlight truncated" when needed.
-- Auth is a single `X-API-Key` header from env. Secrets live in `.env` (gitignored). Never hard-code keys or commit `.env*`.
-- Errors return problem+json: `{ "status": 422, "detail": "..." }`.
-- Costs are stored as `cost_microusd int` (1 USD = 1,000,000) everywhere (`docs/data-model.md`). Do not introduce cents or float dollars.
-- Config comes from env vars, named in `docs/config.md`. Do not invent new names; add them to that doc in the same change.
-- Tooling: `uv` (interpreter pinned by `.python-version`, `uv.lock` committed), `ruff` (lint + format), `mypy` strict on `src/recally/`, `pytest`. Policy in `docs/backend.md`, "Tooling". A pre-commit hook runs ruff only; Bandit and pip-audit run in CI, not locally.
-- Tests never call a real LLM provider. Agents are tested by mocking `llm.py` (or LiteLLM's mock response) with recorded outputs. Ingestion tests run against the committed fixtures in `backend/tests/fixtures/` (see `docs/roadmap.md`, step 1). Every roadmap step has a *Tests* gate (merge requirement, output pasted in the PR) and a *You verify* gate the human runs after merge.
-
-### Android (Kotlin)
-- Jetpack Compose + Material 3, Retrofit + OkHttp, Room, Hilt, FCM. Package root `dev.recally`, structure in `docs/android.md`.
-- Clean architecture with the scaffold pattern (`docs/android.md`, "Architecture"). Screen composables are pure: `UiState` in, callbacks out — no `hiltViewModel()`, no `NavController`, no flow collection inside a screen. ViewModels are instantiated at their `NavHost` route entry, which also owns the navigation decision. One immutable `UiState` per screen. ViewModels talk to repository interfaces, never to a DAO or Retrofit service. Every screen composable and shared component ships a private `@CombinedPreviews` preview function with its `UiState` built inline.
-- Offline-first: Room caches due cards; ratings are queued locally with timestamps and synced later. Approval queue requires connectivity.
-- Capture `response_ms` (flip-to-rate duration) on every rating.
-- Use injected dispatchers, not hard-coded `Dispatchers.IO`. Include exception handlers on coroutines.
 
 ### Docs
 - A design or technology change needs an ADR in `docs/decisions/` (next number, `Status`, `Date`, Context / Decision / Rationale / Consequences). Update the doc that the ADR affects and the index in `docs/decisions/README.md` in the same change. Small local decisions get a one-sentence "why" inline next to the item instead; the test is whether reversing it would touch more than one doc.
@@ -98,47 +73,13 @@ Structural rules from `docs/backend.md` and ADR-007. Verify these in any backend
 
 ## Commands
 
+Module commands are in `backend/AGENTS.md` and `android/AGENTS.md`.
+
 ```
-# backend
-cd backend && uv sync
-uv run pytest
-uv run ruff check . && uv run ruff format --check .
-uv run mypy src/
-uv run alembic upgrade head
-uv run uvicorn recally.main:app --reload
-# Run the watcher by itself until the FastAPI lifespan owns it.
-uv run python -m recally.ingest.watcher
-# The validation-checkpoint client (step 3f): talks to the container directly, no server.
-uv run recally --help
-
-# android
-cd android && ./gradlew ktlintCheck
-./gradlew :app:lintDebug
-./gradlew :app:testDebugUnitTest
-./gradlew :app:assembleDebug
-./gradlew ktlintFormat   # writes fixes; what the pre-commit hook runs
-
-# android — SHIP A BUILD: push a v* tag. This is the only release path
-# (issue #175). Full procedure in docs/workflow.md, "Distribution".
-# Bump android/gradle.properties FIRST, in its own merged PR: the `distribute`
-# job overrides versionName from the tag but never versionCode, so tagging
-# without bumping ships a duplicate versionCode that App Distribution and Play
-# both read as the same build.
-git tag v0.2.3 && git push origin v0.2.3
-
-# android — local build + upload. SMOKE TEST ONLY, not a release: it cuts no
-# GitHub Release, writes no release notes, and uses whatever versionCode is in
-# gradle.properties. Never use it to ship (issue #136). Prerequisites are in
-# docs/workflow.md, "Distribution".
-cd android && ./gradlew assembleDebug appDistributionUploadDebug
-
 # orchestrator (hand-started parallel dispatcher, ADR-013)
 scala-cli scripts/orchestrate.sc -- --dry-run
 scala-cli scripts/orchestrate.sc -- --step=step-4
-
 ```
-
-Backend commands run from `backend/`; policy and config locations are in `docs/backend.md`, "Tooling".
 
 ## Working style for agents
 
@@ -149,5 +90,4 @@ Backend commands run from `backend/`; policy and config locations are in `docs/b
 - Verify before claiming done: run the tests or command and paste the output. If something was skipped, say so.
 - **The ticket's list of named tests is the whole gate** (ADR-012). Write those tests first; for every one asserting a raise, a refusal or a negative, confirm it **fails** before the implementation exists and paste that red output under a `## TDD evidence` heading in the PR, next to the green run (ADR-013 — the heading is what makes the evidence mechanically checkable). Then commit on a feature branch, run the full suite, and paste the output in the PR. Name in the PR any listed test you did not write, and why — never drop one silently. Full workflow in `docs/workflow.md`, "The two gates".
 - **A hard rule above is the human's call, never yours.** If a ticket seems to ask you to work around one, stop and ask rather than quietly overruling it.
-- **Releases ship by pushing a `v*` tag, never from a local machine.** The local `appDistributionUploadDebug` command is a smoke test. Bump `android/gradle.properties` in a merged PR before tagging, or the build ships a duplicate `versionCode`. Shipping is the human's call: do not tag on your own judgement. See `docs/workflow.md`, "Distribution".
 - **Never start a parent step issue or a `manual` ticket, and never auto-merge one.** Parents carry a `You verify` gate only a human can run; `manual` tickets are human work. An agent running unattended may merge its own PR only when all five conditions hold: every named test passes with output pasted, CI green, the `## TDD evidence` section present with red before green, the PR is not docs-only, and the issue is a sub-issue (`docs/workflow.md`, "Unattended dispatch"; ADR-010, ADR-012, ADR-013, ADR-014).

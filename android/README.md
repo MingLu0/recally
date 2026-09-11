@@ -2,7 +2,7 @@
 
 Kotlin + Jetpack Compose. See [../docs/android.md](../docs/android.md).
 
-Step 4a foundation is in: the Gradle project builds, Hilt is wired (`RecallyApplication`, `di/DispatchersModule`), and the design system from [../docs/design/design-system.md](../docs/design/design-system.md) is implemented in `app/src/main/java/dev/recally/ui/theme/` — light and dark colour schemes, the Inter Tight type scale on M3 names, spacing/radius constants, the `@CombinedPreviews` multipreview, and the fixed book-cover colour list. `MainActivity` + `AppScaffold` + `RecallyNavHost` are wired with the sealed routes; the screens themselves land from step 4b onwards (see [../docs/roadmap.md](../docs/roadmap.md)).
+The step 4 MVP is in: Today, Review, Approve, Decks/Book detail and Settings, over a Room cache and a rating outbox that flushes through WorkManager, with FCM registration and push deep links. The design system from [../docs/design/design-system.md](../docs/design/design-system.md) lives in `app/src/main/java/dev/recally/ui/theme/`. Conventions for agents are in [AGENTS.md](AGENTS.md); remaining work is tracked in [../docs/roadmap.md](../docs/roadmap.md).
 
 ```sh
 ./gradlew ktlintCheck              # read-only ktlint (what CI runs)

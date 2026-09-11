@@ -11,7 +11,7 @@ How the project gets built: which tools hold the backlog, run the agents, and ga
 | Agent control plane | [Orca](https://www.onorca.dev/) | Parallel worktrees, diff review with line comments back to the agent, GitHub issue/PR drawer, BYO subscription |
 | Coding agent | Claude Code (any Orca-supported CLI works; the orchestrator dispatches claude only — a usage-limited worker parks and is retried hourly until the window resets) | Reads `AGENTS.md` / `CLAUDE.md` |
 | Parallel dispatcher | `scripts/orchestrate.sc` (scala-cli, ADR-013) | Hand-started, stateful: dispatches up to 10 unblocked sub-issues, retries on failure, fixes merge conflicts by rebase dispatch |
-| Agent instructions | `AGENTS.md` | Hard rules and conventions; the docs are the spec |
+| Agent instructions | `AGENTS.md`, plus `backend/AGENTS.md` and `android/AGENTS.md` | Root holds the hard rules and working style; module files hold that module's conventions and commands. Agents read the nearest file up the tree. The docs are the spec |
 
 Not used: Linear (single-user project, paid tier + AI credits for anything beyond a board), beads (no Orca integration; would be a second backlog Orca cannot see). Linear Coding Sessions or Orca's SSH/remote mode are optional for unattended backend work only (see "Optional: unattended work").
 
@@ -32,7 +32,8 @@ Not used: Linear (single-user project, paid tier + AI credits for anything beyon
 GitHub issue
   → Orca: open worktree from the issue (GitHub drawer, or
     `orca worktree create --repo id:<id> --name <slug> --issue <n>`)
-  → prompt: "Implement #<n>. Read AGENTS.md and the docs it points to.
+  → prompt: "Implement #<n>. Read AGENTS.md, the AGENTS.md of the module you
+             are touching, and the docs they point to.
              TDD against the Tests gate. Run pytest + ruff and paste the output."
   → review the diff in Orca, leave line comments, iterate
   → commit on the feature branch; run the issue's named tests
