@@ -28,10 +28,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.addPathNodes
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -215,6 +217,9 @@ private fun WaitingForYouSection(
     }
 }
 
+/** Test-only hook onto the pending/needs-human tiles (issue #199). */
+internal const val QUEUE_COUNT_TILE_TAG = "queueCountTile"
+
 /**
  * One queue-bucket tile: a 26dp composite icon, then the metric stacked over
  * its label. The number is `ink` and the label `ink-soft` — colour lands on
@@ -237,6 +242,8 @@ internal fun QueueCountTile(
         horizontalArrangement = Arrangement.spacedBy(RecallySpacing.md),
         modifier =
             modifier
+                .testTag(QUEUE_COUNT_TILE_TAG)
+                .clip(RoundedCornerShape(RecallyRadius.md))
                 .border(1.dp, colors.line, RoundedCornerShape(RecallyRadius.md))
                 .clickable(onClick = onClick)
                 .padding(RecallySpacing.cardPadding),
@@ -371,6 +378,7 @@ private fun BookRailCard(
         modifier =
             Modifier
                 .width(190.dp)
+                .clip(RoundedCornerShape(RecallyRadius.md))
                 .border(1.dp, colors.line, RoundedCornerShape(RecallyRadius.md))
                 .clickable(onClick = onClick)
                 .padding(RecallySpacing.cardPadding),

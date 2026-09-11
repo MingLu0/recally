@@ -585,7 +585,7 @@ private fun ActionRow(
             labelColor = MaterialTheme.recallyColors.inkSoft,
             enabled = actionsEnabled,
             onClick = onReject,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f).clip(RoundedCornerShape(bottomStart = RecallyRadius.md)),
         )
         VerticalDivider()
         ActionCell(
