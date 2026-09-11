@@ -157,10 +157,10 @@ private fun TodayMetrics(
             )
             Metric(
                 // Null already falls through to the no-data dash in
-                // `MetricValue`; the label is what says what the figure counts
-                // (design-system.md, "The retention figure"; issue #190).
+                // `MetricValue` (design-system.md, "The retention figure";
+                // issue #201, superseding #190's "recall" label).
                 value = retention30d?.let { "${(it * 100).roundToInt()}%" },
-                label = "recall 30d",
+                label = "retention 30d",
                 valueColor = colors.success,
                 modifier = Modifier.weight(1f),
             )
@@ -232,6 +232,7 @@ private fun ActionBar(
     val barModifier =
         Modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(RecallyRadius.md))
             .then(
                 if (nothingDue) {
                     Modifier

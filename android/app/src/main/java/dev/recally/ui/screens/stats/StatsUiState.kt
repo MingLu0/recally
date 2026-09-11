@@ -22,8 +22,8 @@ data class StatsUiState(
     val streakDays: Int = 0,
     val reviewsToday: Int = 0,
     /**
-     * Recall on cards already learned, last 30 days. Null when no review
-     * fell in the window — an absence, never 0% (issue #190).
+     * Retention on cards past the FSRS learning phase, last 30 days. Null
+     * when no review fell in the window — an absence, never 0% (issue #190).
      */
     val retention30d: Double? = null,
     /** Reviews the retention figure was computed over; drives the small-sample caption. */
