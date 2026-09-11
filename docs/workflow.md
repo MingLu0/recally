@@ -218,6 +218,57 @@ Step 5 is small; do not fan it out. Step 6 fans out as above: 6b-b needs `Learne
 
 Steps 4–5 need the Mac: Gradle, emulator or device, FCM tokens. Keep them in local Orca worktrees. Backend and Android run as two parallel tracks from here on, since the API contract is proven by the checkpoint.
 
+## Distribution
+
+Builds reach testers through Firebase App Distribution. **Pushing a `v*` tag is the only release path** (#175). A human decides when to ship; an agent never tags on its own judgement.
+
+### Shipping a build
+
+Two steps, in this order. The first is not optional.
+
+1. **Bump `android/gradle.properties`** to the version being shipped — both `recally.versionCode` and `recally.versionName` — and merge that PR to `main`.
+2. **Tag the merge commit and push**: `git tag v0.2.3 && git push origin v0.2.3`.
+
+The tag push runs the `distribute` job in `.github/workflows/ci.yml`, which resolves the version from the ref (`refs/tags/v0.2.3` → `0.2.3`), assembles the debug APK, generates release notes naming the version/SHA/date, uploads to App Distribution, retains the APK as a CI artifact for 30 days, and cuts a GitHub Release with the APK attached.
+
+A `workflow_dispatch` run does the same minus the GitHub Release, and keeps the `gradle.properties` version — no input required. Use it to re-push a build to testers without minting a version.
+
+### Why the bump has to come first
+
+The `distribute` job passes `-Precally.versionName` from the tag, which overrides the committed default through the `findProperty` lookup in `app/build.gradle.kts`. **It does not override `versionCode`** — that is read only from `gradle.properties`.
+
+So tagging without bumping ships an APK whose `versionCode` duplicates the previous build's. App Distribution and Play both treat equal `versionCode` values as the same build, and testers may not be offered the update. This went unnoticed through `v0.2.0-rc1`, `v0.2.1` and `v0.2.2`, all of which shipped as `versionCode 1`; `v0.2.3` was the first build with a distinct one.
+
+Tags do not bump the committed version as a side effect, by design — the version in `main` should say what was last shipped, so the bump is a reviewed commit like any other.
+
+### The local command is not a release
+
+```
+cd android && ./gradlew assembleDebug appDistributionUploadDebug
+```
+
+This uploads from a developer machine. It is a **smoke test** — for checking that signing, the Firebase app id and the tester group are wired up. It cuts no GitHub Release, writes no release notes, and ships whatever `versionCode` happens to be in `gradle.properties`. Do not ship with it.
+
+Its prerequisites are all gitignored:
+
+| File | Source |
+|---|---|
+| `android/recally-debug.jks` + `android/keystore.properties` | #135 |
+| `android/app/google-services.json` | Firebase console |
+| `GOOGLE_APPLICATION_CREDENTIALS=<service-account key>` | console: Project settings → Service accounts → Generate new private key |
+
+The `android-testers` group must exist under App Distribution → Testers.
+
+### The same secrets in CI
+
+The `distribute` job reconstructs all of the above from repository secrets — `GOOGLE_SERVICES_JSON`, `RECALLY_DEBUG_KEYSTORE_BASE64`, `RECALLY_KEYSTORE_PROPERTIES`, `FIREBASE_SERVICE_ACCOUNT_JSON` — each failing the job with a named error if unset. The keystore is written extensionless as `android/debug-keystore`, so `RECALLY_KEYSTORE_PROPERTIES` must use `storeFile=debug-keystore`. The service-account key is written under `RUNNER_TEMP`, never the checkout.
+
+### If a release goes wrong
+
+A tag that built a bad APK is not re-pointed — tags are immutable once testers have the build. Fix forward: bump to the next patch version and tag again. Delete the GitHub Release if it should not be public, but leave the tag.
+
+If the job fails before the upload step, nothing reached testers; fix the cause and re-run the workflow from the Actions tab, or delete and re-push the tag (safe only while no build has been distributed from it).
+
 ## Optional: unattended work
 
 The default unattended mechanism is the local hourly automation in "Unattended dispatch". The options below are
