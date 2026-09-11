@@ -148,7 +148,7 @@ private fun WordmarkHeader() {
                     .background(colors.ink, RoundedCornerShape(RecallyRadius.md)),
         ) {
             Image(
-                imageVector = wordmarkBookVector(),
+                imageVector = wordmarkBookVector(colors.ground),
                 contentDescription = null,
                 modifier = Modifier.size(19.dp),
             )
@@ -455,11 +455,14 @@ private fun ErrorRow(
     }
 }
 
-/** The book glyph inside the wordmark square, stroked white per the artboard. */
+/**
+ * The book glyph inside the wordmark square, stroked with [strokeColor] — the
+ * theme's `ground` token, so it inverts with the `ink`-filled tile behind it
+ * (design-system.md: tile = `ink`, glyph = `ground` in both themes).
+ */
 @Composable
-private fun wordmarkBookVector(): ImageVector {
-    val strokeColor = Color.White
-    return remember(strokeColor) {
+private fun wordmarkBookVector(strokeColor: Color): ImageVector =
+    remember(strokeColor) {
         ImageVector
             .Builder(
                 defaultWidth = 19.dp,
@@ -480,7 +483,10 @@ private fun wordmarkBookVector(): ImageVector {
                 strokeLineWidth = 2f,
             ).build()
     }
-}
+
+/** Exposes [wordmarkBookVector] to WordmarkTest, reading the theme's `ground` token as the call site does. */
+@Composable
+internal fun wordmarkBookVectorForTest(): ImageVector = wordmarkBookVector(MaterialTheme.recallyColors.ground)
 
 @CombinedPreviews
 @Composable
