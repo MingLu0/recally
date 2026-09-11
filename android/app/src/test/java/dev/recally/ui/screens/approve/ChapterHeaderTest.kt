@@ -1,20 +1,28 @@
 package dev.recally.ui.screens.approve
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Typography
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.height
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.width
+import dev.recally.ui.theme.RecallySpacing
 import dev.recally.ui.theme.RecallyTheme
-import org.junit.Assert.assertEquals
+import dev.recally.ui.theme.recallyColors
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -22,20 +30,15 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import kotlin.math.abs
 
 /**
- * Chapter group header width distribution (issue #146): a long book title
- * must not squeeze the chapter into a narrow wrapped column — the header is
- * one line per docs/design/design-system.md, "Chapter group header", and
- * overflow degrades by ellipsis with the secondary chapter yielding first.
- *
- * Robolectric's legacy shadow text layout uses near-constant glyph metrics
- * (~1dp per char regardless of font size), so nothing overflows the 320dp
- * display; @GraphicsMode(NATIVE) is required for real text measurement. Even
- * then, real-world-length strings at 14sp do not reach 320dp, so the
- * overflow cases scale `labelLarge` up to [GIANT_SP] — the strings stay the
- * real ones from the issue; only the scale forces them past the row width,
- * which is exactly the device condition that triggered the bug.
+ * Chapter group header layout (issue #201): the book title and chapter now
+ * render on two lines instead of sharing one line and both being squeezed to
+ * an unreadable stub — the one-line layout from issue #146 traded wrapping
+ * for truncation, and on a long title + long chapter pair both hit the
+ * ellipsis. `docs/design/design-system.md`, "Chapter group header" now
+ * specifies the two-line form, superseding #146.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -45,73 +48,103 @@ class ChapterHeaderTest {
     val composeTestRule = createComposeRule()
 
     @Test
-    fun `chapter stays on one line when book title and chapter both overflow`() {
+    fun test_book_title_and_chapter_render_on_separate_lines() {
         composeTestRule.setContent {
-            GiantTypeTheme {
+            RecallyTheme {
                 ChapterHeader(bookId = 1, book = LONG_TITLE, chapter = LONG_CHAPTER)
             }
         }
 
-        val chapterNode = composeTestRule.onNodeWithText("· $LONG_CHAPTER")
-        chapterNode.assertIsDisplayed()
-
         val titleBounds = composeTestRule.onNodeWithText(LONG_TITLE).getBoundsInRoot()
-        val chapterBounds = chapterNode.getBoundsInRoot()
-        assertEquals(
-            "title and chapter share the single header line",
-            titleBounds.height,
-            chapterBounds.height,
+        val chapterBounds = composeTestRule.onNodeWithText(LONG_CHAPTER).getBoundsInRoot()
+
+        assertTrue(
+            "title and chapter occupy different vertical positions",
+            titleBounds.top != chapterBounds.top,
         )
-        assertEquals("same line, same top edge", titleBounds.top, chapterBounds.top)
     }
 
     @Test
-    fun `long book title is ellipsised rather than pushing the chapter out`() {
+    fun test_long_book_title_is_not_squeezed_by_the_chapter() {
+        // Both layouts rendered in one composition (setContent can only be
+        // called once per test) so their title widths can be compared
+        // directly. The old one-line layout is pinned here exactly as it was
+        // in ChapterHeader.kt before this change: title on
+        // weight(1f, fill = false) competing with the chapter on weight(1f).
         composeTestRule.setContent {
-            GiantTypeTheme {
-                ChapterHeader(bookId = 1, book = LONG_TITLE, chapter = SHORT_CHAPTER)
+            RecallyTheme {
+                Column {
+                    OneLineChapterHeaderUnderTest(book = REAL_TITLE, chapter = REAL_CHAPTER)
+                    ChapterHeader(bookId = 1, book = REAL_TITLE, chapter = REAL_CHAPTER)
+                }
             }
         }
 
-        // The title alone is wider than the row; the chapter must still be
-        // present and visible with a non-zero width.
-        val chapterNode = composeTestRule.onNodeWithText("· $SHORT_CHAPTER")
-        chapterNode.assertIsDisplayed()
+        val oldLayoutTitleWidth =
+            composeTestRule.onNodeWithTag(OLD_LAYOUT_TITLE_TAG).getBoundsInRoot().width
+        val titleNodes = composeTestRule.onAllNodesWithText(REAL_TITLE)
+        // Two titles render with the same text: the pinned old layout (tagged
+        // above, excluded here) and the ChapterHeader under test.
+        val newLayoutTitleWidth = titleNodes[1].getBoundsInRoot().width
 
-        val titleBounds = composeTestRule.onNodeWithText(LONG_TITLE).getBoundsInRoot()
-        val chapterBounds = chapterNode.getBoundsInRoot()
-        assertTrue("chapter keeps visible width", chapterBounds.width > Dp.Hairline)
         assertTrue(
-            "title yields space to the chapter instead of consuming the row",
-            titleBounds.right <= chapterBounds.left,
+            "title is no longer squeezed by the chapter — it measures wider on its own line " +
+                "(old: $oldLayoutTitleWidth, new: $newLayoutTitleWidth)",
+            newLayoutTitleWidth > oldLayoutTitleWidth,
         )
     }
 
+    /** #146's one-line layout, pinned here only so this test can measure it. */
+    @Composable
+    private fun OneLineChapterHeaderUnderTest(
+        book: String,
+        chapter: String,
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(RecallySpacing.sm),
+        ) {
+            Text(
+                text = book,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.recallyColors.ink,
+                modifier = Modifier.weight(1f, fill = false).testTag(OLD_LAYOUT_TITLE_TAG),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (chapter.isNotEmpty()) {
+                Text(
+                    text = "· $chapter",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.recallyColors.inkFaint,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+
     @Test
-    fun `short title and chapter are unchanged`() {
+    fun test_chapter_has_no_leading_separator() {
         composeTestRule.setContent {
             RecallyTheme {
                 ChapterHeader(bookId = 1, book = SHORT_TITLE, chapter = SHORT_CHAPTER)
             }
         }
 
-        val titleNode = composeTestRule.onNodeWithText(SHORT_TITLE)
-        val chapterNode = composeTestRule.onNodeWithText("· $SHORT_CHAPTER")
-        titleNode.assertIsDisplayed()
+        composeTestRule.onNode(hasText("· $SHORT_CHAPTER")).assertDoesNotExist()
+        val chapterNode = composeTestRule.onNodeWithText(SHORT_CHAPTER)
         chapterNode.assertIsDisplayed()
-
-        val titleBounds = titleNode.getBoundsInRoot()
-        val chapterBounds = chapterNode.getBoundsInRoot()
-        assertEquals("one line, unchanged", titleBounds.height, chapterBounds.height)
-        assertEquals("one line, unchanged", titleBounds.top, chapterBounds.top)
-        assertTrue(
-            "title still precedes the chapter",
-            titleBounds.right <= chapterBounds.left,
+        assertFalse(
+            "chapter text does not start with a leading separator",
+            SHORT_CHAPTER.trimStart().startsWith("·"),
         )
     }
 
     @Test
-    fun `empty chapter renders title only`() {
+    fun test_empty_chapter_renders_title_only() {
         composeTestRule.setContent {
             RecallyTheme {
                 ChapterHeader(bookId = 1, book = SHORT_TITLE, chapter = "")
@@ -122,32 +155,31 @@ class ChapterHeaderTest {
         composeTestRule.onNode(hasText("·", substring = true)).assertDoesNotExist()
     }
 
-    /**
-     * Real theme with `labelLarge` scaled up so real strings overflow. The
-     * nested [MaterialTheme] re-provides only the typography (LocalTypography
-     * is internal to material3); the header reads its colours from
-     * [dev.recally.ui.theme.recallyColors], a separate composition local the
-     * outer [RecallyTheme] still provides.
-     */
-    @Composable
-    private fun GiantTypeTheme(content: @Composable () -> Unit) {
-        RecallyTheme {
-            MaterialTheme(typography = GiantTypography) {
-                content()
+    @Test
+    fun test_spine_is_vertically_centred_against_both_lines() {
+        composeTestRule.setContent {
+            RecallyTheme {
+                ChapterHeader(bookId = 1, book = SHORT_TITLE, chapter = SHORT_CHAPTER)
             }
         }
+
+        val titleBounds = composeTestRule.onNodeWithText(SHORT_TITLE).getBoundsInRoot()
+        val chapterBounds = composeTestRule.onNodeWithText(SHORT_CHAPTER).getBoundsInRoot()
+        val spineNode = composeTestRule.onNodeWithTag(SPINE_TEST_TAG)
+        val spineBounds = spineNode.getBoundsInRoot()
+
+        val textColumnTop = minOf(titleBounds.top, chapterBounds.top)
+        val textColumnBottom = maxOf(titleBounds.bottom, chapterBounds.bottom)
+        val textColumnCenterY = (textColumnTop + textColumnBottom) / 2
+        val spineCenterY = (spineBounds.top + spineBounds.bottom) / 2
+
+        assertTrue(
+            "spine is vertically centred against the text column",
+            abs(spineCenterY.value - textColumnCenterY.value) <= 1f,
+        )
     }
 
     private companion object {
-        const val GIANT_SP = 100
-
-        val GiantTypography =
-            Typography(
-                labelLarge = TextStyle(fontSize = GIANT_SP.sp, lineHeight = (GIANT_SP + 20).sp),
-            )
-
-        // The real header from issue #146, extended so the title alone is
-        // wider than the row once the type scale is applied.
         const val LONG_TITLE =
             "Building Generative AI Services with FastAPI: " +
                 "From Prototype to Production in the Enterprise"
@@ -155,5 +187,12 @@ class ChapterHeaderTest {
             "2. Getting Started with FastAPI and Serving Your First Generative Model Endpoint"
         const val SHORT_TITLE = "Evals for AI Engineers"
         const val SHORT_CHAPTER = "1. Introduction"
+
+        // The exact pair from the issue report.
+        const val REAL_TITLE = "Building Generative AI Services with FastAPI"
+        const val REAL_CHAPTER = "2. Getting Started with FastAPI"
+
+        const val SPINE_TEST_TAG = "chapter_header_spine"
+        const val OLD_LAYOUT_TITLE_TAG = "old_layout_title"
     }
 }

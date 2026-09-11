@@ -79,13 +79,79 @@ class StatsScreenTest {
         composeTestRule.onNodeWithText("87%").assertIsDisplayed()
     }
 
-    private fun loadedState(retention30d: Double?): StatsUiState {
+    @Test
+    fun test_confident_sample_is_labelled_retention_30d() {
+        composeTestRule.setContent {
+            RecallyTheme {
+                StatsScreen(
+                    uiState = loadedState(retention30d = 0.87, retentionReviewCount = 143),
+                    onRetry = {},
+                    onOpenSettings = {},
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithText("retention 30d").assertIsDisplayed()
+    }
+
+    @Test
+    fun test_no_qualifier_line_on_a_confident_sample() {
+        composeTestRule.setContent {
+            RecallyTheme {
+                StatsScreen(
+                    uiState = loadedState(retention30d = 0.87, retentionReviewCount = 143),
+                    onRetry = {},
+                    onOpenSettings = {},
+                )
+            }
+        }
+
+        composeTestRule
+            .onAllNodesWithText("cards you'd already learned", substring = true)
+            .fetchSemanticsNodes()
+            .let { assertEquals("no qualifier line on a confident sample", 0, it.size) }
+    }
+
+    @Test
+    fun test_small_sample_still_says_too_few_to_read() {
+        composeTestRule.setContent {
+            RecallyTheme {
+                StatsScreen(
+                    uiState = loadedState(retention30d = 0.67, retentionReviewCount = 3),
+                    onRetry = {},
+                    onOpenSettings = {},
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithText("from 3 reviews · too few to read").assertIsDisplayed()
+    }
+
+    @Test
+    fun test_null_retention_renders_the_no_data_dash() {
+        composeTestRule.setContent {
+            RecallyTheme {
+                StatsScreen(
+                    uiState = loadedState(retention30d = null),
+                    onRetry = {},
+                    onOpenSettings = {},
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithText(NO_DATA).assertIsDisplayed()
+    }
+
+    private fun loadedState(
+        retention30d: Double?,
+        retentionReviewCount: Int = if (retention30d == null) 0 else 120,
+    ): StatsUiState {
         val today = LocalDate.of(2026, 9, 9)
         return StatsUiState(
             streakDays = 9,
             reviewsToday = 23,
             retention30d = retention30d,
-            retentionReviewCount = if (retention30d == null) 0 else 120,
+            retentionReviewCount = retentionReviewCount,
             forecast =
                 (0L..6L).map { offset ->
                     ForecastBar(date = today.plusDays(offset), due = 3, isToday = offset == 0L)

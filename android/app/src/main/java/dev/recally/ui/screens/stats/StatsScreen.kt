@@ -129,7 +129,7 @@ private fun HeadlineStrip(
             // Null is an absence, never "0%" (design-system.md, "States" →
             // "No data for a metric"; issue #190).
             value = retention30d?.let { "${(it * 100).roundToInt()}%" } ?: NO_DATA,
-            label = "recall",
+            label = "retention 30d",
             caption = retentionCaption(retention30d, retentionReviewCount),
             valueColor = if (retention30d != null) colors.success else colors.inkFaint,
             modifier = Modifier.weight(1f),
@@ -153,8 +153,8 @@ private fun HeadlineMetric(
     ) {
         Text(value, style = MaterialTheme.typography.titleMedium, color = valueColor)
         Text(label, style = MaterialTheme.typography.labelMedium, color = colors.inkFaint)
-        // The qualifier that says what the figure counts — without it "100%"
-        // is unreadable (design-system.md, "The retention figure").
+        // Present only for the no-data and small-sample states
+        // (design-system.md, "The retention figure").
         caption?.let {
             Text(
                 it,
@@ -167,23 +167,23 @@ private fun HeadlineMetric(
 }
 
 /**
- * What the recall figure counts, and how far to trust it
- * (design-system.md, "The retention figure").
- *
- * A null figure says only that nothing was reviewed. A figure over fewer than
- * [RETENTION_CONFIDENT_REVIEWS] reviews still renders — it is the honest
- * number — but says so, because one lapse in three is 67% and reads as a
- * trend when it is noise.
+ * How far to trust the retention figure (design-system.md, "The retention
+ * figure"). A null figure says only that nothing was reviewed. A figure over
+ * fewer than [RETENTION_CONFIDENT_REVIEWS] reviews still renders — it is the
+ * honest number — but says so, because one lapse in three is 67% and reads as
+ * a trend when it is noise. A confident sample carries no qualifier: the
+ * label is the whole story (issue #201, superseding #190's descriptive
+ * qualifier for a confident sample).
  */
 private fun retentionCaption(
     retention30d: Double?,
     reviewCount: Int,
-): String =
+): String? =
     when {
         retention30d == null -> "no reviews yet · 30d"
         reviewCount < RETENTION_CONFIDENT_REVIEWS ->
             "from $reviewCount ${if (reviewCount == 1) "review" else "reviews"} · too few to read"
-        else -> "cards you'd already learned · 30d"
+        else -> null
     }
 
 @Composable
@@ -359,8 +359,8 @@ private fun comparisonLine(orderedRates: List<Map.Entry<String, Double>>): Strin
 private const val NO_DATA = "–"
 
 /**
- * Reviews in the window below which the recall figure is qualified rather than
- * presented bare (design-system.md, "The retention figure").
+ * Reviews in the window below which the retention figure is qualified rather
+ * than presented bare (design-system.md, "The retention figure").
  */
 private const val RETENTION_CONFIDENT_REVIEWS = 20
 
