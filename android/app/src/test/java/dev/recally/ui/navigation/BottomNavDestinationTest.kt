@@ -1,5 +1,10 @@
 package dev.recally.ui.navigation
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Star
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -83,5 +88,25 @@ class BottomNavDestinationTest {
         }
         val icons = BottomNavDestination.entries.map { it.icon }
         assertEquals("each destination has its own icon", icons.size, icons.toSet().size)
+    }
+
+    @Test
+    fun test_no_nav_seat_uses_a_stock_material_icon() {
+        // The design uses Lucide 24x24 stroke icons (home, book, bar-chart,
+        // settings gear) -- a calendar page, a bulleted list, a star and the
+        // stock gear are not those shapes (issue #198).
+        val stockMaterialIcons =
+            setOf(
+                Icons.Filled.DateRange,
+                Icons.Filled.List,
+                Icons.Filled.Star,
+                Icons.Filled.Settings,
+            )
+        for (destination in BottomNavDestination.entries) {
+            assertFalse(
+                "${destination.name} must not use a stock Material icon",
+                destination.icon in stockMaterialIcons,
+            )
+        }
     }
 }

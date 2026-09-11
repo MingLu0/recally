@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.MissingFieldException
 import java.time.Clock
 import javax.inject.Inject
 
@@ -184,15 +185,38 @@ class TodayViewModel
             when (val result = withContext(ioDispatcher) { deckRepository.decks() }) {
                 is Result.Success ->
                     mutableUiState.update {
-                        it.copy(books = result.data, booksFailedToLoad = false)
+                        it.copy(
+                            books = result.data,
+                            booksFailedToLoad = false,
+                            booksFailureMessage = null,
+                        )
+                    }
+                // A stale backend is the one failure here that can explain
+                // itself, so its message rides through to the rail (issue
+                // #195). Every other failure keeps the rail's own wording.
+                is Result.UnexpectedError ->
+                    mutableUiState.update {
+                        it.copy(
+                            booksFailedToLoad = true,
+                            booksFailureMessage = result.staleBackendMessage(),
+                        )
                     }
                 Result.Unauthorized,
                 is Result.HttpError,
                 is Result.NetworkError,
-                is Result.UnexpectedError,
-                -> mutableUiState.update { it.copy(booksFailedToLoad = true) }
+                ->
+                    mutableUiState.update {
+                        it.copy(booksFailedToLoad = true, booksFailureMessage = null)
+                    }
             }
         }
+
+        /**
+         * [displayMessage] for a decoding fault only. Any other cause is a
+         * programming-level fault the rail cannot usefully narrate, so it gets
+         * null and the strip keeps "Couldn't load your books".
+         */
+        private fun Result.UnexpectedError.staleBackendMessage(): String? = if (cause is MissingFieldException) displayMessage() else null
 
         private companion object {
             const val MESSAGE_UNEXPECTED = "Something went wrong — pull to retry."
