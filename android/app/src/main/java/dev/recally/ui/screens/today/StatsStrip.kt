@@ -232,6 +232,7 @@ private fun ActionBar(
     val barModifier =
         Modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(RecallyRadius.md))
             .then(
                 if (nothingDue) {
                     Modifier
