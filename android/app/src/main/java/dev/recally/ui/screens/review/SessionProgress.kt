@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -58,7 +59,7 @@ fun SessionProgress(
                     .background(colors.track)
                     .testTag("session_progress_track"),
         ) {
-            Row(modifier = Modifier.fillMaxHeight()) {
+            Row(modifier = Modifier.fillMaxSize()) {
                 if (doneCount > 0) {
                     Box(
                         modifier =
