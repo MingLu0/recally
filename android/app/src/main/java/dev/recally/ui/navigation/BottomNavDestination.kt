@@ -1,13 +1,12 @@
 package dev.recally.ui.navigation
 
 import androidx.annotation.StringRes
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.List
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.ui.graphics.vector.ImageVector
 import dev.recally.R
+import dev.recally.ui.theme.NavBarChartIcon
+import dev.recally.ui.theme.NavBookIcon
+import dev.recally.ui.theme.NavHomeIcon
+import dev.recally.ui.theme.NavSettingsIcon
 
 /**
  * The four bottom-navigation destinations (docs/android.md, "Navigation";
@@ -20,10 +19,10 @@ enum class BottomNavDestination(
     @param:StringRes val labelRes: Int,
     val icon: ImageVector,
 ) {
-    TODAY(Screen.Today, R.string.nav_today, Icons.Filled.DateRange),
-    DECKS(Screen.Decks, R.string.nav_decks, Icons.Filled.List),
-    STATS(Screen.Stats, R.string.nav_stats, Icons.Filled.Star),
-    SETTINGS(Screen.Settings, R.string.nav_settings, Icons.Filled.Settings),
+    TODAY(Screen.Today, R.string.nav_today, NavHomeIcon),
+    DECKS(Screen.Decks, R.string.nav_decks, NavBookIcon),
+    STATS(Screen.Stats, R.string.nav_stats, NavBarChartIcon),
+    SETTINGS(Screen.Settings, R.string.nav_settings, NavSettingsIcon),
 }
 
 /**
