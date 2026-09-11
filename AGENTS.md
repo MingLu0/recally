@@ -118,27 +118,19 @@ cd android && ./gradlew ktlintCheck
 ./gradlew :app:assembleDebug
 ./gradlew ktlintFormat   # writes fixes; what the pre-commit hook runs
 
-# android — ship the debug build to Firebase App Distribution (issue #136).
-# One local command; CI runs the same pair via the dispatch/tag-gated
-# `distribute` job in .github/workflows/ci.yml. Prerequisites, all gitignored:
-#   android/recally-debug.jks + android/keystore.properties   (#135)
-#   android/app/google-services.json                          (Firebase console)
-#   GOOGLE_APPLICATION_CREDENTIALS=<path to a Firebase service-account key>
-#     (console: Project settings → Service accounts → Generate new private key;
-#      the `android-testers` group must exist under App Distribution → Testers)
-cd android && ./gradlew assembleDebug appDistributionUploadDebug
+# android — SHIP A BUILD: push a v* tag. This is the only release path
+# (issue #175). Full procedure in docs/workflow.md, "Distribution".
+# Bump android/gradle.properties FIRST, in its own merged PR: the `distribute`
+# job overrides versionName from the tag but never versionCode, so tagging
+# without bumping ships a duplicate versionCode that App Distribution and Play
+# both read as the same build.
+git tag v0.2.3 && git push origin v0.2.3
 
-# android — the tag-to-ship path (issue #175). Pushing a v* tag runs the
-# `distribute` job, which derives the version from the tag (refs/tags/v0.2.0 →
-# -Precally.versionName=0.2.0, overriding gradle.properties for that build
-# only), generates release notes naming the version/SHA/date, uploads to App
-# Distribution, retains the APK for 30 days, and cuts a GitHub Release with the
-# APK attached. A human decides when to ship; the tag does not bump the
-# committed version, so edit gradle.properties in the same change if the
-# default should move too.
-git tag v0.2.0 && git push origin v0.2.0
-# A workflow_dispatch run does the same minus the GitHub Release, and keeps the
-# gradle.properties version — no input required.
+# android — local build + upload. SMOKE TEST ONLY, not a release: it cuts no
+# GitHub Release, writes no release notes, and uses whatever versionCode is in
+# gradle.properties. Never use it to ship (issue #136). Prerequisites are in
+# docs/workflow.md, "Distribution".
+cd android && ./gradlew assembleDebug appDistributionUploadDebug
 
 # orchestrator (hand-started parallel dispatcher, ADR-013)
 scala-cli scripts/orchestrate.sc -- --dry-run
@@ -157,4 +149,5 @@ Backend commands run from `backend/`; policy and config locations are in `docs/b
 - Verify before claiming done: run the tests or command and paste the output. If something was skipped, say so.
 - **The ticket's list of named tests is the whole gate** (ADR-012). Write those tests first; for every one asserting a raise, a refusal or a negative, confirm it **fails** before the implementation exists and paste that red output under a `## TDD evidence` heading in the PR, next to the green run (ADR-013 — the heading is what makes the evidence mechanically checkable). Then commit on a feature branch, run the full suite, and paste the output in the PR. Name in the PR any listed test you did not write, and why — never drop one silently. Full workflow in `docs/workflow.md`, "The two gates".
 - **A hard rule above is the human's call, never yours.** If a ticket seems to ask you to work around one, stop and ask rather than quietly overruling it.
+- **Releases ship by pushing a `v*` tag, never from a local machine.** The local `appDistributionUploadDebug` command is a smoke test. Bump `android/gradle.properties` in a merged PR before tagging, or the build ships a duplicate `versionCode`. Shipping is the human's call: do not tag on your own judgement. See `docs/workflow.md`, "Distribution".
 - **Never start a parent step issue or a `manual` ticket, and never auto-merge one.** Parents carry a `You verify` gate only a human can run; `manual` tickets are human work. An agent running unattended may merge its own PR only when all five conditions hold: every named test passes with output pasted, CI green, the `## TDD evidence` section present with red before green, the PR is not docs-only, and the issue is a sub-issue (`docs/workflow.md`, "Unattended dispatch"; ADR-010, ADR-012, ADR-013, ADR-014).
