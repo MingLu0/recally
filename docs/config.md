@@ -25,6 +25,7 @@ Provider credentials use LiteLLM's own variable names (`ANTHROPIC_API_KEY`, `OPE
 | `CURATOR_MAX_BATCH` | `40` | Curator | Max highlights per Curator call; a longer chapter is split into consecutive batches. Grouping cannot span a batch boundary |
 | `LLM_MAX_ROUNDS` | `3` | Writer ⇄ Critic | Hard rule 9; do not raise without a doc change |
 | `AUTO_APPROVE_ROUND1_ACCEPT` | `false` | pipeline | Hard rule 1 exception; skips the queue for round-1 `accept` |
+| `LLM_CONCURRENCY` | `1` | pipeline | Curated units whose Writer ⇄ Critic chains run in parallel (ADR-015). `1` is sequential; raise only as far as the provider's rate limit allows |
 | `LLM_LOG_PAYLOADS` | `true` | `llm.py` | Store `request`/`response` on `llm_calls`; turn off only if the table bloats (ADR-006) |
 | `AGENT_CURATOR` | `default` | pipeline | Registered variant for the Curator role (ADR-007) |
 | `AGENT_WRITER` | `default` | pipeline | Registered variant for the Writer role |
