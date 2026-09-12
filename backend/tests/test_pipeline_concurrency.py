@@ -63,8 +63,12 @@ def make_file_backed_container(tmp_path: Path, **setting_overrides: Any) -> Cont
 
 @pytest.fixture
 def tmp_container(tmp_path: Path) -> Iterator[Container]:
-    """The sequential baseline: LLM_CONCURRENCY at its shipped default of 1."""
-    container = make_file_backed_container(tmp_path)
+    """The sequential baseline, pinned rather than inherited.
+
+    `LLM_CONCURRENCY` now defaults to 16, so a fixture that relied on the default
+    would silently stop testing the sequential path.
+    """
+    container = make_file_backed_container(tmp_path, LLM_CONCURRENCY=1)
     try:
         yield container
     finally:

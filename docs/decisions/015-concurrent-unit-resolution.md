@@ -36,3 +36,37 @@ The refactor splits resolution from persistence. `_resolve_card` and `_resolve_u
 - Scoped out, deliberately: card-level concurrency; retry/backoff in `llm.py` (a 429 at 8-wide propagates as a unit failure, which the retry path survives — a follow-up ticket); any prompt change; overlapping the Curator and Writer phases.
 - **The ~5 min estimate is modelled from one ingest on one model.** Provider behaviour under 8 concurrent requests is not in that data. Rollout is `LLM_CONCURRENCY=1`, then 4 on a real ingest watching for 429s and `database is locked`, then 8. The first real run at 4 is the measurement that matters; the estimate is a hypothesis this change sets up to test, not a promise.
 - Reversible by config alone: `LLM_CONCURRENCY=1` restores the sequential path without a deploy.
+
+## Amendment, 2026-09-12: default raised to 16
+
+The rollout above ran, and the hypothesis it set up has been tested. Measured on a 70-highlight
+ingest (*AI Engineering* ch. 6, `openai/k3`, the same model as the reference run), each on a
+throwaway database:
+
+| `LLM_CONCURRENCY` | wall-clock | speedup |
+|---|---|---|
+| 1 | 2113.5s (35.2 min) | 1.0x |
+| 8 | 374.2s (6.2 min) | 5.6x |
+| 16 | 268.6s (4.5 min) | 7.9x |
+
+Zero `database is locked` and zero 429s at every level, so the busy-timeout assumption above
+holds in practice and the provider showed no back-pressure up to 16. Per-call reconciliation
+confirmed no `llm_calls` row was lost to write contention. Card quality was unchanged: Critic
+acceptance 96.1% / 97.5% / 97.6% and mean generation rounds 1.37 / 1.41 / 1.36 across the three
+runs — differences well inside Curator/Writer nondeterminism, which also explains the differing
+card counts (the Curator returns different units from identical input).
+
+**The default therefore moves from 1 to 16.** The original 1 existed so the shipped default was
+provably the pre-ADR-015 path while the estimate was still a hypothesis; that caution has been
+paid for with measurement. `LLM_CONCURRENCY=1` still restores the old path exactly, with no
+deploy.
+
+Returns are already flattening — 8 → 16 bought only 1.39x — because the Curator's serial prefix
+(~44% of the 16-wide run) and the slowest single unit now dominate. Raising the value further is
+not expected to help much; **making the Curator phase concurrent is the next real lever**, and is
+deliberately still out of scope here.
+
+An AIMD controller that searches for the provider's limit at runtime was also prototyped and
+**rejected on measurement**: it ran the same subset in 564.5s (3.7x), slower than either fixed
+value, because additive increase cannot converge inside a workload this short — it spent the run
+climbing from 2 to 9 and finished before the width it found could pay off.
