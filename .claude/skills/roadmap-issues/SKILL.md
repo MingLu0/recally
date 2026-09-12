@@ -100,6 +100,9 @@ Spec: [<doc>](../blob/main/docs/<doc>), "<section>".
 `<test file path>`
 - [ ] `test_name` — what it asserts, concretely.
 
+## Docs to update
+- [ ] `<doc path>` — <what changes>, or: none — <why no documented behaviour or structure changes>
+
 ## Done when
 - [ ] <binary statements; several literal `grep` commands>
 - [ ] `<test command>` — green, output pasted in the PR.
@@ -190,6 +193,7 @@ Exit 1 with no output means nothing is dispatchable — correct when every sub-i
 The skill gives you the shape. These come from reading the specs, and a weak version of any is a real defect:
 
 - **The named tests.** Since ADR-012 the ticket's test list is the whole merge gate. Derive them from the docs' hard constraints — the ones that look like bugs without context. Step 4's review ticket asserts `response_ms` is measured flip-to-rate, that no interval hint appears on Good/Easy (hard rule 5), and that a card at `step` 1 does not restart at step 0. None of that is guessable from the format.
+- **The `Docs to update` list.** The named-tests gate teaches agents that done = listed tests green; docs named the same way become part of done instead of an afterthought (#212 is what the afterthought looks like). Name every doc whose prose, table or layout tree the sub-issue will touch — new module → `backend.md`'s tree, new setting → `config.md` and `.env.example`, new endpoint → `api-spec.md`. Write `none — <reason>` only when truly nothing documented changes; `tests/test_docs_layout.py` will catch the layout tree and `config.md` cases anyway, the list is what catches the prose a test cannot.
 - **Real file paths** in `## Scope`, from the area doc's project-structure section.
 - **The `Done when` greps.** Turn each invariant into a command: `grep -rn "import litellm" backend/src/recally/` returning only `llm.py`; `grep -rn "Modifier.shadow" android/` returning nothing.
 - **The scoped-out list**, when the design outruns the API. Name the gap, say what is not built, and say why. Never invent a field to fill a screen.
