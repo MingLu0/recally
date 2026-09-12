@@ -32,6 +32,8 @@ keystore.properties
 local.properties
 **/build/
 .cxx/
+# Kotlin compiler session + daemon crash logs, written beside the module.
+android/.kotlin/
 # A Gradle user home created inside the checkout (a worker ran Gradle with
 # GRADLE_USER_HOME=<repo>/android once); regenerable caches, never source.
 android/.tmp/
