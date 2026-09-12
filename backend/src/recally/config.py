@@ -86,6 +86,11 @@ class Settings(BaseSettings):
     auto_approve_round1_accept: bool = Field(
         default=False, validation_alias="AUTO_APPROVE_ROUND1_ACCEPT"
     )
+    # Units resolved in parallel (ADR-015). 1 = sequential (the historical path);
+    # raise only as far as the provider's rate limit allows. Past ~16 the slowest
+    # single unit (144 s on the reference ingest) dominates and there is nothing
+    # left to win. The shipped default is provably today's code path.
+    llm_concurrency: int = Field(default=1, gt=0, validation_alias="LLM_CONCURRENCY")
 
     # Registered variant per agent role (ADR-007); the registry validates them at
     # startup, so a typo fails the container build rather than the first LLM call.

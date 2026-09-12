@@ -1,14 +1,17 @@
 """Engine and session factory.
 
 Nothing here is SQLite-specific in the SQL sense (ADR-004): the phase 2/3 Postgres
-cutover is a change to `RECALLY_DATABASE_URL` and nothing else. The one file-backend
-concession is creating the parent directory of a SQLite path, which is confined to the
-branch below and is a no-op for every other dialect.
+cutover is a change to `RECALLY_DATABASE_URL` and nothing else. Two file-backend
+concessions live in the one `sqlite` branch below and are absent for every other
+dialect — creating the parent directory of a SQLite path, and putting the database in
+WAL mode. Both are connection setup, not query text, so no SQL in the codebase is
+dialect-bound.
 """
 
 from pathlib import Path
+from typing import Any
 
-from sqlalchemy import Engine, create_engine, make_url
+from sqlalchemy import Engine, create_engine, event, make_url
 from sqlalchemy.orm import Session, sessionmaker
 
 from recally.config import get_settings
@@ -17,8 +20,39 @@ from recally.config import get_settings
 def create_database_engine(database_url: str | None = None) -> Engine:
     """Build an engine for `database_url`, defaulting to the configured one."""
     url = make_url(database_url or get_settings().database_url)
-    _ensure_sqlite_directory_exists(url.database if url.get_backend_name() == "sqlite" else None)
-    return create_engine(url)
+    engine = create_engine(url)
+    if url.get_backend_name() == "sqlite":
+        _ensure_sqlite_directory_exists(url.database)
+        _enable_write_ahead_logging(engine)
+    return engine
+
+
+def _enable_write_ahead_logging(engine: Engine) -> None:
+    """Put a SQLite database in WAL mode on every new connection.
+
+    Connection configuration, not SQL, so ADR-004 holds: no query in the codebase
+    changes, and the pragma is simply absent on Postgres. WAL lets the pipeline's
+    worker threads write their `llm_calls` rows while the main thread reads and
+    commits units (ADR-015) — the default rollback journal blocks readers behind a
+    writer, which under `LLM_CONCURRENCY > 1` shows up as `database is locked`.
+
+    WAL is necessary but not sufficient: it gives one writer and many readers, while
+    this design has concurrent *writers*. Those still serialize, and whether a
+    blocked writer waits or raises depends on the busy timeout — Python's `sqlite3`
+    defaults to `timeout=5.0`, which the concurrency tests exercise rather than
+    assume.
+
+    Note this fires only for engines built here. A test hand-rolling its own engine
+    bypasses WAL entirely.
+    """
+
+    @event.listens_for(engine, "connect")
+    def _set_journal_mode(dbapi_connection: Any, _connection_record: Any) -> None:
+        cursor = dbapi_connection.cursor()
+        try:
+            cursor.execute("PRAGMA journal_mode=WAL")
+        finally:
+            cursor.close()
 
 
 def create_session_factory(engine: Engine) -> sessionmaker[Session]:
