@@ -459,8 +459,18 @@ def _resolve_units_concurrently(
     unprocessed. Units already committed survive the rollback, which discards only
     the uncommitted tail.
     """
+    if not pending:
+        # Nothing to resolve: a re-run where every keep unit already has cards, or an
+        # ingest the Curator dropped entirely. `ThreadPoolExecutor` rejects
+        # `max_workers=0`, so this stays a clean no-op rather than a crash.
+        return
+
     first_error: Exception | None = None
-    with ThreadPoolExecutor(max_workers=settings.llm_concurrency) as pool:
+    # `LLM_CONCURRENCY` is a ceiling on provider concurrency, not a thread quota: a
+    # thread with no unit to resolve can never do work, so a small ingest sizes the
+    # pool down. This only ever spawns *fewer* threads than configured and so can
+    # never raise provider pressure above the documented limit.
+    with ThreadPoolExecutor(max_workers=min(settings.llm_concurrency, len(pending))) as pool:
         futures = {
             pool.submit(
                 _resolve_unit_cards,

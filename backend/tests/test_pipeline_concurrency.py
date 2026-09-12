@@ -24,6 +24,7 @@ assertions independent of who finishes first — the property actually under tes
 import json
 import threading
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
@@ -239,6 +240,24 @@ def straightforward_handler(highlight_ids: list[int], unit_count: int) -> Any:
     return handle
 
 
+def record_pool_widths(monkeypatch: pytest.MonkeyPatch) -> list[int]:
+    """Record the `max_workers` of every ThreadPoolExecutor the pipeline builds.
+
+    Returns a list that fills in as pools are constructed — empty means the
+    sequential path ran and no pool was built at all.
+    """
+    widths: list[int] = []
+    real_executor = ThreadPoolExecutor
+
+    class RecordingExecutor(real_executor):  # type: ignore[valid-type,misc]
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            widths.append(kwargs.get("max_workers", 0))
+            super().__init__(*args, **kwargs)
+
+    monkeypatch.setattr("recally.pipeline.ThreadPoolExecutor", RecordingExecutor)
+    return widths
+
+
 # --- The gate ------------------------------------------------------------------
 
 
@@ -272,17 +291,7 @@ def test_concurrency_one_creates_no_thread_pool(
     run_id, highlight_ids = seed_highlights(tmp_container, 2)
     RoutedLlm(monkeypatch, straightforward_handler(highlight_ids, 2))
 
-    constructed: list[int] = []
-    real_executor = __import__(
-        "concurrent.futures", fromlist=["ThreadPoolExecutor"]
-    ).ThreadPoolExecutor
-
-    class RecordingExecutor(real_executor):  # type: ignore[valid-type,misc]
-        def __init__(self, *args: Any, **kwargs: Any) -> None:
-            constructed.append(kwargs.get("max_workers", 0))
-            super().__init__(*args, **kwargs)
-
-    monkeypatch.setattr("recally.pipeline.ThreadPoolExecutor", RecordingExecutor)
+    constructed = record_pool_widths(monkeypatch)
 
     tmp_container.run_pipeline(run_id)
 
@@ -567,5 +576,93 @@ def test_revise_stays_within_its_card(tmp_path: Path, monkeypatch: pytest.Monkey
             (accepted_front, "pending_review", 1),
             (revised_front, "pending_review", 2),
         }
+    finally:
+        container.engine.dispose()
+
+
+def test_pool_is_never_wider_than_the_units_it_has(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The pool is sized to the work, not to the config ceiling.
+
+    `LLM_CONCURRENCY` is a ceiling on provider concurrency, not a thread quota: a
+    small ingest (or the tail of a large one) has fewer pending units than the
+    ceiling allows, and spawning threads that can never receive work is pure waste.
+    Sizing by `min(ceiling, len(pending))` only ever spawns *fewer* threads than the
+    configured width, so it cannot raise provider pressure.
+
+    Three units against a ceiling of 8 must build a pool of 3.
+    """
+    container = make_file_backed_container(tmp_path, LLM_CONCURRENCY=8)
+    try:
+        run_id, highlight_ids = seed_highlights(container, 3)
+        RoutedLlm(monkeypatch, straightforward_handler(highlight_ids, 3))
+        widths = record_pool_widths(monkeypatch)
+
+        container.run_pipeline(run_id)
+
+        assert widths == [3], (
+            f"a run with 3 pending units built pools of width {widths} against a "
+            "ceiling of 8: max_workers must be min(LLM_CONCURRENCY, len(pending)), "
+            "since a thread with no unit to resolve can never do work"
+        )
+        assert len(all_cards(container)) == 3, "all three units still produce cards"
+    finally:
+        container.engine.dispose()
+
+
+def test_run_with_no_pending_units_builds_no_pool(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Negative: a run with nothing to resolve builds no pool and does not raise.
+
+    Reachable two ways: a re-run where every keep unit already has cards (the
+    idempotency path), and an ingest the Curator drops entirely. `ThreadPoolExecutor`
+    rejects `max_workers=0`, so sizing the pool to `len(pending)` without guarding
+    the empty case turns a clean no-op into a crash that `run()` would record on
+    `ingest_runs.error`.
+    """
+    container = make_file_backed_container(tmp_path, LLM_CONCURRENCY=8)
+    try:
+        run_id, highlight_ids = seed_highlights(container, 2)
+
+        def drop_everything(prompt: str) -> str:
+            """The Curator drops both units, so nothing reaches the Writer phase."""
+            assert is_curator_prompt(prompt), (
+                f"no Writer/Critic call may happen when every unit is dropped: {prompt[:120]}"
+            )
+            return json.dumps(
+                {
+                    "units": [
+                        {
+                            "highlight_ids": [highlight_id],
+                            "curated_text": text,
+                            "tags": [],
+                            "truncated_highlight_ids": [],
+                            "decision": "drop",
+                            "reason": "Bare heading, no sibling context.",
+                        }
+                        for text, highlight_id in zip(
+                            UNIT_TEXTS[:2], highlight_ids[:2], strict=True
+                        )
+                    ]
+                }
+            )
+
+        RoutedLlm(monkeypatch, drop_everything)
+        widths = record_pool_widths(monkeypatch)
+
+        container.run_pipeline(run_id)
+
+        assert widths == [], (
+            f"a run with no pending units built pools of width {widths}: with nothing "
+            "to resolve there is no work to parallelise, and max_workers=0 raises"
+        )
+        run = fetch_run(container, run_id)
+        assert run.error is None, (
+            f"an empty Writer phase must be a clean no-op, got error={run.error!r}"
+        )
+        assert run.units_dropped == 2
+        assert all_cards(container) == []
     finally:
         container.engine.dispose()
