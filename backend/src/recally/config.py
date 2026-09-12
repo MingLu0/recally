@@ -86,11 +86,13 @@ class Settings(BaseSettings):
     auto_approve_round1_accept: bool = Field(
         default=False, validation_alias="AUTO_APPROVE_ROUND1_ACCEPT"
     )
-    # Units resolved in parallel (ADR-015). 1 = sequential (the historical path);
-    # raise only as far as the provider's rate limit allows. Past ~16 the slowest
-    # single unit (144 s on the reference ingest) dominates and there is nothing
-    # left to win. The shipped default is provably today's code path.
-    llm_concurrency: int = Field(default=1, gt=0, validation_alias="LLM_CONCURRENCY")
+    # Units resolved in parallel (ADR-015). 1 = sequential (the historical path).
+    # Default 16, measured rather than guessed: on a 70-highlight reference ingest
+    # (`openai/k3`) 1 -> 8 -> 16 ran 35.2 / 6.2 / 4.5 min, with zero 429s and zero
+    # `database is locked` at any level. Past ~16 the slowest single unit dominates
+    # and there is little left to win — 8 -> 16 already bought only 1.39x. Lower it
+    # if a provider starts rate-limiting; 1 restores the pre-ADR-015 path exactly.
+    llm_concurrency: int = Field(default=16, gt=0, validation_alias="LLM_CONCURRENCY")
 
     # Registered variant per agent role (ADR-007); the registry validates them at
     # startup, so a typo fails the container build rather than the first LLM call.

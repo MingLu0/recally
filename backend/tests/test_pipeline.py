@@ -68,8 +68,15 @@ def make_container(**setting_overrides: Any) -> tuple[Container, Any]:
 
 @pytest.fixture
 def container() -> Iterator[Container]:
-    """The default container: AUTO_APPROVE_ROUND1_ACCEPT off, LLM_MAX_ROUNDS 3."""
-    test_container, engine = make_container()
+    """The default container: AUTO_APPROVE_ROUND1_ACCEPT off, LLM_MAX_ROUNDS 3.
+
+    Pinned to `LLM_CONCURRENCY=1` deliberately, not by inheriting the default (now
+    16). `ScriptedLlm` replays its responses in strict call order, which is only
+    meaningful while calls are sequential — under concurrency a unit would receive a
+    sibling's scripted reply. Concurrent behaviour is covered by
+    test_pipeline_concurrency.py, whose `RoutedLlm` routes by prompt content instead.
+    """
+    test_container, engine = make_container(LLM_CONCURRENCY=1)
     try:
         yield test_container
     finally:
