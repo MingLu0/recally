@@ -262,6 +262,53 @@ def record_pool_widths(monkeypatch: pytest.MonkeyPatch) -> list[int]:
     return widths
 
 
+def seed_chapters(container: Container, chapter_count: int) -> tuple[int, dict[str, list[int]]]:
+    """One book, `chapter_count` chapters of one highlight each, and a run row.
+
+    Chapters are the Curator's unit of work — one call per (book, chapter) group —
+    so this is the shape that exercises concurrent curation.
+    """
+    with container.session() as session:
+        run = IngestRun(filename="chapters-oreilly-annotations.csv", user_id=1)
+        session.add(run)
+        book = Book(
+            title="Concurrent Reading",
+            source="oreilly",
+            external_id="isbn-chapters",
+            user_id=1,
+        )
+        session.add(book)
+        session.flush()
+        by_chapter: dict[str, list[int]] = {}
+        for index in range(chapter_count):
+            chapter = f"Chapter {index}"
+            highlight = Highlight(
+                book_id=book.id,
+                chapter=chapter,
+                raw_text=f"The raw highlight for {chapter}.",
+                dedupe_key=f"uuid-chapter-{index}",
+                source="oreilly",
+                highlighted_at=date(2026, 9, 9),
+                export_position=index,
+                truncated=False,
+                processed=False,
+                user_id=1,
+            )
+            session.add(highlight)
+            session.flush()
+            by_chapter[chapter] = [highlight.id]
+        session.commit()
+        return run.id, by_chapter
+
+
+def chapter_of(prompt: str) -> str | None:
+    """Which chapter a Curator prompt is about, by the marker its text carries."""
+    for index in range(32):
+        if f"The raw highlight for Chapter {index}." in prompt:
+            return f"Chapter {index}"
+    return None
+
+
 # --- The gate ------------------------------------------------------------------
 
 
@@ -668,5 +715,123 @@ def test_run_with_no_pending_units_builds_no_pool(
         )
         assert run.units_dropped == 2
         assert all_cards(container) == []
+    finally:
+        container.engine.dispose()
+
+
+def test_chapters_are_curated_concurrently(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Curator calls for different chapters overlap in time.
+
+    The Curator phase is serial today: on a real export that is 31 chapters at
+    ~50-60s each, which dominates the run once units are already concurrent. A
+    chapter is an independent Curator call — grouping never spans one
+    (docs/agents.md §2) — so they parallelise exactly as units do.
+
+    Proven by observing genuine overlap: the first chapter's call blocks until a
+    second chapter's call has started. Serially that deadlocks, and the timeout
+    turns it into a failure.
+    """
+    container = make_file_backed_container(tmp_path, LLM_CONCURRENCY=4)
+    try:
+        run_id, by_chapter = seed_chapters(container, 3)
+        second_started = threading.Event()
+        overlapped = threading.Event()
+
+        def handle(prompt: str) -> str:
+            chapter = chapter_of(prompt)
+            if chapter is not None:  # a Curator prompt
+                if chapter == "Chapter 0":
+                    # Wait for a sibling chapter to enter the Curator. If curation
+                    # were serial this would never fire.
+                    if second_started.wait(timeout=10):
+                        overlapped.set()
+                else:
+                    second_started.set()
+                return curator_response([f"Curated unit for {chapter}."], by_chapter[chapter])
+            # Writer/Critic: accept everything on round 1.
+            if is_critic_prompt(prompt):
+                return critic_response(ACCEPT)
+            return writer_response("Question?")
+
+        RoutedLlm(monkeypatch, handle)
+        container.run_pipeline(run_id)
+
+        assert overlapped.is_set(), (
+            "no two chapters were being curated at the same time: the Curator phase "
+            "is still serial, which is the dominant cost on a multi-chapter export"
+        )
+        assert fetch_run(container, run_id).error is None
+        assert len(all_cards(container)) == 3, "every chapter still produces its card"
+    finally:
+        container.engine.dispose()
+
+
+def test_single_chapter_run_builds_no_curator_pool(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Negative: one chapter has nothing to overlap, so no Curator pool is built.
+
+    Threads with no second chapter to curate can never do work, and the unit pool
+    that follows is sized separately. Guarding the degenerate case keeps a
+    single-chapter ingest on exactly the path it has today.
+    """
+    container = make_file_backed_container(tmp_path, LLM_CONCURRENCY=8)
+    try:
+        run_id, highlight_ids = seed_highlights(container, 2)  # one chapter
+        RoutedLlm(monkeypatch, straightforward_handler(highlight_ids, 2))
+        widths = record_pool_widths(monkeypatch)
+
+        container.run_pipeline(run_id)
+
+        # Only the unit pool should exist, sized to its two pending units.
+        assert widths == [2], (
+            f"expected only the unit pool (width 2) for a single-chapter run, got "
+            f"{widths}: a Curator pool with one chapter has nothing to overlap"
+        )
+        assert len(all_cards(container)) == 2
+    finally:
+        container.engine.dispose()
+
+
+def test_failed_chapter_does_not_lose_its_siblings(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A Curator exception in one chapter still commits the chapters that worked.
+
+    Same partial-failure contract as units (ADR-015): the failing chapter's
+    highlights stay `processed=false` for the next run, its siblings commit, and
+    the first error lands on `ingest_runs.error` rather than the run claiming
+    success.
+    """
+    container = make_file_backed_container(tmp_path, LLM_CONCURRENCY=4)
+    try:
+        run_id, by_chapter = seed_chapters(container, 3)
+
+        def handle(prompt: str) -> Any:
+            chapter = chapter_of(prompt)
+            if chapter is not None:
+                if chapter == "Chapter 1":
+                    return RuntimeError("curator exploded for Chapter 1")
+                return curator_response([f"Curated unit for {chapter}."], by_chapter[chapter])
+            if is_critic_prompt(prompt):
+                return critic_response(ACCEPT)
+            return writer_response("Question?")
+
+        RoutedLlm(monkeypatch, handle)
+        container.run_pipeline(run_id)
+
+        run = fetch_run(container, run_id)
+        assert run.error is not None and "curator exploded" in run.error, (
+            f"a failed chapter must surface on ingest_runs.error, got {run.error!r}"
+        )
+        with container.session() as session:
+            unprocessed = session.scalars(
+                select(Highlight).where(Highlight.processed.is_(False))
+            ).all()
+            failed_ids = set(by_chapter["Chapter 1"])
+            assert {highlight.id for highlight in unprocessed} == failed_ids, (
+                "only the failed chapter's highlights stay retryable"
+            )
+        assert len(all_cards(container)) == 2, "the two healthy chapters still commit"
     finally:
         container.engine.dispose()

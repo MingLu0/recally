@@ -71,6 +71,7 @@ from recally.agents.base import (
     CriticRequest,
     Curator,
     CuratorRequest,
+    CuratorResult,
     HighlightInput,
     Writer,
     WriterRequest,
@@ -363,10 +364,13 @@ def _run_phases(
 
     # Phase 1: curate every chapter, persisting units before any Writer call.
     new_keep_units: list[tuple[CuratedUnit, list[Highlight]]] = []
-    for (book_title, chapter), highlights in groups:
-        curated = _curate_chapter(
-            session, registry, settings, llm_caller, ingest_run, book_title, chapter, highlights
-        )
+    # A chapter whose Curator call failed. Carried past phase 2 rather than raised
+    # between the phases, so the chapters that did curate still produce their cards.
+    deferred_error: Exception | None = None
+
+    def record_chapter(highlights: list[Highlight], result: CuratorResult) -> None:
+        """Persist one chapter's units and fold them into the run counters."""
+        curated = _persist_chapter(session, ingest_run, highlights, result)
         by_id = {highlight.id: highlight for highlight in highlights}
         for unit, highlight_ids in curated:
             covered = [
@@ -382,6 +386,59 @@ def _run_phases(
                 stats.units_kept += 1
                 new_keep_units.append((unit, covered))
         session.commit()
+
+    if settings.llm_concurrency == 1 or len(groups) < 2:
+        # The historical path, and the degenerate single-chapter case where a pool
+        # would add threads with nothing to overlap.
+        for (book_title, chapter), highlights in groups:
+            record_chapter(
+                highlights,
+                _resolve_chapter(
+                    registry,
+                    settings,
+                    llm_caller,
+                    ingest_run.id,
+                    book_title,
+                    chapter,
+                    highlights,
+                ),
+            )
+    else:
+        # Chapters are independent Curator calls — grouping never spans one
+        # (docs/agents.md §2) — so they overlap exactly as units do. On a real
+        # export this is the dominant serial cost: 31 chapters at ~50-60s each.
+        first_curator_error: Exception | None = None
+        with ThreadPoolExecutor(
+            max_workers=min(settings.llm_concurrency, len(groups))
+        ) as curator_pool:
+            chapter_futures = {
+                curator_pool.submit(
+                    _resolve_chapter,
+                    registry,
+                    settings,
+                    llm_caller,
+                    ingest_run.id,
+                    book_title,
+                    chapter,
+                    highlights,
+                ): highlights
+                for (book_title, chapter), highlights in groups
+            }
+            for future in as_completed(chapter_futures):
+                highlights = chapter_futures[future]
+                try:
+                    result = future.result()
+                except Exception as exc:
+                    first_curator_error = first_curator_error or exc
+                    continue
+                record_chapter(highlights, result)
+        # Deliberately NOT raised here: a chapter that failed to curate must not
+        # abort phase 2 for the chapters that succeeded. Their units are already
+        # committed, and raising between the phases would leave them cardless with
+        # their highlights unprocessed — losing work the run had already paid for.
+        # The error is carried to the end of the run instead (see below), where it
+        # reaches `ingest_runs.error` exactly as a failed unit's would.
+        deferred_error = first_curator_error
 
     # Phase 2: each keep unit → Writer, each card → Critic ⇄ Writer.
     guidance_version, guidance = _latest_guidance(session)
@@ -414,6 +471,8 @@ def _run_phases(
                 ),
                 settings,
             )
+        if deferred_error is not None:
+            raise deferred_error
         return
 
     _resolve_units_concurrently(
@@ -427,6 +486,8 @@ def _run_phases(
         guidance_version,
         guidance,
     )
+    if deferred_error is not None:
+        raise deferred_error
 
 
 def _resolve_units_concurrently(
@@ -556,23 +617,27 @@ def _unprocessed_by_chapter(
     return list(groups.items())
 
 
-def _curate_chapter(
-    session: Session,
+def _resolve_chapter(
     registry: AgentRegistry,
     settings: Settings,
     llm_caller: LlmCaller,
-    ingest_run: IngestRun,
+    ingest_run_id: int,
     book_title: str,
     chapter: str | None,
     highlights: list[Highlight],
-) -> list[tuple[CuratedUnit, list[int]]]:
-    """One Curator call over the chapter's highlights; persist every unit it returns.
+) -> CuratorResult:
+    """One Curator call over a chapter's highlights, holding no session.
 
-    The runner writes `truncated=true` back onto the flagged `highlights` rows —
-    the Curator only names ids (agents hold no session, ADR-007; hard rule 7).
-    Returns each persisted unit with the highlight ids it covers.
+    Session-free for the same reason `_resolve_unit_cards` is (ADR-015): chapters
+    are independent — grouping never spans one (docs/agents.md §2) — so they can be
+    curated concurrently, and a worker thread must never touch a `Session`. The
+    result is a set of drafts; `_persist_chapter` turns them into rows.
+
+    The only `Highlight` attributes read here are `id`, `raw_text` and
+    `personal_note`, all loaded before the worker starts and readable after a
+    main-thread commit because the session sets `expire_on_commit=False` (`db.py`).
     """
-    curator, context = _agent_context("curator", registry, settings, llm_caller, ingest_run.id)
+    curator, context = _agent_context("curator", registry, settings, llm_caller, ingest_run_id)
     request = CuratorRequest(
         book_title=book_title,
         chapter=chapter,
@@ -583,8 +648,21 @@ def _curate_chapter(
             for highlight in highlights
         ],
     )
-    result = curator(request, context)
+    return curator(request, context)
 
+
+def _persist_chapter(
+    session: Session,
+    ingest_run: IngestRun,
+    highlights: list[Highlight],
+    result: CuratorResult,
+) -> list[tuple[CuratedUnit, list[int]]]:
+    """Write one chapter's curated units; main thread only.
+
+    The runner writes `truncated=true` back onto the flagged `highlights` rows —
+    the Curator only names ids (agents hold no session, ADR-007; hard rule 7).
+    Returns each persisted unit with the highlight ids it covers.
+    """
     truncated_ids = {
         truncated_id for unit in result.units for truncated_id in unit.truncated_highlight_ids
     }
