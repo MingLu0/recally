@@ -283,3 +283,28 @@ def test_no_provider_sdk_imports() -> None:
         f"provider SDKs {PROVIDER_SDKS} are banned; call models through llm.py (LiteLLM)",
         REF_LLM,
     )
+
+
+def test_resolution_helpers_take_no_session() -> None:
+    """Card resolution is session-free, so it can run off the main thread (ADR-015).
+
+    Signature-level via `inspect.signature`, never a source grep: the word "session"
+    appears in `pipeline.py` comments and in the persistence helpers that legitimately
+    take one, so a grep would false-positive on prose. What matters is the parameter
+    list — a worker thread must not be handed a `Session`, which SQLAlchemy does not
+    make thread-safe.
+    """
+    import inspect
+
+    from recally import pipeline
+
+    offenders = [
+        f"{helper.__name__}({', '.join(inspect.signature(helper).parameters)})"
+        for helper in (pipeline._resolve_card, pipeline._resolve_unit_cards)
+        if "session" in inspect.signature(helper).parameters
+    ]
+    assert not offenders, (
+        f"resolution helpers must take no `session` parameter, found {offenders}: "
+        "they run on worker threads under LLM_CONCURRENCY > 1 and SQLAlchemy's "
+        "Session is not thread-safe (docs/decisions/015-concurrent-unit-resolution.md)"
+    )

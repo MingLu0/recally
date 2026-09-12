@@ -116,6 +116,22 @@ class _CorrelatedLlm(LlmCaller):
         )
 
 
+@dataclass(frozen=True)
+class _CardOutcome:
+    """One card's resolved result, before anything touches the database.
+
+    The Writer ⇄ Critic loop produces this and nothing else; `_write_card` turns it
+    into a `cards` row on the main thread. Keeping resolution and persistence apart
+    is what lets units resolve on worker threads (ADR-015) — a worker never holds a
+    `Session`, which SQLAlchemy does not make thread-safe.
+    """
+
+    draft: CardDraft
+    status: str
+    status_reason: str | None
+    generation_rounds: int
+
+
 @dataclass
 class _RunStats:
     """The pipeline's `ingest_runs` counters, accumulated as work commits."""
@@ -234,7 +250,7 @@ def rewrite_leech_card(
     """One leech → one rewrite card, through the normal Writer ⇄ Critic loop.
 
     Spec: docs/agents.md §7 — "Rewrites go through the normal Writer ⇄ Critic →
-    human approval path as new cards." This is the same `_run_card_loop` initial
+    human approval path as new cards." This is the same `_resolve_card` initial
     generation uses (the 3-round cap and the queue statuses included); what
     differs is correlation, not the path:
 
@@ -281,8 +297,7 @@ def rewrite_leech_card(
         )
         # One leech, one rewrite: the first draft is the rewrite; any further
         # drafts are discarded, exactly as a revision keeps only its first card.
-        rewrite = _run_card_loop(
-            session,
+        outcome = _resolve_card(
             registry,
             settings,
             llm_caller,
@@ -294,6 +309,7 @@ def rewrite_leech_card(
             guidance=guidance,
             card_id=leech.id,
         )
+        rewrite = _write_card(session, unit, outcome, settings)
         rewrite.supersedes_card_id = leech.id
         session.commit()
         return rewrite.id
@@ -353,27 +369,50 @@ def _run_phases(
     guidance_version, guidance = _latest_guidance(session)
     card_counts = _card_counts(session, [unit.id for unit, _ in new_keep_units])
     session.commit()  # close the read transaction before the first Writer call
-    for unit, highlights in new_keep_units:
-        if card_counts.get(unit.id, 0) > 0:
-            # Idempotency: a keep unit that already has cards is never re-generated.
-            continue
-        cards = _generate_cards(
-            session,
+    # Idempotency: a keep unit that already has cards is never re-generated.
+    pending = [
+        (unit, highlights)
+        for unit, highlights in new_keep_units
+        if card_counts.get(unit.id, 0) == 0
+    ]
+    for unit, highlights in pending:
+        outcomes = _resolve_unit_cards(
             registry,
             settings,
             llm_caller,
-            ingest_run,
+            ingest_run.id,
             unit,
             highlights,
             guidance_version,
             guidance,
         )
-        stats.cards_generated += len(cards)
-        for highlight in highlights:
-            # Terminal outcome: every card of the unit now has a status.
-            highlight.processed = True
-        stats.finished.append((unit, cards))
-        session.commit()
+        _persist_unit(session, stats, unit, highlights, outcomes, settings)
+
+
+def _persist_unit(
+    session: Session,
+    stats: _RunStats,
+    unit: CuratedUnit,
+    highlights: list[Highlight],
+    outcomes: list[_CardOutcome],
+    settings: Settings,
+) -> None:
+    """Commit one resolved unit: its cards, its `processed` flips, its counters.
+
+    Everything in this function touches the session, and nothing else in the unit's
+    path does — which is the whole point (ADR-015). Under `LLM_CONCURRENCY > 1` this
+    runs on the main thread only, one unit at a time, while workers resolve the rest.
+    A unit commits the moment it is persisted, so a later crash keeps the units
+    already done — the documented retry path (docs/architecture.md, "Failure
+    handling").
+    """
+    cards = [_write_card(session, unit, outcome, settings) for outcome in outcomes]
+    stats.cards_generated += len(cards)
+    for highlight in highlights:
+        # Terminal outcome: every card of the unit now has a status.
+        highlight.processed = True
+    stats.finished.append((unit, cards))
+    session.commit()
 
 
 def _delete_orphan_keep_units(session: Session) -> None:
@@ -463,22 +502,26 @@ def _curate_chapter(
     return persisted
 
 
-def _generate_cards(
-    session: Session,
+def _resolve_unit_cards(
     registry: AgentRegistry,
     settings: Settings,
     llm_caller: LlmCaller,
-    ingest_run: IngestRun,
+    ingest_run_id: int | None,
     unit: CuratedUnit,
     highlights: list[Highlight],
     guidance_version: int | None,
     guidance: str | None,
-) -> list[Card]:
-    """The Writer ⇄ Critic loop for one keep unit; one `cards` row per draft, each
-    written exactly once, at its terminal verdict (docs/agents.md §3–§4)."""
+) -> list[_CardOutcome]:
+    """The Writer ⇄ Critic loop for one keep unit; one outcome per draft, each
+    resolved to its terminal verdict (docs/agents.md §3–§4).
+
+    Session-free (ADR-015), so a whole unit's LLM chain can run on a worker thread
+    while the main thread persists whichever units have already finished. The
+    caller turns each outcome into a `cards` row.
+    """
     source_truncated = any(highlight.truncated for highlight in highlights)
     writer, writer_context = _agent_context(
-        "writer", registry, settings, llm_caller, ingest_run.id, unit_id=unit.id, round=1
+        "writer", registry, settings, llm_caller, ingest_run_id, unit_id=unit.id, round=1
     )
     result = writer(
         WriterRequest(
@@ -491,12 +534,11 @@ def _generate_cards(
         writer_context,
     )
     return [
-        _run_card_loop(
-            session,
+        _resolve_card(
             registry,
             settings,
             llm_caller,
-            ingest_run.id,
+            ingest_run_id,
             unit,
             draft,
             source_truncated=source_truncated,
@@ -507,8 +549,7 @@ def _generate_cards(
     ]
 
 
-def _run_card_loop(
-    session: Session,
+def _resolve_card(
     registry: AgentRegistry,
     settings: Settings,
     llm_caller: LlmCaller,
@@ -520,12 +561,18 @@ def _run_card_loop(
     guidance_version: int | None,
     guidance: str | None,
     card_id: int | None = None,
-) -> Card:
+) -> _CardOutcome:
     """One card's Critic ⇄ Writer rounds, bounded by LLM_MAX_ROUNDS (hard rule 9).
 
     The round count lives here, not in the agents: the Writer and the Critic each
     see one request and return one result. A `revise` re-enters the Writer for this
     card only — siblings already accepted keep their status and are never re-sent.
+
+    Session-free by construction (ADR-015): this returns a `_CardOutcome` and the
+    caller writes it. That is what lets a whole unit resolve on a worker thread —
+    the only state it reads off `unit` (`curated_text`, `tags`) was loaded before
+    the thread started and stays readable because the session sets
+    `expire_on_commit=False` (`db.py`).
     """
     round_number = 1
     current = draft
@@ -555,31 +602,22 @@ def _run_card_loop(
                 if settings.auto_approve_round1_accept and round_number == 1
                 else "pending_review"
             )
-            return _write_card(
-                session,
-                unit,
-                current,
-                settings,
+            return _CardOutcome(
+                draft=current,
                 status=status,
                 status_reason=None,
                 generation_rounds=round_number,
             )
         if verdict.verdict == "reject":
-            return _write_card(
-                session,
-                unit,
-                current,
-                settings,
+            return _CardOutcome(
+                draft=current,
                 status="needs_human",
                 status_reason=verdict.critique,
                 generation_rounds=round_number,
             )
         if round_number >= settings.llm_max_rounds:
-            return _write_card(
-                session,
-                unit,
-                current,
-                settings,
+            return _CardOutcome(
+                draft=current,
                 status="needs_human",
                 status_reason=(
                     f"Critic: {verdict.critique}; "
@@ -617,21 +655,19 @@ def _run_card_loop(
 def _write_card(
     session: Session,
     unit: CuratedUnit,
-    draft: CardDraft,
+    outcome: _CardOutcome,
     settings: Settings,
-    *,
-    status: str,
-    status_reason: str | None,
-    generation_rounds: int,
 ) -> Card:
-    """Stage the single write of a card, at its terminal verdict.
+    """Stage the single write of a resolved card, at its terminal verdict.
 
-    `original_front`/`original_back` keep the Writer text the Critic accepted (or
-    gave up on), so a human edit at approval time stays distinguishable from what
-    the model produced (docs/data-model.md, `cards`). No flush here: the unit's
-    cards commit together with the `processed` flips at the end of the unit, and no
-    transaction may be open while the next agent call runs (module docstring).
+    Main thread only: this is the half of resolution that touches the session
+    (ADR-015). `original_front`/`original_back` keep the Writer text the Critic
+    accepted (or gave up on), so a human edit at approval time stays distinguishable
+    from what the model produced (docs/data-model.md, `cards`). No flush here: the
+    unit's cards commit together with the `processed` flips at the end of the unit,
+    and no transaction may be open while the next agent call runs (module docstring).
     """
+    draft = outcome.draft
     card = Card(
         unit_id=unit.id,
         type=draft.type,
@@ -640,9 +676,9 @@ def _write_card(
         original_front=draft.front,
         original_back=draft.back,
         tags=unit.tags,
-        status=status,
-        status_reason=status_reason,
-        generation_rounds=generation_rounds,
+        status=outcome.status,
+        status_reason=outcome.status_reason,
+        generation_rounds=outcome.generation_rounds,
         model=settings.llm_model_writer,
         guidance_version=draft.guidance_version,
     )
