@@ -35,11 +35,29 @@ Failure handling (docs/architecture.md): an agent exception is recorded on
 propagate — the watcher and the scheduler keep running, and the next run retries.
 
 One transaction rule throughout: the runner's session holds no open transaction
-while an agent runs, because `LlmCaller` commits each `llm_calls` row independently
-(ADR-006) and the two share one connection under the test suite's `StaticPool`.
-Every agent call is therefore preceded by a commit, and result writes follow it.
+while an agent runs. Every agent call is therefore preceded by a commit, and result
+writes follow it. Two independent reasons, both live — this is not test-only
+scaffolding, and deleting the commit-before-agent-call discipline would break
+production:
+
+1. `LlmCaller` commits each `llm_calls` row on its own session (ADR-006). SQLite
+   serializes writers across connections, so an open runner transaction while the
+   wrapper commits on its own pooled connection yields `database is locked`. WAL
+   (`db.py`) relaxes reader/writer contention but not writer/writer, so the rule
+   still stands.
+2. Under the test suite's `StaticPool` the runner and the wrapper genuinely share
+   one connection, where the wrapper's commit would also commit the runner's
+   pending work.
+
+Concurrency (ADR-015): with `LLM_CONCURRENCY > 1` each keep unit's Writer ⇄ Critic
+chain resolves on a worker thread and only `_persist_unit` touches the session, on
+the main thread. That split is what the `_resolve_*` helpers' missing `session`
+parameter encodes — SQLAlchemy's `Session` is not thread-safe, and the failure mode
+is silent. Units commit as they complete, so a failure leaves finished units intact
+and the failed unit's highlights retryable.
 """
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from typing import Any, Literal, overload
 
@@ -375,18 +393,98 @@ def _run_phases(
         for unit, highlights in new_keep_units
         if card_counts.get(unit.id, 0) == 0
     ]
-    for unit, highlights in pending:
-        outcomes = _resolve_unit_cards(
-            registry,
-            settings,
-            llm_caller,
-            ingest_run.id,
-            unit,
-            highlights,
-            guidance_version,
-            guidance,
-        )
-        _persist_unit(session, stats, unit, highlights, outcomes, settings)
+    if settings.llm_concurrency == 1:
+        # The historical path, untouched: the shipped default is provably today's
+        # code, so a rollback needs no deploy (ADR-015, "Rollout").
+        for unit, highlights in pending:
+            _persist_unit(
+                session,
+                stats,
+                unit,
+                highlights,
+                _resolve_unit_cards(
+                    registry,
+                    settings,
+                    llm_caller,
+                    ingest_run.id,
+                    unit,
+                    highlights,
+                    guidance_version,
+                    guidance,
+                ),
+                settings,
+            )
+        return
+
+    _resolve_units_concurrently(
+        session,
+        registry,
+        settings,
+        llm_caller,
+        ingest_run,
+        stats,
+        pending,
+        guidance_version,
+        guidance,
+    )
+
+
+def _resolve_units_concurrently(
+    session: Session,
+    registry: AgentRegistry,
+    settings: Settings,
+    llm_caller: LlmCaller,
+    ingest_run: IngestRun,
+    stats: _RunStats,
+    pending: list[tuple[CuratedUnit, list[Highlight]]],
+    guidance_version: int | None,
+    guidance: str | None,
+) -> None:
+    """Resolve `pending` units on a thread pool; persist each as it finishes.
+
+    Units are independent chains, so overlapping them turns an ingest's summed
+    provider latency into roughly its slowest single unit (ADR-015). Only the LLM
+    half runs on a worker: `_resolve_unit_cards` holds no session, and every write
+    happens back here on the main thread, one unit at a time.
+
+    `as_completed`, never `map`: a unit commits the moment it finishes, so a crash
+    partway through keeps everything already done — today's recovery behaviour.
+    `map` would batch every write to the end of the run and lose all of it.
+
+    Partial failure is per unit (ADR-015): a raising unit is skipped, its highlights
+    stay `processed=false` for the next run to retry, and the loop keeps draining so
+    in-flight siblings are not abandoned. The first exception is re-raised once the
+    pool has drained, which is what puts it on `ingest_runs.error` via `run()`;
+    swallowing it would let the run row claim success while failed units sat
+    unprocessed. Units already committed survive the rollback, which discards only
+    the uncommitted tail.
+    """
+    first_error: Exception | None = None
+    with ThreadPoolExecutor(max_workers=settings.llm_concurrency) as pool:
+        futures = {
+            pool.submit(
+                _resolve_unit_cards,
+                registry,
+                settings,
+                llm_caller,
+                ingest_run.id,
+                unit,
+                highlights,
+                guidance_version,
+                guidance,
+            ): (unit, highlights)
+            for unit, highlights in pending
+        }
+        for future in as_completed(futures):
+            unit, highlights = futures[future]
+            try:
+                outcomes = future.result()
+            except Exception as exc:
+                first_error = first_error or exc
+                continue
+            _persist_unit(session, stats, unit, highlights, outcomes, settings)
+    if first_error is not None:
+        raise first_error
 
 
 def _persist_unit(
