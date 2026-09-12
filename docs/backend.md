@@ -9,17 +9,21 @@ backend/
   pyproject.toml                  # uv; ruff + mypy + pytest config
   .env.example                    # mirrors config.md
   src/recally/
-    main.py                       # app factory; lifespan owns watcher + APScheduler
+    main.py                       # app factory; lifespan owns APScheduler (the watcher
+                                  #   runs standalone: python -m recally.ingest.watcher)
     config.py                     # env parsing, single source of defaults
     container.py                  # source of truth for agent/service resolution
     db.py                         # engine/session factory; no SQLite-specific SQL
     api/                          # the only layer that imports FastAPI
       deps.py                     # request-scoped dependencies (pull from container)
       auth.py                     # X-API-Key dependency
+      errors.py                   # problem+json handlers; one error shape for the client
       routers/                    # one module per api-spec.md section:
         health.py  reviews.py  cards.py  decks.py  stats.py  ingest.py  jobs.py  devices.py
     models/                       # SQLAlchemy models (data-model.md)
     schemas/                      # Pydantic request/response models (api-spec.md)
+    services/                     # query/command services shared by routers, CLI, jobs;
+                                  #   take a Session, return plain dataclasses
     ingest/
       watcher.py                  # watchdog, on_moved + debounce
       dedupe.py                   # annotation-UUID upsert / removed_at logic
@@ -46,12 +50,16 @@ backend/
     scheduling/
       fsrs.py                     # py-fsrs wrapper; server-authoritative review_card
       optimizer.py                # Learner stage A: nightly fsrs.Optimizer fit -> fsrs_params
+      learner.py                  # Learner stage B: review aggregates + nightly guidance job
       notifier.py                 # one-push-per-day policy
       jobs.py                     # notify / learner / optimizer entry points for POST /jobs/run
     cli.py                        # recally CLI (roadmap step 3)
+  scripts/
+    seed_demo.py                  # demo-db seeder for the manual Android UI pass (docs/demo-seed.md)
   alembic/                        # render_as_batch=True
   tests/
     fixtures/                     # committed trimmed exports (roadmap step 1)
+    agents/  api/  scheduling/    # per-layer suites; the rest sits flat at tests/
 ```
 
 ## Layering
