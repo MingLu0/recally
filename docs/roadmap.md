@@ -74,8 +74,54 @@ The last one was an either/or — build the count or drop the badge — and was 
 | Phase | Trigger | Changes |
 |---|---|---|
 | 1. Local | now | Mac, SQLite, watcher, LAN |
-| 2. Hosted | want access away from home | Dockerize; upload endpoint replaces watcher. HF Spaces only with paid always-on hardware and persistent storage (free tier sleeps after 48 h and wipes disk, which kills the scheduler and the DB). Otherwise a small VPS, or external cron → `POST /jobs/run` plus hosted Postgres |
+| 2. Hosted | want access away from home | Steps 7–11 below: Postgres cutover, Dockerize, upload endpoint replaces watcher, deploy, Android over HTTPS |
 | 3. AWS | multi-user or reliability needs | ECS/Lambda + RDS Postgres, S3 drop zone, real auth |
+
+Phase 2 is Postgres from the start (ADR-016). Hugging Face Spaces no longer offers block storage — its disk is ephemeral and the replacement, Storage Buckets, is S3-like object storage that SQLite cannot run on — so SQLite has nowhere durable to live on a Space. Postgres is therefore forced by the hosting choice, and independently wanted: it moves the one lossy migration to the point where the database is still disposable.
+
+Steps 7–11 carry the same two gates as steps 1–6. Where they name a test, it is a named test function (ADR-012); where a negative is asserted, the red output goes in the PR under `## TDD evidence` (ADR-013).
+
+### 7. Postgres cutover
+The riskiest step, done first and entirely locally — no hosting involved, so a failure costs nothing. Cards regenerate from the CSV; `review_logs` and the FSRS state built from them cannot. Today that is validation-checkpoint data, by phase 3 it is months of history.
+
+- `backend/scripts/migrate_to_postgres.py`: refuse a non-empty target, `alembic upgrade head` to build the schema, copy table by table in FK-dependency order **through the SQLAlchemy models** (so type coercion is SQLAlchemy's problem, not ours), reset every sequence to `max(id) + 1`, then verify and exit non-zero on any mismatch. A `.dump | psql` does not work and is not the method (ADR-016).
+- The four silent-corruption risks, all coercion: booleans stored `0`/`1` (`highlights.truncated`, `highlights.processed`), timestamps stored as text across 18 `DateTime` columns, generic `JSON` stored as TEXT (`cards.tags`, `push_runs.card_ids`, `fsrs_params.parameters`, `llm_calls.request`/`response`), and sequences that do not transfer.
+- **Data safety**: the SQLite file is opened read-only and never written; take `data/recally.db.pre-migration` first anyway. **Rollback is one env var** — `RECALLY_DATABASE_URL` back to the SQLite path. Both backends stay supported indefinitely; that dual support *is* the rollback, so no SQLite-removing cleanup lands here.
+- **Tests**: `test_migration_refuses_nonempty_target` raises rather than double-writing; `test_migration_never_writes_to_source` leaves the source checksum unchanged; `test_migration_copies_every_table_row_count`; `test_migration_preserves_card_state_values` keeps `due`, `stability` and `difficulty` byte-identical; `test_migration_preserves_json_payloads` round-trips all four JSON columns; `test_migration_preserves_naive_utc_timestamps` shifts no offset; `test_migration_resets_sequences` inserts without a PK collision; `test_suite_passes_on_postgres` runs the existing suite against Postgres, which is what converts hard rule 4 from a claim into a fact (`JSON` comparison semantics, `NULL` ordering, string collation).
+- **You verify**: migrate a copy of the real `data/recally.db` into a local Postgres. `GET /stats`, `GET /cards/pending` and `GET /reviews/due` return identical payloads on both backends. Rate a card on Postgres and confirm the next due date matches what SQLite gave for the same rating. Point `RECALLY_DATABASE_URL` back at SQLite and confirm the app still runs unchanged.
+
+### 8. Dockerize
+- `backend/Dockerfile`: `uv sync --frozen`, non-root user, `EXPOSE 7860` (the HF convention), `alembic upgrade head` on boot before uvicorn. `.dockerignore` excludes `data/`, `.env*`, `.venv`. `LOG_LEVEL` logs to stdout, which is what the HF log viewer reads.
+- `GET /health` reports the running version. With auto-deploy there is no tag naming what is live, so this is the only way to tell what is actually running.
+- The `optimizer` extra (~800MB of torch) stays out. Not a decision for this step: the fit is a no-op below `OPTIMIZER_MIN_REVIEWS`, and `scheduling/optimizer.py` degrades gracefully without the extra — "never a raise, never a row". Step 6a is where it becomes real; adding `uv sync --extra optimizer` then is a one-line change.
+- **Tests**: `test_dockerfile_has_no_secrets` finds no key material baked into the image; `test_container_boots_and_serves_health`; `test_container_runs_migrations_on_boot` leaves an empty database at head; `test_health_reports_version` matches `pyproject.toml`.
+- **You verify**: `docker run` locally against the step 7 Postgres. `GET /health/auth` answers 200 with the key and 401 without.
+
+### 9. Upload endpoint replaces the watcher
+`POST /ingest` is already specified (`api-spec.md`, "Ingestion") and already noted as absent in `api/routers/ingest.py`. The watcher stays for local use; it has no role in the container.
+
+- **Tests**: `test_ingest_upload_matches_watcher_counts` gives the same new/updated/removed counts as the watcher for the same fixture; `test_ingest_upload_requires_api_key` returns 401 without one; `test_ingest_upload_rejects_non_csv` returns 422; `test_ingest_upload_is_idempotent` reports 0/0/0 on the second upload of the same file.
+- **You verify**: upload the real 695-row export to the deployed Space; `GET /ingest/status` shows the counts the step 1 gate produced.
+
+### 10. Deploy
+- Space on the Docker SDK, GitHub-connected, **auto-deploying on every push to `main`**. No tag gate: single user, and shipping is a human call on what lands on `main`. A `backend-v*` tag gate mirroring the Android `v*` path in `ci.yml` is the easy upgrade if a bad deploy ever warrants it — deferred deliberately, not overlooked.
+- **HF Spaces + Neon Postgres**, decided 2026-09-13. Start on **CPU Basic** and add a keep-alive if sleep actually bites. Basic sleeps after 48 h idle, but daily use keeps it awake on its own, so the gap that matters is a lapsed habit — and that case is circular, because the notifier is what recovers a lapsed habit and it is what stops when the Space sleeps. The fix is an external cron pinging the Space every few hours while APScheduler keeps doing the real scheduling in-process; that sidesteps the UTC-vs-`RECALLY_TIMEZONE` and 60-day-auto-disable problems of running the jobs themselves from cron. CPU Upgrade (~$22/mo) never sleeps and needs none of it — the upgrade is a settings change, so start cheap.
+- Rejected: **Fly.io**, whose Managed Postgres starts at $38/mo with no hobby tier (checked 2026-09-13) — more than HF Upgrade plus Neon's free tier, for one user. Fly compute with external Postgres is the cheapest always-on option at roughly $5/mo and stays the fallback if HF disappoints; the container is portable either way, so this is reversible.
+- Neon's free tier scales compute to zero when idle, so the first query after a quiet period pays a wake-up. It stacks with a sleeping Space; see the step 11 timeout note.
+- Env vars in Space settings: `RECALLY_API_KEY`, `RECALLY_DATABASE_URL`, the provider key, `RECALLY_TIMEZONE`, `FIREBASE_CREDENTIALS_FILE`. **Rotate `RECALLY_API_KEY`** — it stops being a LAN-only secret and starts guarding a public endpoint.
+- Nightly `pg_dump` to an HF Storage Bucket via `hf sync`. Free-tier Postgres carries no backup guarantee worth relying on, and the bucket docs name rolling backups as an intended use case.
+- `docs/deployment.md` records the procedure.
+- **Tests**: `test_settings_rejects_sqlite_url_when_hosted` refuses to boot the hosted container on the SQLite default, which would otherwise lose every write on restart.
+- **You verify**: `GET /health` over HTTPS from off the home network. Upload the CSV, watch the pipeline run, approve a card. **Restart the Space and confirm the data is still there** — this is the check that proves the ephemeral-disk problem is solved. Confirm the backup lands in the bucket.
+
+### 11. Android over HTTPS
+The phone talks to the API exactly as before with a different base URL; Postgres is invisible to it, and FCM is unaffected because push goes server → Google → phone and never touches the base URL. Depends on step 10 for a live URL to test against, except the signing work, which can run in parallel.
+
+- **A real release variant.** [android.md](android.md), "Connecting to the backend" says the release build "cannot talk to a phase-1 LAN backend — which is correct: phase 2 hosting brings TLS, and that is when a release build gets a backend it can reach." This is that moment. But `ci.yml`'s `distribute` job ships `assembleDebug` with a debug keystore, and the debug variant permits cleartext globally, so a mistyped `http://` URL would silently downgrade against a public endpoint. Needs a release signing config, a keystore secret, `assembleRelease` and an R8/minify decision.
+- Base URL default and placeholder become HTTPS (`SettingsScreen.kt` currently hints `http://192.168.1.42:8000`), and a cleartext URL gets a real warning rather than failing as "no answer from the server".
+- OkHttp timeouts are tuned for a LAN Mac; a hosted backend (and a free-tier Postgres waking from idle) needs headroom. The Room cache absorbs much of this.
+- **Tests**: `test_release_manifest_permits_no_cleartext` keeps the existing release audit honest; `test_release_variant_is_signed_with_release_key` fails on the debug keystore; `test_settings_warns_on_cleartext_url`; `test_base_url_accepts_https_host_without_port`.
+- **You verify**: install the release APK, put the phone on mobile data off the home network, and the Settings connection test passes against the Space URL. Review five cards offline, reconnect, and `review_logs` matches. Leave cards unreviewed overnight: exactly one push arrives inside the window, so hard rule 8 still holds against the hosted scheduler.
 
 ## Later ideas
 
