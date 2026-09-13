@@ -37,6 +37,16 @@ dev = [
     # Starlette's TestClient transport (it deprecates plain httpx in favour of this);
     # test-only, so declared here rather than pulled in via fastapi's `standard` extra.
     "httpx2",
+    # The Postgres half of the dual-backend suite (roadmap step 7, ADR-016).
+    # `pgserver` vendors a real PostgreSQL 16 server binary and runs it on a unix
+    # socket in a temp directory, so the suite proves hard rule 4 on an actual
+    # Postgres with no system install, no Docker and no CI service container.
+    # Test-only: the app never imports it, and the deployed backend talks to a real
+    # server through `RECALLY_DATABASE_URL`.
+    "pgserver>=0.1.4",
+    # The driver SQLAlchemy uses for `postgresql+psycopg://`. The `binary` extra
+    # ships libpq, so nothing has to be built or linked against a system Postgres.
+    "psycopg[binary]>=3.2",
 ]
 
 [build-system]
@@ -74,4 +84,9 @@ markers = [
     # Fit tests need torch + pandas; they skip when the extra is absent so the
     # default `uv sync` suite (and CI) stays green and fast.
     "optimizer: needs the fsrs[optimizer] extra (uv sync --extra optimizer)",
+    # The dual-backend half of the suite (roadmap step 7). `pgserver` is a dev
+    # dependency, so these normally run; the marker exists so a machine where the
+    # vendored server cannot start reports skips against one name rather than a
+    # scattering of errors.
+    "postgres: runs against an embedded PostgreSQL server (pgserver)",
 ]
