@@ -71,7 +71,7 @@ Deliberately minimal for v1; the database is the trace.
 - **Failure handling**: exceptions are caught at the agent boundary, recorded in `ingest_runs.error`, and the run is marked finished. The watcher and scheduler keep running. Retry is the next pipeline run (triggered by any ingest, or `POST /ingest` with the same file): it processes every `highlights` row still `processed=false`, so dedupe skipping the unchanged rows does not block recovery. See `agents.md`, "Pipeline runner and handoffs".
 
 ### Storage
-SQLite now (`data/recally.db`), SQLAlchemy models, Postgres-ready (no SQLite-specific SQL). Alembic runs with `render_as_batch=True` because SQLite cannot ALTER columns in place. See [data-model.md](data-model.md).
+SQLite locally (`data/recally.db`), Postgres from phase 2 (ADR-016); the same SQLAlchemy models serve both and `RECALLY_DATABASE_URL` selects one, so both stay supported and the cutover is reversible. No SQLite-specific SQL. Alembic runs with `render_as_batch=True` because SQLite cannot ALTER columns in place. See [data-model.md](data-model.md).
 
 ### Android
 Native Kotlin + Jetpack Compose, offline-first with Room cache and rating sync queue. See [android.md](android.md).
@@ -81,9 +81,11 @@ Native Kotlin + Jetpack Compose, offline-first with Room cache and rating sync q
 | Phase | Hosting | Ingestion | DB | Notes |
 |---|---|---|---|---|
 | 1. Local (now) | Mac (Python ≥ 3.10) | watch folder | SQLite | LAN access for the app |
-| 2. Hosted | Docker on HF Spaces (paid always-on hardware + persistent storage) **or** a small VPS/Fly.io machine | manual upload endpoint | SQLite on persistent volume, or external Postgres (Neon/Supabase) | single user |
+| 2. Hosted | Docker on HF Spaces, a small VPS or Fly.io | manual upload endpoint | **Postgres** (hosted; Neon/Supabase) | single user |
 | 3. AWS | ECS/Lambda + RDS | S3 drop → trigger | Postgres (RDS) | real auth, multi-user ready |
 
-Phase 2 caveat: the free HF Spaces tier sleeps after 48 h of inactivity and its disk is ephemeral, which halts the in-process scheduler and loses the database. Either pay for always-on hardware plus persistent storage, or move the scheduler out of process (an external cron such as GitHub Actions calling `POST /jobs/run`) and the database to a hosted Postgres.
+Phase 2 is Postgres, not SQLite (ADR-016). HF Spaces has no block storage: a Space's disk is ephemeral and lost on restart, and the replacement — Storage Buckets — is S3-like object storage, which cannot host a SQLite file because there is no POSIX file locking. So the database has to be external, and moving to Postgres in phase 2 also does the risky migration while the database is still disposable rather than during the phase-3 AWS build.
+
+Two Spaces caveats remain, and neither touches the database. Creating a Space that runs compute (Docker or Gradio) now requires a paid plan; CPU Basic is then $0/hr but sleeps after 48 h of inactivity, while CPU Upgrade never does. Sleep matters only because it stops the in-process scheduler — daily use keeps a Space awake on its own, so the failure case is a lapsed habit, which is exactly when the notifier is needed. An external cron pinging the Space every few hours is enough to prevent that, and is preferable to moving the jobs themselves out of process: `POST /jobs/run` from GitHub Actions cron would run in UTC against `RECALLY_TIMEZONE` day boundaries and disables itself after 60 days of repo inactivity.
 
 The ingestion and agent code is identical across phases; only triggers and connection strings change.
