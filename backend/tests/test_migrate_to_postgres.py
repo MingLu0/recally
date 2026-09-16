@@ -24,6 +24,7 @@ a copy that flattens a type has somewhere to show it.
 from __future__ import annotations
 
 import hashlib
+import sqlite3
 import subprocess
 import sys
 from collections.abc import Iterator
@@ -411,7 +412,7 @@ def test_migration_never_writes_to_source(source_database: Path, postgres_url: s
     The source stays a complete working database, which is what makes rollback a
     matter of pointing `RECALLY_DATABASE_URL` back at it (issue #224). A checksum is
     the assertion because an accidental write need not change any row the tests read —
-    WAL mode alone rewrites the file.
+    the app's own engine enables WAL on connect, and that alone rewrites the file.
     """
 
     checksum_before = _checksum(source_database)
@@ -419,10 +420,71 @@ def test_migration_never_writes_to_source(source_database: Path, postgres_url: s
     migrate(source_url=_sqlite_url(source_database), target_url=postgres_url)
 
     assert _checksum(source_database) == checksum_before
-    # A stray sidecar is a write too: WAL/journal files mean the connection was not
-    # read-only, even when the main file's bytes happen to be unchanged.
-    assert not source_database.with_name(source_database.name + "-wal").exists()
+    # A rollback journal would mean a write transaction was opened against the source.
+    # (`-wal`/`-shm` are deliberately *not* asserted on here; see the WAL test below.)
     assert not source_database.with_name(source_database.name + "-journal").exists()
+
+
+def test_migration_never_writes_to_a_wal_mode_source(
+    source_database: Path, postgres_url: str
+) -> None:
+    """The real `data/recally.db` is in WAL mode, and that case behaves differently.
+
+    `recally.db.create_database_engine` puts every SQLite database in WAL mode, so the
+    production file is WAL and the migration has to be safe against *that*, not just
+    against a default-journal file built by a fixture.
+
+    The wrinkle: opening a WAL database read-only still creates `-shm` and `-wal`
+    sidecars, because SQLite needs the shared-memory index to read one at all. So their
+    presence is not evidence of a write, and asserting their absence would fail against
+    the real database while proving nothing. What must hold is that the *main file* is
+    byte-identical and the data is still readable afterwards — which is what rollback
+    actually depends on.
+    """
+    with sqlite3.connect(source_database) as connection:
+        connection.execute("PRAGMA journal_mode=WAL")
+    # Checksum taken after the mode change so WAL setup is not counted as the migration's
+    # write.
+    checksum_before = _checksum(source_database)
+
+    migrate(source_url=_sqlite_url(source_database), target_url=postgres_url)
+
+    assert _checksum(source_database) == checksum_before
+    assert not source_database.with_name(source_database.name + "-journal").exists()
+
+    # The checksum alone is weak here: on an already-WAL database a read-write open
+    # need not change the main file's bytes, so it would pass even if the migration
+    # opened the source writable. The connection itself is therefore asserted on —
+    # a read-only connection raises on write, a read-write one silently succeeds.
+    assert _source_connection_is_read_only(_sqlite_url(source_database))
+
+    # Still a complete, readable database: the rollback path has to work, not merely
+    # leave the bytes alone.
+    with sqlite3.connect(f"file:{source_database}?mode=ro", uri=True) as connection:
+        book_count = connection.execute("SELECT count(*) FROM books").fetchone()[0]
+    assert book_count == 1
+
+
+def _source_connection_is_read_only(source_url: str) -> bool:
+    """Does the script's own source engine refuse a write?
+
+    Asks the implementation for the engine it would use and tries to write through it.
+    A read-only connection raises `OperationalError`; anything else means the migration
+    could scribble on the database it is supposed to be preserving.
+    """
+    from sqlalchemy import text as sql_text
+    from sqlalchemy.exc import OperationalError
+
+    engine = migrate_to_postgres._create_read_only_source_engine(source_url)
+    try:
+        with engine.connect() as connection:
+            connection.execute(sql_text("CREATE TABLE _write_probe (a INTEGER)"))
+    except OperationalError:
+        return True
+    else:
+        return False
+    finally:
+        engine.dispose()
 
 
 def test_migration_copies_every_table_row_count(source_database: Path, postgres_url: str) -> None:
