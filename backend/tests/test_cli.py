@@ -20,15 +20,13 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
-from sqlalchemy import create_engine, select
+from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session
-from sqlalchemy.pool import StaticPool
 
 from recally import cli
 from recally.config import Settings
 from recally.container import Container
 from recally.models import (
-    Base,
     Book,
     Card,
     CardState,
@@ -48,17 +46,10 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 
 
 @pytest.fixture
-def container() -> Iterator[Container]:
-    """A container on a fresh in-memory database (see test_card_controls.py)."""
-    engine = create_engine(
-        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-    )
-    Base.metadata.create_all(engine)
-    settings = Settings(RECALLY_DATABASE_URL="sqlite://", RECALLY_API_KEY=TEST_API_KEY)
-    try:
-        yield Container(settings, engine=engine)
-    finally:
-        engine.dispose()
+def container(test_engine: Engine) -> Iterator[Container]:
+    """A container on a fresh database from the shared fixture (tests/conftest.py)."""
+    settings = Settings(RECALLY_DATABASE_URL=str(test_engine.url), RECALLY_API_KEY=TEST_API_KEY)
+    yield Container(settings, engine=test_engine)
 
 
 def run_cli(container: Container, *argv: str) -> int:

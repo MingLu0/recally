@@ -35,6 +35,9 @@ Run from `backend/`.
 ```
 uv sync
 uv run pytest
+# The same suite against the embedded Postgres (pgserver); the shared engine
+# fixture in tests/conftest.py reads RECALLY_TEST_BACKEND. CI runs both.
+RECALLY_TEST_BACKEND=postgres uv run pytest -rs
 uv run ruff check . && uv run ruff format --check .
 uv run mypy src/
 uv run alembic upgrade head

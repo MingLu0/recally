@@ -25,15 +25,13 @@ from zoneinfo import ZoneInfo
 import firebase_admin
 import pytest
 from firebase_admin import exceptions, messaging
-from sqlalchemy import create_engine, select
+from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session
-from sqlalchemy.pool import StaticPool
 
 import recally.scheduling
 from recally.config import Settings
 from recally.container import Container
 from recally.models import (
-    Base,
     Book,
     Card,
     CardState,
@@ -55,31 +53,23 @@ _PROVENANCE_COUNTER = itertools.count(1)
 
 
 @pytest.fixture
-def make_container() -> Iterator[Callable[..., Container]]:
+def make_container(
+    test_engine_factory: Callable[[], Engine],
+) -> Iterator[Callable[..., Container]]:
     """Container factory on fresh in-memory databases, with settings overrides
     (same shape as tests/scheduling/test_optimizer.py)."""
-    built: list[Container] = []
 
     def factory(**settings_overrides: object) -> Container:
-        engine = create_engine(
-            "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-        )
-        Base.metadata.create_all(engine)
+        engine = test_engine_factory()
         settings = Settings(
-            RECALLY_DATABASE_URL="sqlite://",
+            RECALLY_DATABASE_URL=str(engine.url),
             RECALLY_API_KEY=TEST_API_KEY,
             FIREBASE_CREDENTIALS_FILE="/nonexistent/test-service-account.json",
             **settings_overrides,  # type: ignore[arg-type]
         )
-        container = Container(settings, engine=engine)
-        built.append(container)
-        return container
+        return Container(settings, engine=engine)
 
-    try:
-        yield factory
-    finally:
-        for container in built:
-            container.engine.dispose()
+    yield factory
 
 
 @pytest.fixture

@@ -5,10 +5,9 @@
 "sqlite" cannot vet — the ones issue #224 names: `JSON` comparison semantics, `NULL`
 ordering in `ORDER BY`, and string collation.
 
-The backend under test comes from `RECALLY_TEST_DATABASE_URL` when it is set (that is
-how `test_migrate_to_postgres.py::test_suite_passes_on_postgres` runs this file against
-its embedded server) and from the module's own `postgres_url` fixture otherwise, so the
-file is runnable on its own.
+The backend under test comes from `RECALLY_TEST_DATABASE_URL` when it is set (a manual
+override for pointing this file at a real server) and from the module's own
+`postgres_url` fixture otherwise, so the file is runnable on its own.
 """
 
 from __future__ import annotations
@@ -44,8 +43,8 @@ REFERENCE_NOW = datetime(2026, 9, 13, 4, 37, 11, 123456)
 def migrated_postgres(postgres_url: str) -> Iterator[Engine]:
     """A Postgres database with `alembic upgrade head` already applied.
 
-    Prefers `RECALLY_TEST_DATABASE_URL` so the parent suite can hand this file the
-    database it already created, rather than standing up a second server.
+    Prefers `RECALLY_TEST_DATABASE_URL` when set, so the file can be pointed at a
+    real server; otherwise each test gets its own fresh database from `postgres_url`.
     """
     database_url = os.environ.get("RECALLY_TEST_DATABASE_URL") or postgres_url
     config = Config(str(BACKEND_ROOT / "alembic.ini"))

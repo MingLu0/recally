@@ -5,10 +5,10 @@ the uniqueness constraints that make re-ingestion idempotent, `truncated` living
 on `highlights` (hard rule 7), and money stored as integer micro-USD.
 """
 
-from sqlalchemy import Integer, UniqueConstraint, create_engine
+from sqlalchemy import Engine, Integer, UniqueConstraint
 from sqlalchemy.orm import Session
 
-from recally.models import Base, Book, Card, CuratedUnit, Highlight
+from recally.models import Book, Card, CuratedUnit, Highlight
 
 
 def test_book_is_unique_per_source_and_external_id() -> None:
@@ -53,14 +53,11 @@ def test_costs_are_integer_micro_usd() -> None:
         assert isinstance(cost_column.type, Integer), table.name
 
 
-def test_user_id_defaults_to_one_on_insert() -> None:
+def test_user_id_defaults_to_one_on_insert(test_engine: Engine) -> None:
     """The server default is what fills `user_id` for a v1 single-user insert."""
-    engine = create_engine("sqlite://")
-    Base.metadata.create_all(engine)
-    with Session(engine) as session:
+    with Session(test_engine) as session:
         book = Book(title="30 Agents", source="oreilly", external_id="9781098150952")
         session.add(book)
         session.commit()
         session.refresh(book)
         assert book.user_id == 1
-    engine.dispose()

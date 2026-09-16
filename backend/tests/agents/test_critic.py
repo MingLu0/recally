@@ -9,22 +9,19 @@ on `revise`/`reject`.
 
 import inspect
 import json
-from collections.abc import Iterator
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, get_args, get_type_hints
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import Engine
 from sqlalchemy.orm import Session, sessionmaker
-from sqlalchemy.pool import StaticPool
 
 from recally.agents.base import AgentContext, CardDraft, CardVerdict, CriticRequest, CriticResult
 from recally.agents.critic import default as critic_module
 from recally.agents.critic.default import DefaultCritic
 from recally.config import Settings
 from recally.llm import LlmCaller
-from recally.models import Base
 
 CARD_STATUSES = {"pending_review", "approved", "needs_human", "rejected"}
 
@@ -85,12 +82,8 @@ class RecordingLlm:
 
 
 @pytest.fixture
-def session_factory() -> Iterator[sessionmaker[Session]]:
-    engine = create_engine(
-        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-    )
-    Base.metadata.create_all(engine)
-    yield sessionmaker(bind=engine, expire_on_commit=False)
+def session_factory(test_engine: Engine) -> sessionmaker[Session]:
+    return sessionmaker(bind=test_engine, expire_on_commit=False)
 
 
 @pytest.fixture

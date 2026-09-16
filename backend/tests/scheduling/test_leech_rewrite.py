@@ -18,8 +18,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from sqlalchemy import create_engine, select
-from sqlalchemy.pool import StaticPool
+from sqlalchemy import Engine, select
 
 from recally.agents.base import (
     CardDraft,
@@ -34,7 +33,7 @@ from recally.agents.base import (
 from recally.agents.registry import AgentRegistry
 from recally.config import Settings
 from recally.container import Container
-from recally.models import Base, Card, CardState, CuratedUnit, IngestRun, LlmCall, ReviewLog
+from recally.models import Card, CardState, CuratedUnit, IngestRun, LlmCall, ReviewLog
 from recally.models.base import utc_now
 
 TEST_API_KEY = "test-key-not-a-real-secret"
@@ -103,9 +102,13 @@ class StubCritic:
 
 
 @pytest.fixture
-def make_container(monkeypatch: pytest.MonkeyPatch) -> Iterator[Callable[..., Container]]:
-    """Container factory on fresh in-memory databases, with `litellm` mocked so
-    the stubs' `ctx.llm` calls write real `llm_calls` rows without a provider."""
+def make_container(
+    monkeypatch: pytest.MonkeyPatch,
+    test_engine_factory: Callable[[], Engine],
+) -> Iterator[Callable[..., Container]]:
+    """Container factory on fresh databases from the shared fixture
+    (tests/conftest.py), with `litellm` mocked so the stubs' `ctx.llm` calls write
+    real `llm_calls` rows without a provider."""
 
     def fake_completion(*, model: str, messages: list[dict[str, Any]], **kwargs: Any) -> Any:
         return SimpleNamespace(
@@ -117,8 +120,6 @@ def make_container(monkeypatch: pytest.MonkeyPatch) -> Iterator[Callable[..., Co
     monkeypatch.setattr("recally.llm.litellm.completion", fake_completion)
     monkeypatch.setattr("recally.llm.litellm.completion_cost", lambda **kwargs: 0.0)
 
-    built: list[Container] = []
-
     def factory(
         *,
         learner: StubLearner | None = None,
@@ -126,12 +127,9 @@ def make_container(monkeypatch: pytest.MonkeyPatch) -> Iterator[Callable[..., Co
         critic: StubCritic | None = None,
         **settings_overrides: object,
     ) -> Container:
-        engine = create_engine(
-            "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-        )
-        Base.metadata.create_all(engine)
+        engine = test_engine_factory()
         settings = Settings(
-            RECALLY_DATABASE_URL="sqlite://",
+            RECALLY_DATABASE_URL=str(engine.url),
             RECALLY_API_KEY=TEST_API_KEY,
             **settings_overrides,  # type: ignore[arg-type]
         )
@@ -142,15 +140,9 @@ def make_container(monkeypatch: pytest.MonkeyPatch) -> Iterator[Callable[..., Co
             registry.register("writer", "default", writer)
         if critic is not None:
             registry.register("critic", "default", critic)
-        container = Container(settings, engine=engine, registry=registry)
-        built.append(container)
-        return container
+        return Container(settings, engine=engine, registry=registry)
 
-    try:
-        yield factory
-    finally:
-        for container in built:
-            container.engine.dispose()
+    yield factory
 
 
 def _seed_leech(container: Container, *, again_count: int = 3) -> int:

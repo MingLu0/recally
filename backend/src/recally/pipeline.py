@@ -61,7 +61,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from typing import Any, Literal, overload
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
 from recally.agents.base import (
@@ -600,6 +600,11 @@ def _delete_orphan_keep_units(session: Session) -> None:
         if highlights and all(not highlight.processed for highlight in highlights):
             for link in unit.highlight_links:
                 session.delete(link)
+            # Null the reference rather than delete the rows: `llm_calls` is the
+            # cost ledger (hard rule 3), and the calls happened even though the unit
+            # they served is gone. SQLite never enforced this FK, so the delete only
+            # surfaced as a violation once the suite ran on Postgres (issue #226).
+            session.execute(update(LlmCall).where(LlmCall.unit_id == unit.id).values(unit_id=None))
             session.delete(unit)
 
 

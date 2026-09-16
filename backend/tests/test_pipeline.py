@@ -16,7 +16,7 @@ loop, so asserting them on the Curator row would assert the opposite of the sche
 
 import json
 from collections import deque
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
@@ -24,9 +24,8 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, select
+from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session
-from sqlalchemy.pool import StaticPool
 
 from recally.api.deps import container_dependency
 from recally.config import Settings, get_settings
@@ -35,7 +34,6 @@ from recally.ingest import ingest_file
 from recally.ingest.adapters import OReillyCsvAdapter
 from recally.main import create_app
 from recally.models import (
-    Base,
     Book,
     Card,
     CuratedUnit,
@@ -49,25 +47,20 @@ TEST_API_KEY = "test-key-not-a-real-secret"
 FIXTURE_A = Path(__file__).parent / "fixtures" / "oreilly-annotations-a.csv"
 
 
-def make_container(**setting_overrides: Any) -> tuple[Container, Any]:
-    """A container on a fresh in-memory database, with optional Settings overrides.
-
-    `StaticPool` on a single connection is what makes `sqlite://` usable here:
-    without it every checkout gets its own empty database. The engine is returned so
-    the caller can dispose it.
-    """
-    engine = create_engine(
-        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-    )
-    Base.metadata.create_all(engine)
+def make_container(
+    test_engine_factory: Callable[[], Engine], **setting_overrides: Any
+) -> Container:
+    """A container on a fresh database from the shared fixture (tests/conftest.py),
+    with optional Settings overrides. The engine's disposal is the fixture's job."""
+    engine = test_engine_factory()
     settings = Settings(
-        RECALLY_DATABASE_URL="sqlite://", RECALLY_API_KEY=TEST_API_KEY, **setting_overrides
+        RECALLY_DATABASE_URL=str(engine.url), RECALLY_API_KEY=TEST_API_KEY, **setting_overrides
     )
-    return Container(settings, engine=engine), engine
+    return Container(settings, engine=engine)
 
 
 @pytest.fixture
-def container() -> Iterator[Container]:
+def container(test_engine_factory: Callable[[], Engine]) -> Iterator[Container]:
     """The default container: AUTO_APPROVE_ROUND1_ACCEPT off, LLM_MAX_ROUNDS 3.
 
     Pinned to `LLM_CONCURRENCY=1` deliberately, not by inheriting the default (now
@@ -76,11 +69,7 @@ def container() -> Iterator[Container]:
     sibling's scripted reply. Concurrent behaviour is covered by
     test_pipeline_concurrency.py, whose `RoutedLlm` routes by prompt content instead.
     """
-    test_container, engine = make_container(LLM_CONCURRENCY=1)
-    try:
-        yield test_container
-    finally:
-        engine.dispose()
+    yield make_container(test_engine_factory, LLM_CONCURRENCY=1)
 
 
 class ScriptedLlm:
@@ -521,33 +510,31 @@ def test_accept_on_round_two_stops_the_loop(
 
 def test_auto_approve_flag_on_approves_only_round_one_accepts(
     monkeypatch: pytest.MonkeyPatch,
+    test_engine_factory: Callable[[], Engine],
 ) -> None:
     """The hard-rule-1 exception: with AUTO_APPROVE_ROUND1_ACCEPT on, a round-1
     `accept` skips the queue (`approved`); a round-2 `accept` still does not."""
-    flag_container, engine = make_container(AUTO_APPROVE_ROUND1_ACCEPT=True)
-    try:
-        run_id, highlights = ingest_fixture(flag_container)
-        ScriptedLlm(
-            monkeypatch,
-            [
-                curator_response(keep_unit([highlights[0].id])),
-                writer_response("Round 1 accept?", "Round 2 accept draft?"),
-                critic_response(ACCEPT),  # round 1: auto-approved
-                critic_response(REVISE),  # round 1: revise
-                writer_response("Round 2 accept revised?"),
-                critic_response(ACCEPT),  # round 2: stays in the queue
-            ],
-        )
+    flag_container = make_container(test_engine_factory, AUTO_APPROVE_ROUND1_ACCEPT=True)
+    run_id, highlights = ingest_fixture(flag_container)
+    ScriptedLlm(
+        monkeypatch,
+        [
+            curator_response(keep_unit([highlights[0].id])),
+            writer_response("Round 1 accept?", "Round 2 accept draft?"),
+            critic_response(ACCEPT),  # round 1: auto-approved
+            critic_response(REVISE),  # round 1: revise
+            writer_response("Round 2 accept revised?"),
+            critic_response(ACCEPT),  # round 2: stays in the queue
+        ],
+    )
 
-        flag_container.run_pipeline(run_id)
+    flag_container.run_pipeline(run_id)
 
-        cards = all_cards(flag_container)
-        assert len(cards) == 2
-        by_rounds = {card.generation_rounds: card for card in cards}
-        assert by_rounds[1].status == "approved"
-        assert by_rounds[2].status == "pending_review"
-    finally:
-        engine.dispose()
+    cards = all_cards(flag_container)
+    assert len(cards) == 2
+    by_rounds = {card.generation_rounds: card for card in cards}
+    assert by_rounds[1].status == "approved"
+    assert by_rounds[2].status == "pending_review"
 
 
 # --- Idempotency and crash recovery ----------------------------------------------

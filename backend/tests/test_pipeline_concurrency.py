@@ -22,6 +22,7 @@ assertions independent of who finishes first — the property actually under tes
 """
 
 import json
+import os
 import threading
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
@@ -36,6 +37,17 @@ from sqlalchemy import select
 from recally.config import Settings
 from recally.container import Container
 from recally.models import Base, Book, Card, CuratedUnit, Highlight, IngestRun, LlmCall
+
+# The one module the dual-backend switch (RECALLY_TEST_BACKEND, tests/conftest.py)
+# must not follow: it exists to exercise SQLite's locking and `PRAGMA journal_mode=WAL`
+# under threads (ADR-015, module docstring above). On Postgres it would not test what
+# it was written to test, so it stays pinned to SQLite and sits the Postgres run out.
+if os.environ.get("RECALLY_TEST_BACKEND") == "postgres":
+    pytest.skip(
+        "pinned to file-backed SQLite: the module exists to exercise SQLite locking "
+        "and WAL under threads (ADR-015), which a Postgres run would not exercise",
+        allow_module_level=True,
+    )
 
 TEST_API_KEY = "test-key-not-a-real-secret"
 

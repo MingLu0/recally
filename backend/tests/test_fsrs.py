@@ -14,12 +14,11 @@ from pathlib import Path
 
 import pytest
 from fsrs import Rating, Scheduler, State
-from sqlalchemy import create_engine
+from sqlalchemy import Engine
 from sqlalchemy.orm import Session, sessionmaker
-from sqlalchemy.pool import StaticPool
 
 from recally.config import Settings
-from recally.models import Base, CardState, FsrsParams
+from recally.models import CardState, FsrsParams
 from recally.scheduling.fsrs import (
     FsrsScheduler,
     apply_library_card,
@@ -43,17 +42,10 @@ FITTED_NEW = _fitted_weights(0.4)
 
 
 @pytest.fixture
-def session() -> Iterator[Session]:
-    engine = create_engine(
-        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-    )
-    Base.metadata.create_all(engine)
-    session_factory = sessionmaker(bind=engine)
-    try:
-        with session_factory() as test_session:
-            yield test_session
-    finally:
-        engine.dispose()
+def session(test_engine: Engine) -> Iterator[Session]:
+    session_factory = sessionmaker(bind=test_engine)
+    with session_factory() as test_session:
+        yield test_session
 
 
 def _settings(**overrides: object) -> Settings:

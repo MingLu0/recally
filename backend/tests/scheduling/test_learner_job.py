@@ -29,8 +29,7 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, func, select
-from sqlalchemy.pool import StaticPool
+from sqlalchemy import Engine, func, select
 
 from recally.agents.base import LearnerRequest, LearnerResult
 from recally.agents.registry import AgentRegistry
@@ -39,7 +38,6 @@ from recally.config import Settings, get_settings
 from recally.container import Container
 from recally.main import create_app
 from recally.models import (
-    Base,
     Card,
     CuratedUnit,
     IngestRun,
@@ -78,19 +76,17 @@ class StubLearner:
 
 
 @pytest.fixture
-def make_container() -> Iterator[Callable[..., Container]]:
-    """Container factory on fresh in-memory databases (same shape as
-    tests/scheduling/test_optimizer.py). `learner=` installs a stub variant into a
-    test-local registry; without it the container uses the default registry."""
-    built: list[Container] = []
+def make_container(
+    test_engine_factory: Callable[[], Engine],
+) -> Iterator[Callable[..., Container]]:
+    """Container factory on fresh databases from the shared fixture
+    (tests/conftest.py). `learner=` installs a stub variant into a test-local
+    registry; without it the container uses the default registry."""
 
     def factory(learner: StubLearner | None = None, **settings_overrides: object) -> Container:
-        engine = create_engine(
-            "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-        )
-        Base.metadata.create_all(engine)
+        engine = test_engine_factory()
         settings = Settings(
-            RECALLY_DATABASE_URL="sqlite://",
+            RECALLY_DATABASE_URL=str(engine.url),
             RECALLY_API_KEY=TEST_API_KEY,
             **settings_overrides,  # type: ignore[arg-type]
         )
@@ -98,20 +94,19 @@ def make_container() -> Iterator[Callable[..., Container]]:
         if learner is not None:
             registry = AgentRegistry()
             registry.register("learner", "default", learner)
-        container = Container(settings, engine=engine, registry=registry)
-        built.append(container)
-        return container
+        return Container(settings, engine=engine, registry=registry)
 
-    try:
-        yield factory
-    finally:
-        for container in built:
-            container.engine.dispose()
+    yield factory
 
 
 def _seed_reviews(container: Container, count: int) -> None:
     """`count` review_logs on one approved card, one per hour."""
     with container.session() as session:
+        # Postgres enforces `cards.guidance_version`'s FK, which SQLite never did
+        # (issue #226): the card names v1 when a v1 row exists (the `_seed_v1`
+        # tests), and None when the guidance table is empty — as a real card written
+        # before any guidance existed would.
+        guidance_version = 1 if session.get(WriterGuidance, 1) is not None else None
         run = IngestRun(filename="learner-job-oreilly-annotations.csv", user_id=1)
         session.add(run)
         session.flush()
@@ -131,7 +126,7 @@ def _seed_reviews(container: Container, count: int) -> None:
             status="approved",
             approved_at=NOW - timedelta(days=30),
             model="claude-sonnet-5",
-            guidance_version=1,
+            guidance_version=guidance_version,
             user_id=1,
         )
         session.add(card)
@@ -353,16 +348,9 @@ def test_learner_llm_call_has_null_ingest_run_id(
 
 
 @pytest.fixture
-def api_container() -> Iterator[Container]:
-    engine = create_engine(
-        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-    )
-    Base.metadata.create_all(engine)
-    settings = Settings(RECALLY_DATABASE_URL="sqlite://", RECALLY_API_KEY=TEST_API_KEY)
-    try:
-        yield Container(settings, engine=engine)
-    finally:
-        engine.dispose()
+def api_container(test_engine: Engine) -> Iterator[Container]:
+    settings = Settings(RECALLY_DATABASE_URL=str(test_engine.url), RECALLY_API_KEY=TEST_API_KEY)
+    yield Container(settings, engine=test_engine)
 
 
 @pytest.fixture

@@ -24,6 +24,7 @@ a copy that flattens a type has somewhere to show it.
 from __future__ import annotations
 
 import hashlib
+import os
 import sqlite3
 import subprocess
 import sys
@@ -704,47 +705,49 @@ def test_migration_resets_sequences(source_database: Path, postgres_url: str) ->
         target_engine.dispose()
 
 
-def test_suite_passes_on_postgres(postgres_url: str) -> None:
-    """The existing suite runs green against Postgres.
+@pytest.mark.skipif(
+    os.environ.get("RECALLY_TEST_BACKEND") == "postgres",
+    reason="this run is already the full suite on Postgres; a child run would recurse",
+)
+def test_suite_passes_on_postgres() -> None:
+    """The full suite runs green against Postgres.
 
     This is what converts hard rule 4 from a claim into a fact (issue #224): it catches
     what a grep cannot — `JSON` comparison semantics, `NULL` ordering in `ORDER BY`,
-    string collation.
+    string collation. Since issue #226 the child runs the *whole* suite, not the
+    dialect-sensitive subset: the differences named above were the ones we predicted,
+    and the point of running everything is the one nobody predicted.
 
-    Run as a subprocess rather than in-process because the suite's own fixtures build
-    their engines at import and fixture time; a nested pytest is the honest way to make
-    *them* use a different backend. `RECALLY_TEST_DATABASE_URL` is read by the tests
-    that support both backends, and `-p no:cacheprovider` keeps the child run from
-    fighting the parent over `.pytest_cache`.
+    Run as a subprocess rather than in-process because the suite's fixtures build
+    their engines at fixture time; a nested pytest is the honest way to make *them*
+    use a different backend. `RECALLY_TEST_BACKEND=postgres` is the switch the shared
+    engine fixture in tests/conftest.py reads (each engine then gets its own fresh
+    database on the child's embedded server), and `-p no:cacheprovider` keeps the
+    child run from fighting the parent over `.pytest_cache`.
     """
     completed = subprocess.run(  # noqa: S603 - fixed argv, no shell
         [
             sys.executable,
             "-m",
             "pytest",
-            "tests/test_migrations_postgres.py",
-            "tests/test_models.py",
+            "tests",
             "-q",
             "-p",
             "no:cacheprovider",
         ],
         cwd=BACKEND_ROOT,
-        env=_postgres_suite_environment(postgres_url),
+        env=_postgres_suite_environment(),
         capture_output=True,
         text=True,
     )
     assert completed.returncode == 0, completed.stdout + completed.stderr
 
 
-def _postgres_suite_environment(postgres_url: str) -> dict[str, str]:
-    """The child suite's environment: the same one, pointed at Postgres."""
-    import os
-
+def _postgres_suite_environment() -> dict[str, str]:
+    """The child suite's environment: the same one, switched to Postgres."""
     environment = dict(os.environ)
-    environment["RECALLY_TEST_DATABASE_URL"] = postgres_url
+    environment["RECALLY_TEST_BACKEND"] = "postgres"
     environment.setdefault("RECALLY_API_KEY", "test-key-not-a-real-secret")
-    # The child must not recurse into this module.
-    environment["RECALLY_SKIP_POSTGRES_SUITE"] = "1"
     return environment
 
 

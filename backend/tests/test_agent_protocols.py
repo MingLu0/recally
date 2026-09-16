@@ -6,12 +6,9 @@ The runtime invocations exist so the test documents the intent and the assignmen
 are not dead code.
 """
 
-from collections.abc import Iterator
-
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import Engine
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 from recally.agents.base import (
     AgentContext,
@@ -33,7 +30,6 @@ from recally.agents.base import (
 )
 from recally.config import Settings
 from recally.llm import LlmCaller
-from recally.models import Base
 
 
 class StubCurator:
@@ -61,19 +57,12 @@ class StubLearner:
 
 
 @pytest.fixture
-def ctx() -> Iterator[AgentContext]:
-    engine = create_engine(
-        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
+def ctx(test_engine: Engine) -> AgentContext:
+    return AgentContext(
+        ingest_run_id=None,
+        settings=Settings(RECALLY_API_KEY="test-key-not-a-real-secret"),
+        llm=LlmCaller(sessionmaker(bind=test_engine), log_payloads=False),
     )
-    Base.metadata.create_all(engine)
-    try:
-        yield AgentContext(
-            ingest_run_id=None,
-            settings=Settings(RECALLY_API_KEY="test-key-not-a-real-secret"),
-            llm=LlmCaller(sessionmaker(bind=engine), log_payloads=False),
-        )
-    finally:
-        engine.dispose()
 
 
 def test_conforming_stub_satisfies_protocol(ctx: AgentContext) -> None:

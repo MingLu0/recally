@@ -19,13 +19,13 @@ from datetime import date
 from pathlib import Path
 
 import pytest
-from sqlalchemy import create_engine, select
+from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from recally.ingest import ingest_file
 from recally.ingest.adapters import OReillyCsvAdapter
 from recally.ingest.adapters.oreilly_csv import OReillyCsvError
-from recally.models import Base, Book, Highlight
+from recally.models import Book, Highlight
 
 FIXTURES = Path(__file__).parent / "fixtures"
 FIXTURE_A = FIXTURES / "oreilly-annotations-a.csv"
@@ -41,11 +41,9 @@ CLIPPED_TEXT = (
 
 
 @pytest.fixture
-def session_factory() -> sessionmaker[Session]:
-    """A fresh in-memory schema per test."""
-    engine = create_engine("sqlite://")
-    Base.metadata.create_all(engine)
-    return sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+def session_factory(test_engine: Engine) -> sessionmaker[Session]:
+    """A fresh schema per test, from the shared fixture (tests/conftest.py)."""
+    return sessionmaker(bind=test_engine, autoflush=False, expire_on_commit=False)
 
 
 def ingest(session_factory: sessionmaker[Session], file: Path) -> tuple[int, int, int, int]:
