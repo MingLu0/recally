@@ -9,7 +9,7 @@ How the project gets built: which tools hold the backlog, run the agents, and ga
 | Backlog | GitHub Issues + milestones | Repo already lives on GitHub; Orca opens worktrees from issues natively; zero cost |
 | Progress view | GitHub Project board "[Recally Roadmap](https://github.com/users/MingLu0/projects/2)" | One pane across parallel agents; issues stay the source of truth |
 | Agent control plane | [Orca](https://www.onorca.dev/) | Parallel worktrees, diff review with line comments back to the agent, GitHub issue/PR drawer, BYO subscription |
-| Coding agent | Claude Code (any Orca-supported CLI works; the orchestrator dispatches claude only — a usage-limited worker parks and is retried hourly until the window resets) | Reads `AGENTS.md` / `CLAUDE.md` |
+| Coding agent | Claude Code (any Orca-supported CLI works; pool, models and effort live in `orchestrator.json` — a usage-limited worker parks and is retried hourly until the window resets) | Reads `AGENTS.md` / `CLAUDE.md` |
 | Parallel dispatcher | `scripts/orchestrate.sc` (scala-cli, ADR-013) | Hand-started, stateful: dispatches up to 10 unblocked sub-issues, retries on failure, fixes merge conflicts by rebase dispatch |
 | Agent instructions | `AGENTS.md`, plus `backend/AGENTS.md` and `android/AGENTS.md` | Root holds the hard rules and working style; module files hold that module's conventions and commands. Agents read the nearest file up the tree. The docs are the spec |
 
