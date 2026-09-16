@@ -56,6 +56,7 @@ backend/
     cli.py                        # recally CLI (roadmap step 3)
   scripts/
     seed_demo.py                  # demo-db seeder for the manual Android UI pass (docs/demo-seed.md)
+    migrate_to_postgres.py        # SQLite -> Postgres ORM-level copy + verify (roadmap step 7)
   alembic/                        # render_as_batch=True
   tests/
     fixtures/                     # committed trimmed exports (roadmap step 1)
@@ -135,4 +136,5 @@ Every entry point converges on the same functions:
 - **Ruff** (lint + format; replaces Flake8/isort/Autoflake/Black): config in `pyproject.toml` under `[tool.ruff]`, rule sets `E, F, I, UP, B`. Run: `uv run ruff check . && uv run ruff format --check .`.
 - **Mypy, strict on `src/recally/`**: config under `[tool.mypy]` in `pyproject.toml`. Strictness is load-bearing, not taste: ADR-007's protocol boundary only protects the pipeline if mypy rejects a variant that doesn't satisfy its role `Protocol`.
 - **pre-commit, ruff only**: `.pre-commit-config.yaml` runs `ruff check --fix` and `ruff format` on commit. Milliseconds fast; catches "forgot to lint" before CI. Nothing else runs in hooks.
+- **Both database backends are tested, on every run.** `pgserver` (a dev dependency) vendors a PostgreSQL 16 binary and runs it on a unix socket under a temp directory, so `uv run pytest` exercises the real Postgres dialect with no system install, no Docker and no CI service container. That is what makes hard rule 4 ("no SQLite-specific SQL") a fact rather than a claim: `tests/test_migrations_postgres.py` runs the schema and the query shapes a grep cannot vet — `JSON` comparison, `NULL` ordering in `ORDER BY`, string collation — and `tests/test_migrate_to_postgres.py` covers the SQLite → Postgres copy. The `postgres` marker exists so a machine that cannot start the vendored server reports one clear skip. The driver is `psycopg` 3, so Postgres URLs use `postgresql+psycopg://`.
 - **Security scanners, CI only**: Bandit (scans our code for hard-coded secrets and insecure patterns) and pip-audit (dependency CVEs; chosen over Safety — maintained, no account needed) run in GitHub Actions on every PR. Kept out of the local loop: Bandit's false positives and scan latency aren't worth it for a single-user LAN app.
