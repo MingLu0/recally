@@ -25,14 +25,54 @@ import scala.sys.process.*
 
 object Orchestrator:
 
-  // --- configuration (ADR-013) ---
-  val WorktreeCap = 10
-  val AgentPool = List("claude")
-  val PollInterval = 60.seconds
-  val MaxAttempts = 2       // dispatch retries per issue before needs_human
-  val MaxConflictFixes = 2  // rebase dispatches per PR before needs_human
-  val UsageRetryInterval = 1.hour // usage-limited workers park and re-check
-  val GithubRepo = "MingLu0/recally"
+  // --- configuration (ADR-013): orchestrator.json at the repo root, all keys
+  // optional, defaults below. Missing file = defaults. Invalid JSON = one
+  // clear startup error before anything dispatches (fail closed).
+  // --agent=<id>[:model[:effort]] overrides the agent list for one run.
+  case class AgentSpec(id: String, model: Option[String] = None, effort: Option[String] = None)
+  object AgentSpec:
+    given upickle.default.ReadWriter[AgentSpec] = upickle.default.macroRW
+  case class Config(
+    repo: String = "MingLu0/recally",
+    cap: Int = 10,
+    pollSeconds: Int = 60,
+    usageRetryMinutes: Int = 60,
+    maxAttempts: Int = 2,
+    maxConflictFixes: Int = 2,
+    agents: List[AgentSpec] = List(AgentSpec("claude")),
+  )
+  object Config:
+    given upickle.default.ReadWriter[Config] = upickle.default.macroRW
+
+  private var cfg: Config = Config()
+
+  // defs (not vals) so every existing reference follows the loaded config
+  def WorktreeCap = cfg.cap
+  def AgentPool = cfg.agents
+  def PollInterval = cfg.pollSeconds.seconds
+  def MaxAttempts = cfg.maxAttempts
+  def MaxConflictFixes = cfg.maxConflictFixes
+  def UsageRetryInterval = cfg.usageRetryMinutes.minutes
+  def GithubRepo = cfg.repo
+  def specOf(id: String): AgentSpec = cfg.agents.find(_.id == id).getOrElse(AgentSpec(id))
+  def agentLabel(s: AgentSpec): String =
+    s.id + s.model.map(m => s"($m${s.effort.fold("")(e => s",$e")})").getOrElse("")
+
+  def loadConfig(args: List[String]): IO[Unit] = IO.blocking {
+    val path = os.pwd / "orchestrator.json"
+    val base =
+      if os.exists(path) then
+        try upickle.default.read[Config](os.read(path))
+        catch case e: Exception =>
+          throw new RuntimeException(s"orchestrator.json is invalid: ${e.getMessage}")
+      else Config()
+    cfg = args.find(_.startsWith("--agent=")).map(_.stripPrefix("--agent=")) match
+      case Some(spec) =>
+        val parts = spec.split(":", -1).toList
+        base.copy(agents = List(AgentSpec(parts.head, parts.lift(1).filter(_.nonEmpty), parts.lift(2).filter(_.nonEmpty))))
+      case None => base
+  }
+
   val PrecheckScript = "scripts/orca-ready-issues.sh"
   val PromptFile: os.RelPath = os.rel / "scripts" / "orca-autostart-prompt.md"
   val StatePath = os.pwd / ".orca" / "orchestrator-state.json"
@@ -225,9 +265,11 @@ object Orchestrator:
     orca(List("orchestration", "task-create", "--spec", spec, "--task-title", title, "--run", runId))
       .flatMap(requiredString(_, Set("taskId", "id"), "task id"))
 
-  def startWorker(taskId: String, issue: Int, agent: String, retryOf: Option[String], runId: String): IO[String] =
-    val base = List("orchestration", "worker-start", "--task", taskId, "--worktree", s"issue:$issue", "--agent", agent, "--run", runId)
-    orca(base ::: retryOf.toList.flatMap(id => List("--retry-of", id)))
+  def startWorker(taskId: String, issue: Int, agent: AgentSpec, retryOf: Option[String], runId: String): IO[String] =
+    val modelArgs = agent.model.toList.flatMap(m => List("--model", m)) ++
+      agent.effort.toList.flatMap(e => List("--effort", e))
+    val base = List("orchestration", "worker-start", "--task", taskId, "--worktree", s"issue:$issue", "--agent", agent.id, "--run", runId)
+    orca(base ::: modelArgs ::: retryOf.toList.flatMap(id => List("--retry-of", id)))
       .flatMap(requiredString(_, Set("dispatchId", "dispatch"), "dispatch id"))
 
   def slugify(title: String): String =
@@ -260,14 +302,14 @@ object Orchestrator:
       }
     }.handleError(_ => false) // on listing failure, create as before
 
-  def dispatchIssue(candidate: ReadyIssue, agent: String, repoId: String, runId: String): IO[TrackedIssue] =
+  def dispatchIssue(candidate: ReadyIssue, agent: AgentSpec, repoId: String, runId: String): IO[TrackedIssue] =
     val assignment = s"\n\n---\nOrchestrator assignment: your issue is #${candidate.number}. " +
       s"Skip the 'Pick the issue' step; claim #${candidate.number} and implement it."
-    val blank = TrackedIssue(candidate.number, candidate.title, "", "", agent,
+    val blank = TrackedIssue(candidate.number, candidate.title, "", "", agent.id,
       attempts = 1, conflictFixes = 0, conflictDispatchId = None, evidenceNudged = false, Phase.Dispatched,
       parent = candidate.parent)
     for
-      _ <- event(s"🌱 #${candidate.number} dispatched → $agent — ${candidate.title}")
+      _ <- event(s"🌱 #${candidate.number} dispatched → ${agentLabel(agent)} — ${candidate.title}")
       exists <- worktreeExists(candidate.number)
       _ <-
         if exists then event(dim(s"   ↳ reusing existing worktree for #${candidate.number}"))
@@ -294,7 +336,7 @@ object Orchestrator:
   // A redispatch carries a NEW spec (conflict fix, evidence nudge), so it is a
   // new task and a fresh dispatch — no --retry-of (Orca rejects retry across
   // tasks: "cannot retry from Dispatch").
-  def redispatch(t: TrackedIssue, agent: String, spec: String, title: String, runId: String): IO[String] =
+  def redispatch(t: TrackedIssue, agent: AgentSpec, spec: String, title: String, runId: String): IO[String] =
     for
       taskId <- createTask(spec, title, runId)
       dispatchId <- startWorker(taskId, t.issue, agent, retryOf = None, runId)
@@ -302,8 +344,8 @@ object Orchestrator:
 
   // A retry re-runs the SAME task after a worker failure; --retry-of links the
   // replacement attempt to the failed dispatch.
-  def retryWorker(t: TrackedIssue, agent: String, runId: String): IO[String] =
-    startWorker(t.taskId, t.issue, agent, retryOf = Some(t.dispatchId), runId)
+  def retryWorker(t: TrackedIssue, runId: String): IO[String] =
+    startWorker(t.taskId, t.issue, specOf(t.agent), retryOf = Some(t.dispatchId), runId)
 
   // --- logging (events always print; dashboard renders on change only, ADR-014) ---
   //
@@ -435,7 +477,7 @@ object Orchestrator:
                 event(s"▶️  #${t.issue} usage window reset — PR #${open.head("number").num.toInt} open, back in the flow")
                   .as(Some(t.copy(phase = Phase.PrOpen, nextRetryAt = 0, conflictDispatchId = None)))
               else
-                retryWorker(t, t.agent, runId).flatMap { newDispatchId =>
+                retryWorker(t, runId).flatMap { newDispatchId =>
                   event(s"▶️  #${t.issue} usage window reset — resumed on ${t.agent}")
                     .as(Some(t.copy(dispatchId = newDispatchId, phase = Phase.Dispatched, nextRetryAt = 0)))
                 }.handleErrorWith {
@@ -536,7 +578,7 @@ object Orchestrator:
         "code and a doc disagree, the doc wins), re-run `uv run pytest`, `uv run ruff check .` and " +
         "`uv run mypy src/` from backend/, force-push, and then follow the merge policy again."
       event(s"🔀 #${t.issue} PR #$prNumber conflicting → rebase dispatched (${t.conflictFixes + 1}/$MaxConflictFixes)") *>
-        redispatch(t, t.agent, spec, s"Rebase issue #${t.issue} onto main", runId).map { newDispatchId =>
+        redispatch(t, specOf(t.agent), spec, s"Rebase issue #${t.issue} onto main", runId).map { newDispatchId =>
           t.copy(conflictFixes = t.conflictFixes + 1, conflictDispatchId = Some(newDispatchId))
         }
 
@@ -555,7 +597,7 @@ object Orchestrator:
               "existed, next to the green run, then follow the merge policy again. If the red run never " +
               "happened, say so in the PR and stop."
             event(s"📝 #${t.issue} PR #$prNumber missing $TddEvidenceMarker — nudging") *>
-              redispatch(t, t.agent, spec, s"TDD evidence for issue #${t.issue}", runId)
+              redispatch(t, specOf(t.agent), spec, s"TDD evidence for issue #${t.issue}", runId)
                 .map(newDispatchId => t.copy(dispatchId = newDispatchId, evidenceNudged = true))
           case _ =>
             escalate(t, s"PR #$prNumber still lacks the `$TddEvidenceMarker` section after a nudge.").map(_.get)
@@ -573,7 +615,7 @@ object Orchestrator:
       case Failed(_) =>
         if t.attempts < MaxAttempts then
           event(s"🔁 #${t.issue} worker failed — retry ${t.attempts + 1}/$MaxAttempts on ${t.agent}") *>
-            retryWorker(t, t.agent, runId).map { newDispatchId =>
+            retryWorker(t, runId).map { newDispatchId =>
               t.copy(dispatchId = newDispatchId, attempts = t.attempts + 1)
             }
         else escalate(t, s"worker failed ${t.attempts} times; giving up.").map(_.get)
@@ -657,7 +699,7 @@ object Orchestrator:
 
   def printPanel(runId: String, stepScope: Option[String], tracked: List[TrackedIssue],
                  freeSlots: Int, actions: List[String], extra: List[String], graph: List[String] = Nil): IO[Unit] =
-    showPanel(Some(s"scope ${stepScope.getOrElse("all")} · cap $WorktreeCap · pool ${AgentPool.mkString("→")} · run $runId"),
+    showPanel(Some(s"scope ${stepScope.getOrElse("all")} · cap $WorktreeCap · pool ${AgentPool.map(agentLabel).mkString("→")} · run $runId"),
       tracked, freeSlots, actions, extra, graph)
 
   def printChange(tracked: List[TrackedIssue], freeSlots: Int, actions: List[String], extra: List[String],
@@ -983,8 +1025,9 @@ object Orchestrator:
     val once = args.contains("--once")
     val stepScope = args.find(_.startsWith("--step=")).map(_.stripPrefix("--step="))
     val useTui = !dryRun && !once && System.console() != null && UseColor
-    if dryRun then tick(dryRun = true, stepScope, runId = "", tickNum = 0, forcePrint = true).void.as(ExitCode.Success)
-    else if once then
+    loadConfig(args) >> (
+      if dryRun then tick(dryRun = true, stepScope, runId = "", tickNum = 0, forcePrint = true).void.as(ExitCode.Success)
+      else if once then
       // One Run per PROCESS: a Run dies with its coordinator terminal, so a
       // persisted id is always stale after a restart (the #89 error storm).
       createRun.flatMap { runId =>
@@ -1004,7 +1047,8 @@ object Orchestrator:
               } >> loop(stepScope, runId, tickNum = 1))
               .guarantee(IO.blocking { lock.release(); channel.close(); Tui.stop() })
           }
-      }.as(ExitCode.Success)
+      }
+    ).as(ExitCode.Success)
 
 // .sc entry point: the script wrapper main runs top-level statements, so the
 // IOApp object above must be invoked explicitly.

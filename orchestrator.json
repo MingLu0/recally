@@ -1,0 +1,11 @@
+{
+  "repo": "MingLu0/recally",
+  "cap": 10,
+  "pollSeconds": 60,
+  "usageRetryMinutes": 60,
+  "maxAttempts": 2,
+  "maxConflictFixes": 2,
+  "agents": [
+    { "id": "claude" }
+  ]
+}
