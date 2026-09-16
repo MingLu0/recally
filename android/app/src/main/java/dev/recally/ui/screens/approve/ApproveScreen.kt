@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -45,6 +46,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.recally.domain.model.PendingCard
@@ -62,7 +64,7 @@ import dev.recally.ui.theme.recallyColors
  * out — the ViewModel lives at the route entry.
  *
  * The header carries the collection-wide "N pending" from `GET
- * /cards/pending`'s `counts` (G1, issue #132), and the sticky "Approve N
+ * /cards/pending`'s `counts` (G1, issue #132), and the floating "Approve N
  * ready" bar acts on every clean card in the collection (issue #168).
  * `needs_human` cards are excluded from it and opened individually
  * (hard rule 1).
@@ -110,6 +112,18 @@ fun ApproveScreen(
                         onRejectCard = onRejectCard,
                     )
             }
+
+            // Floating action, not a docked band: it overlays the list's Box
+            // so card content scrolls behind it (issue #227). QueueList's
+            // bottom contentPadding keeps the last card reachable.
+            if (uiState.showBulkApprove) {
+                BulkApproveBar(
+                    count = uiState.bulkApprovableCount ?: 0,
+                    enabled = !uiState.isOffline && !uiState.isBulkApproving && uiState.busyCardId == null,
+                    onApproveAllClean = onApproveAllClean,
+                    modifier = Modifier.align(Alignment.BottomCenter),
+                )
+            }
         }
 
         uiState.errorMessage?.let { message ->
@@ -120,20 +134,16 @@ fun ApproveScreen(
                 modifier = Modifier.padding(horizontal = RecallySpacing.screenPadding),
             )
         }
-
-        if (uiState.showBulkApprove) {
-            BulkApproveBar(
-                count = uiState.bulkApprovableCount ?: 0,
-                enabled = !uiState.isOffline && !uiState.isBulkApproving && uiState.busyCardId == null,
-                onApproveAllClean = onApproveAllClean,
-            )
-        }
     }
 }
 
 /**
- * The sticky bulk bar (artboard `RcApprove.dc.html`): a `line-soft` top border
- * over a full-width `primary` action. It is the screen's one filled button
+ * The floating bulk bar (artboard `RcApprove.dc.html`): the `primary`
+ * "Approve N ready" pill hovering over the queue's bottom edge, with the
+ * page — and scrolling card content — visible around and behind it. No
+ * background, no border: a hairline here would float unattached over the
+ * list and read as a stray line (the artboard's `border-top` belongs to the
+ * docked-band treatment, issue #227). It is the screen's one filled button
  * besides the per-card Approve, and it acts on **every** clean card in the
  * collection, not just the filtered view — clearing the backlog is the point.
  *
@@ -145,13 +155,14 @@ private fun BulkApproveBar(
     count: Int,
     enabled: Boolean,
     onApproveAllClean: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val colors = MaterialTheme.recallyColors
     Column(
         modifier =
-            Modifier
+            modifier
                 .fillMaxWidth()
-                .border(width = 1.dp, color = colors.lineSoft)
+                .testTag(BULK_APPROVE_BAR_TAG)
                 .padding(
                     start = RecallySpacing.screenPadding,
                     end = RecallySpacing.screenPadding,
@@ -164,7 +175,8 @@ private fun BulkApproveBar(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .height(50.dp)
+                    .height(BULK_BAR_PILL_HEIGHT)
+                    .testTag(BULK_APPROVE_PILL_TAG)
                     .clip(RoundedCornerShape(RecallyRadius.md))
                     .background(if (enabled) colors.primary else colors.primaryMuted)
                     .clickable(enabled = enabled, onClick = onApproveAllClean),
@@ -387,7 +399,12 @@ private fun QueueList(
     val actionsEnabled = !uiState.isOffline && uiState.busyCardId == null
     LazyColumn(
         verticalArrangement = Arrangement.spacedBy(RecallySpacing.md),
-        modifier = Modifier.fillMaxSize(),
+        // The bulk bar floats over the list's bottom edge (issue #227); the
+        // bottom padding equals its height so the last card scrolls fully
+        // clear of it — the #150 class of bug, pre-empted.
+        contentPadding =
+            PaddingValues(bottom = if (uiState.showBulkApprove) BULK_BAR_HEIGHT else 0.dp),
+        modifier = Modifier.fillMaxSize().testTag(QUEUE_LIST_TAG),
     ) {
         uiState.visibleGroups.forEach { group ->
             item(key = "header-${group.bookId}-${group.chapter}-${group.cards.first().id}") {
@@ -741,6 +758,20 @@ private val HAIRLINE = 1.dp
 private val SKELETON_HEADER_WIDTH = 180.dp
 private val SKELETON_CARD_HEIGHT = 180.dp
 private val QUEUE_CLEAR_ICON_HALO = 48.dp
+
+/** The bulk pill's height; the artboard's 50px (RcApprove.dc.html). */
+private val BULK_BAR_PILL_HEIGHT = 50.dp
+
+/**
+ * Total height the floating bulk bar occupies over the queue — top gap, pill,
+ * bottom inset. [QueueList] pads its bottom by exactly this so the bar never
+ * covers the last card; keep the two in lockstep.
+ */
+private val BULK_BAR_HEIGHT = RecallySpacing.md + BULK_BAR_PILL_HEIGHT + RecallyBottomInset
+
+internal const val QUEUE_LIST_TAG = "approveQueueList"
+internal const val BULK_APPROVE_BAR_TAG = "bulkApproveBar"
+internal const val BULK_APPROVE_PILL_TAG = "bulkApprovePill"
 
 // --- Previews (docs/android.md, "Every previewable composable has a preview") ---
 
