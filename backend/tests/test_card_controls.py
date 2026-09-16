@@ -12,22 +12,20 @@ post-boundary cases. 3b's endpoint reuses that predicate; the substitution is na
 in the PR per the ticket's substitution rule.
 """
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from datetime import datetime, timedelta
 from unittest.mock import Mock
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import Engine
 from sqlalchemy.orm import Session
-from sqlalchemy.pool import StaticPool
 
 from recally.api.deps import container_dependency
 from recally.config import Settings, get_settings
 from recally.container import Container
 from recally.main import create_app
 from recally.models import (
-    Base,
     Book,
     Card,
     CardState,
@@ -51,23 +49,16 @@ BACK = "An LLM pipeline's behaviour only makes sense end-to-end."
 CARD_STATE_COLUMNS = ("state", "step", "stability", "difficulty", "due", "last_review")
 
 
-def _build_container(**env: str) -> Container:
-    """A container on a fresh in-memory database (see test_api.py for StaticPool)."""
-    engine = create_engine(
-        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-    )
-    Base.metadata.create_all(engine)
-    settings = Settings(RECALLY_DATABASE_URL="sqlite://", RECALLY_API_KEY=TEST_API_KEY, **env)
+def _build_container(test_engine_factory: Callable[[], Engine], **env: str) -> Container:
+    """A container on a fresh database from the shared fixture (tests/conftest.py)."""
+    engine = test_engine_factory()
+    settings = Settings(RECALLY_DATABASE_URL=str(engine.url), RECALLY_API_KEY=TEST_API_KEY, **env)
     return Container(settings, engine=engine)
 
 
 @pytest.fixture
-def container() -> Iterator[Container]:
-    container = _build_container()
-    try:
-        yield container
-    finally:
-        container.engine.dispose()
+def container(test_engine_factory: Callable[[], Engine]) -> Container:
+    return _build_container(test_engine_factory)
 
 
 def _build_client(container: Container, monkeypatch: pytest.MonkeyPatch) -> TestClient:

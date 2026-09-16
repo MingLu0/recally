@@ -10,14 +10,11 @@ sentinel objects, because this ticket ships no agent implementations.
 """
 
 import dataclasses
-from collections.abc import Iterator
 from typing import get_args, get_type_hints
 
 import pytest
-from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
-from sqlalchemy.pool import StaticPool
 
 from recally.agents.base import (
     AgentContext,
@@ -33,7 +30,6 @@ from recally.agents.registry import AgentRegistry, UnknownAgentVariantError
 from recally.config import Settings
 from recally.container import Container
 from recally.llm import LlmCaller
-from recally.models import Base
 
 ROLES = ("curator", "writer", "critic", "learner")
 CARD_STATUSES = {"pending_review", "approved", "needs_human", "rejected"}
@@ -50,15 +46,9 @@ def registry() -> AgentRegistry:
 
 
 @pytest.fixture
-def engine() -> Iterator[Engine]:
-    engine = create_engine(
-        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-    )
-    Base.metadata.create_all(engine)
-    try:
-        yield engine
-    finally:
-        engine.dispose()
+def engine(test_engine: Engine) -> Engine:
+    """A fresh schema-ready engine from the shared fixture (tests/conftest.py)."""
+    return test_engine
 
 
 def test_resolves_default_variant(registry: AgentRegistry, monkeypatch: pytest.MonkeyPatch) -> None:

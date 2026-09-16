@@ -16,14 +16,13 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from sqlalchemy import create_engine, select
-from sqlalchemy.pool import StaticPool
+from sqlalchemy import Engine, select
 
 from recally.config import Settings
 from recally.container import Container
 from recally.ingest import ingest_file
 from recally.ingest.adapters import OReillyCsvAdapter
-from recally.models import Base, Card, LlmCall, WriterGuidance
+from recally.models import Card, LlmCall, WriterGuidance
 
 TEST_API_KEY = "test-key-not-a-real-secret"
 FIXTURE_A = Path(__file__).parent / "fixtures" / "oreilly-annotations-a.csv"
@@ -64,16 +63,9 @@ class ScriptedLlm:
 
 
 @pytest.fixture
-def container() -> Iterator[Container]:
-    engine = create_engine(
-        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-    )
-    Base.metadata.create_all(engine)
-    settings = Settings(RECALLY_DATABASE_URL="sqlite://", RECALLY_API_KEY=TEST_API_KEY)
-    try:
-        yield Container(settings, engine=engine)
-    finally:
-        engine.dispose()
+def container(test_engine: Engine) -> Iterator[Container]:
+    settings = Settings(RECALLY_DATABASE_URL=str(test_engine.url), RECALLY_API_KEY=TEST_API_KEY)
+    yield Container(settings, engine=test_engine)
 
 
 def test_next_writer_call_request_contains_the_v2_text(

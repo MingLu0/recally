@@ -25,14 +25,13 @@ from datetime import timedelta
 from pathlib import Path
 
 import pytest
-from sqlalchemy import create_engine, func, select
+from sqlalchemy import Engine, func, select
 from sqlalchemy.orm import Session
-from sqlalchemy.pool import StaticPool
 
 import recally.scheduling
 from recally.config import Settings
 from recally.container import Container
-from recally.models import Base, Card, CuratedUnit, FsrsParams, IngestRun, ReviewLog
+from recally.models import Card, CuratedUnit, FsrsParams, IngestRun, ReviewLog
 from recally.models.base import utc_now
 
 TEST_API_KEY = "test-key-not-a-real-secret"
@@ -67,30 +66,22 @@ requires_optimizer_extra = pytest.mark.skipif(
 
 
 @pytest.fixture
-def make_container() -> Iterator[Callable[..., Container]]:
+def make_container(
+    test_engine_factory: Callable[[], Engine],
+) -> Iterator[Callable[..., Container]]:
     """Container factory on fresh in-memory databases, with settings overrides
     (same shape as tests/api/test_jobs.py)."""
-    built: list[Container] = []
 
     def factory(**settings_overrides: object) -> Container:
-        engine = create_engine(
-            "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-        )
-        Base.metadata.create_all(engine)
+        engine = test_engine_factory()
         settings = Settings(
-            RECALLY_DATABASE_URL="sqlite://",
+            RECALLY_DATABASE_URL=str(engine.url),
             RECALLY_API_KEY=TEST_API_KEY,
             **settings_overrides,  # type: ignore[arg-type]
         )
-        container = Container(settings, engine=engine)
-        built.append(container)
-        return container
+        return Container(settings, engine=engine)
 
-    try:
-        yield factory
-    finally:
-        for container in built:
-            container.engine.dispose()
+    yield factory
 
 
 @pytest.fixture

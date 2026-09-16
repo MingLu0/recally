@@ -11,31 +11,22 @@ from collections.abc import Iterator
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.pool import StaticPool
+from sqlalchemy import Engine
 
 from recally import __version__
 from recally.api.deps import container_dependency
 from recally.config import Settings, get_settings
 from recally.container import Container
 from recally.main import create_app
-from recally.models import Base
 
 TEST_API_KEY = "test-key-not-a-real-secret"
 
 
 @pytest.fixture
-def container() -> Iterator[Container]:
-    """A container on a fresh in-memory database (same shape as tests/api/test_devices.py)."""
-    engine = create_engine(
-        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-    )
-    Base.metadata.create_all(engine)
-    settings = Settings(RECALLY_DATABASE_URL="sqlite://", RECALLY_API_KEY=TEST_API_KEY)
-    try:
-        yield Container(settings, engine=engine)
-    finally:
-        engine.dispose()
+def container(test_engine: Engine) -> Iterator[Container]:
+    """A container on a fresh database from the shared fixture (tests/conftest.py)."""
+    settings = Settings(RECALLY_DATABASE_URL=str(test_engine.url), RECALLY_API_KEY=TEST_API_KEY)
+    yield Container(settings, engine=test_engine)
 
 
 @pytest.fixture

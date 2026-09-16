@@ -27,12 +27,10 @@ from datetime import timedelta
 from typing import Any
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import Engine
 from sqlalchemy.orm import Session
-from sqlalchemy.pool import StaticPool
 
 from recally.models import (
-    Base,
     Book,
     Card,
     CuratedUnit,
@@ -40,6 +38,7 @@ from recally.models import (
     Highlight,
     IngestRun,
     ReviewLog,
+    WriterGuidance,
 )
 from recally.models.base import utc_now
 
@@ -51,19 +50,27 @@ BURIED_YESTERDAY = NOW - timedelta(days=1)
 
 
 @pytest.fixture
-def session() -> Iterator[Session]:
-    engine = create_engine(
-        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-    )
-    Base.metadata.create_all(engine)
-    try:
-        with Session(engine) as session:
-            yield session
-    finally:
-        engine.dispose()
+def session(test_engine: Engine) -> Iterator[Session]:
+    with Session(test_engine) as session:
+        yield session
 
 
 _seed_counter = 0
+
+
+def _ensure_guidance_version(session: Session, version: int) -> None:
+    """The `writer_guidance` row a seeded card's `guidance_version` points at."""
+    if session.get(WriterGuidance, version) is None:
+        session.add(
+            WriterGuidance(
+                version=version,
+                guidance=f"v{version} guidance",
+                basis={},
+                created_at=NOW,
+                user_id=1,
+            )
+        )
+        session.flush()
 
 
 def _seed_card(
@@ -114,6 +121,10 @@ def _seed_card(
     session.add(unit)
     session.flush()
     session.add(CuratedUnitHighlight(unit_id=unit.id, highlight_id=highlight.id, user_id=1))
+    if guidance_version is not None:
+        # Postgres enforces `cards.guidance_version`'s FK, which SQLite never did
+        # (issue #226): the version the card names must exist.
+        _ensure_guidance_version(session, guidance_version)
     card = Card(
         unit_id=unit.id,
         type=card_type,

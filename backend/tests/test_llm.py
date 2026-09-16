@@ -6,17 +6,15 @@ The fake completion returns a `SimpleNamespace` shaped like the bits of LiteLLM'
 `litellm.completion_cost` is patched per test so costs are deterministic.
 """
 
-from collections.abc import Iterator
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import Engine
 from sqlalchemy.orm import Session, sessionmaker
-from sqlalchemy.pool import StaticPool
 
 from recally.llm import LlmCaller
-from recally.models import Base, Card, CuratedUnit, IngestRun, LlmCall
+from recally.models import Card, CuratedUnit, IngestRun, LlmCall
 
 MESSAGES = [{"role": "user", "content": "Summarise this highlight."}]
 MODEL = "writer-model-x"
@@ -25,18 +23,11 @@ FAKE_COMPLETION = "fake completion text"
 
 
 @pytest.fixture
-def session_factory() -> Iterator[sessionmaker[Session]]:
-    """A session factory over one shared in-memory database.
-
-    `StaticPool` keeps a single connection so the wrapper's own session (it opens one
-    per call to write the `llm_calls` row) and the test's assertion session see the
-    same database.
-    """
-    engine = create_engine(
-        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-    )
-    Base.metadata.create_all(engine)
-    yield sessionmaker(bind=engine, expire_on_commit=False)
+def session_factory(test_engine: Engine) -> sessionmaker[Session]:
+    """A session factory over one shared database from the shared fixture
+    (tests/conftest.py), so the wrapper's own session (it opens one per call to write
+    the `llm_calls` row) and the test's assertion session see the same database."""
+    return sessionmaker(bind=test_engine, expire_on_commit=False)
 
 
 @pytest.fixture
@@ -198,15 +189,26 @@ def test_provider_error_propagates_and_still_logs(
 
     monkeypatch.setattr("recally.llm.litellm.completion", failing)
 
+    # A real unit to point at: Postgres enforces `llm_calls.unit_id`'s FK, which
+    # SQLite never did (issue #226).
+    with session_factory() as session:
+        run = IngestRun(filename="export.csv")
+        session.add(run)
+        session.flush()
+        unit = CuratedUnit(ingest_run_id=run.id, curated_text="text", decision="keep")
+        session.add(unit)
+        session.commit()
+        unit_id = unit.id
+
     caller = LlmCaller(session_factory, log_payloads=True)
     with pytest.raises(RuntimeError, match="provider down"):
-        caller(MESSAGES, model=MODEL, agent=AGENT, unit_id=1)
+        caller(MESSAGES, model=MODEL, agent=AGENT, unit_id=unit_id)
 
     row = _only_row(session_factory)
     assert row.request == MESSAGES
     assert row.response is None
     assert row.model == MODEL
-    assert row.unit_id == 1
+    assert row.unit_id == unit_id
     assert row.input_tokens == 0
     assert row.output_tokens == 0
     assert row.cost_microusd == 0

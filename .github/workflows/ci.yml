@@ -46,6 +46,15 @@ jobs:
       - name: Pytest
         run: uv run pytest
 
+      # The dual-backend half of hard rule 4 (issue #226): the same suite again
+      # against the embedded Postgres server (pgserver, a dev dependency — no
+      # service container needed). RECALLY_TEST_BACKEND is the switch the shared
+      # engine fixture in backend/tests/conftest.py reads;
+      # tests/test_pipeline_concurrency.py stays on SQLite on purpose and reports
+      # its skip reason via -rs.
+      - name: Pytest (Postgres)
+        run: RECALLY_TEST_BACKEND=postgres uv run pytest -rs
+
       # Security scanners are CI-only (docs/backend.md, "Tooling"). Run via
       # `uvx` so they stay out of the project's locked dependency set.
       - name: Bandit
