@@ -47,6 +47,7 @@ backend/
         prompts/learner.md
     pipeline.py                   # the runner; resolves agents via registry, owns all DB transitions
     llm.py                        # sole LiteLLM wrapper; logs every call to llm_calls
+    logging_config.py             # configure_logging(): one handler on the `recally` logger, at INFO
     scheduling/
       fsrs.py                     # py-fsrs wrapper; server-authoritative review_card
       optimizer.py                # Learner stage A: nightly fsrs.Optimizer fit -> fsrs_params

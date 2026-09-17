@@ -27,7 +27,12 @@ from recally.models import Base
 config = context.config
 
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # `disable_existing_loggers=False` is not the default and matters: `fileConfig`
+    # otherwise sets `disabled=True` on every logger already created, including the
+    # whole `recally.*` namespace, for the rest of the process. Any process that runs
+    # a migration and then does work — `alembic upgrade head` before serving, the test
+    # suite — would go permanently silent (issue #211).
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 if not config.get_main_option("sqlalchemy.url", default=None):
     # `%` is the config parser's interpolation character; a URL containing one (a
