@@ -4,7 +4,8 @@ The lifespan resolves settings so a missing `RECALLY_API_KEY` fails startup rath
 than the first request; it also owns the in-process APScheduler — the nightly
 optimizer (stage A) and learner guidance job (stage B) on `LEARNER_CRON`, and the
 notifier tick on `PUSH_CHECK_INTERVAL_MIN` — which is why startup work lives there
-and not at module import time.
+and not at module import time. It also configures `recally.*` logging, without which
+every one of those jobs runs silently under uvicorn's defaults (issue #211).
 """
 
 from collections.abc import AsyncIterator
@@ -20,6 +21,7 @@ from recally.api.errors import register_error_handlers
 from recally.api.routers import cards, decks, devices, health, ingest, jobs, reviews, stats
 from recally.config import get_settings
 from recally.container import get_container
+from recally.logging_config import configure_logging
 from recally.scheduling.jobs import run_job
 
 
@@ -48,6 +50,10 @@ def _run_notifier_tick() -> None:
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    # First, before anything that might log: uvicorn configures only its own
+    # `uvicorn.*` loggers, so without this the scheduled jobs below run silently
+    # (issue #211).
+    configure_logging()
     settings = get_settings()
     timezone = ZoneInfo(settings.timezone)
     scheduler = BackgroundScheduler(timezone=timezone)

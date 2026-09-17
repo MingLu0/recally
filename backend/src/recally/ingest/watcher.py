@@ -17,6 +17,8 @@ from typing import Protocol
 from watchdog.events import DirMovedEvent, FileMovedEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 
+from recally.logging_config import configure_logging
+
 EXPORT_PATTERN = "*oreilly-annotations*.csv"
 
 logger = logging.getLogger(__name__)
@@ -153,7 +155,13 @@ def create_configured_export_watcher() -> ExportWatcher:
 
 
 def main() -> None:
-    """Run the watcher until interrupted; useful before the app lifespan owns it."""
+    """Run the watcher until interrupted; useful before the app lifespan owns it.
+
+    This is a process entry point, so it configures logging itself — the FastAPI
+    lifespan never runs here (the watcher is a separate process), and without it the
+    ingest failures this module logs reach no handler (issue #211).
+    """
+    configure_logging()
     watcher = create_configured_export_watcher()
     watcher.start()
     try:
