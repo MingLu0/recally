@@ -57,6 +57,7 @@ is silent. Units commit as they complete, so a failure leaves finished units int
 and the failed unit's highlights retryable.
 """
 
+import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from typing import Any, Literal, overload
@@ -89,6 +90,8 @@ from recally.models import (
     WriterGuidance,
 )
 from recally.models.base import utc_now
+
+logger = logging.getLogger(__name__)
 
 
 class _CorrelatedLlm(LlmCaller):
@@ -360,6 +363,7 @@ def _run_phases(
     """The run itself: orphan cleanup, the Curator phase, then the Writer ⇄ Critic phase."""
     _delete_orphan_keep_units(session)
     groups = _unprocessed_by_chapter(session)
+    logger.info("%s", _backlog_summary(groups, ingest_run))
     session.commit()  # close the read transaction before the first agent call
 
     # Phase 1: curate every chapter, persisting units before any Writer call.
@@ -615,6 +619,47 @@ def _unprocessed_by_chapter(
         key = (highlight.book.title, highlight.chapter)
         groups.setdefault(key, []).append(highlight)
     return list(groups.items())
+
+
+def _backlog_summary(
+    groups: list[tuple[tuple[str, str | None], list[Highlight]]],
+    ingest_run: IngestRun,
+) -> str:
+    """One INFO line naming what this run is about to resolve, and how much predates it.
+
+    The runner selects on `processed=false` alone — no book filter, no run filter
+    (`_unprocessed_by_chapter`) — so a run triggered by a 20-row CSV also sweeps every
+    leftover row from any earlier run, for any book. That wide sweep is the documented
+    recovery contract (docs/architecture.md, "Failure handling") and is deliberately
+    unchanged here: scoping it per book would strand rows whose book is never
+    re-exported. The defect this line fixes is that the sweep was *invisible* — a run
+    could resolve 103 highlights while its `ingest_runs` row honestly reported
+    `rows_seen=20`, and the operator learned the difference only from the clock
+    (issue #211).
+
+    Derived from the grouping the caller already holds plus `rows_seen` on the run row:
+    no second scan and no schema change. `rows_seen` counts the file's rows, of which
+    the unchanged ones are already `processed`, so it is clamped to the backlog rather
+    than trusted blindly — a re-ingest of an unchanged file must not report more rows
+    "from this run's file" than the run has to resolve at all.
+    """
+    total = sum(len(highlights) for _, highlights in groups)
+    from_this_file = min(ingest_run.rows_seen, total)
+    pre_existing = total - from_this_file
+    if pre_existing == 0:
+        # No zero clause on the common case: a clause that is almost always "0
+        # pre-existing" trains the operator to stop reading the line that matters.
+        return f"resolving {total} unprocessed highlights"
+
+    # The book count is what actually surprises the operator: the leftovers usually
+    # belong to a book this file never mentions.
+    other_books = len({book_title for (book_title, _), _ in groups}) - 1
+    book_word = "book" if other_books == 1 else "books"
+    return (
+        f"resolving {total} unprocessed highlights "
+        f"({from_this_file} from this run's file, "
+        f"{pre_existing} pre-existing across {other_books} other {book_word})"
+    )
 
 
 def _resolve_chapter(

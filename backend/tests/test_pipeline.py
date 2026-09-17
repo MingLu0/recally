@@ -15,6 +15,7 @@ loop, so asserting them on the Curator row would assert the opposite of the sche
 """
 
 import json
+import logging
 from collections import deque
 from collections.abc import Iterator
 from datetime import date
@@ -1011,3 +1012,153 @@ def test_endpoints_require_the_api_key(client: TestClient) -> None:
     assert client.get("/cards/pending").status_code == 401
     assert client.post("/cards/1/approve").status_code == 401
     assert client.post("/cards/1/reject", json={"reason": "x"}).status_code == 401
+
+
+# --- Issue #211: the run announces its backlog before resolving anything ---------
+
+
+def seed_other_book_backlog(container: Container, count: int) -> list[int]:
+    """`count` unprocessed highlights on a *different* book than the fixture's.
+
+    Seeded directly rather than from a second CSV: both committed fixtures export the
+    same book, and the number that surprises the operator is the one that spans books.
+
+    Returns the new highlight ids so the caller can script a Curator response that
+    actually names them — `ScriptedLlm` replays in call order, and the seeded book is a
+    second chapter group, so the run makes two Curator calls, not one.
+    """
+    seeded_ids: list[int] = []
+    with container.session() as session:
+        book = Book(
+            title="Another Book Entirely",
+            source="oreilly",
+            external_id="9780000000001",
+            url="https://learning.oreilly.com/library/view/-/9780000000001/",
+            user_id=1,
+        )
+        session.add(book)
+        session.flush()
+        for offset in range(count):
+            highlight = Highlight(
+                book_id=book.id,
+                chapter="Chapter 1: Leftovers",
+                raw_text=f"A highlight left unprocessed by an earlier run ({offset}).",
+                dedupe_key=f"backlog-{offset}-0000-4000-8000-000000000000",
+                source="oreilly",
+                highlighted_at=date(2026, 6, 19),
+                export_position=offset,
+                processed=False,
+                user_id=1,
+            )
+            session.add(highlight)
+            session.flush()
+            seeded_ids.append(highlight.id)
+        session.commit()
+    return seeded_ids
+
+
+def backlog_lines(caplog: pytest.LogCaptureFixture) -> list[str]:
+    """Every INFO line the pipeline logged about the backlog it is about to resolve."""
+    return [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == "recally.pipeline" and "unprocessed highlights" in record.getMessage()
+    ]
+
+
+def test_run_logs_the_unprocessed_backlog_before_resolving(
+    container: Container, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The backlog line is emitted BEFORE the first agent call, and names both counts.
+
+    The runner selects on `processed=false` alone — no book filter, no run filter — so
+    a run triggered by a 15-row file also sweeps every leftover row from any earlier
+    run, for any book. That sweep is the documented recovery contract
+    (docs/architecture.md, "Failure handling") and must not change; the defect is that
+    it was invisible, which is why cost and `ingest_runs.rows_seen` diverged silently.
+    """
+    run_id, highlights = ingest_fixture(container)
+    seeded_ids = seed_other_book_backlog(container, 8)
+    # Two chapter groups, so two Curator calls. Both are scripted as drops: this test
+    # is about the line the run logs before any of that, not about card generation.
+    scripted = ScriptedLlm(
+        monkeypatch,
+        [
+            curator_response(drop_unit([highlight.id for highlight in highlights])),
+            curator_response(drop_unit(seeded_ids)),
+        ],
+    )
+
+    with caplog.at_level(logging.INFO, logger="recally.pipeline"):
+        container.run_pipeline(run_id)
+
+    assert len(backlog_lines(caplog)) == 1
+    line = backlog_lines(caplog)[0]
+    # 15 fixture rows + 8 seeded leftovers, of which 8 predate this run's file.
+    assert "23" in line
+    assert "15" in line
+    assert "8" in line
+    assert "pre-existing" in line
+
+    # Ordering is the whole point: an operator learns the size of the run before
+    # paying for it, not from the clock afterwards.
+    logged_at = next(
+        index
+        for index, record in enumerate(caplog.records)
+        if record.name == "recally.pipeline" and "unprocessed highlights" in record.getMessage()
+    )
+    first_llm_call_at = next(
+        (index for index, record in enumerate(caplog.records) if record.name == "recally.llm"),
+        None,
+    )
+    if first_llm_call_at is not None:
+        assert logged_at < first_llm_call_at
+    assert scripted.requests, "the run should have reached the Curator at all"
+
+
+def test_backlog_line_names_only_this_run_when_nothing_predates_it(
+    container: Container, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A clean database logs the total with no "pre-existing" clause.
+
+    Printing a zero clause on the common case would train the operator to ignore the
+    line that matters.
+    """
+    run_id, highlights = ingest_fixture(container)
+    ScriptedLlm(
+        monkeypatch, [curator_response(drop_unit([highlight.id for highlight in highlights]))]
+    )
+
+    with caplog.at_level(logging.INFO, logger="recally.pipeline"):
+        container.run_pipeline(run_id)
+
+    assert len(backlog_lines(caplog)) == 1
+    line = backlog_lines(caplog)[0]
+    assert "15" in line
+    assert "pre-existing" not in line
+
+
+def test_backlog_line_counts_other_books_not_just_this_file(
+    container: Container, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The pre-existing count spans books, and names how many other books it spans.
+
+    Scoping the count to the triggering file's book would report 0 here and hide
+    exactly the work that makes a run take 25 minutes.
+    """
+    run_id, highlights = ingest_fixture(container)
+    seeded_ids = seed_other_book_backlog(container, 8)
+    ScriptedLlm(
+        monkeypatch,
+        [
+            curator_response(drop_unit([highlight.id for highlight in highlights])),
+            curator_response(drop_unit(seeded_ids)),
+        ],
+    )
+
+    with caplog.at_level(logging.INFO, logger="recally.pipeline"):
+        container.run_pipeline(run_id)
+
+    line = backlog_lines(caplog)[0]
+    assert "8 pre-existing" in line
+    assert "1 other book" in line
