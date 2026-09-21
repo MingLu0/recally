@@ -74,7 +74,7 @@ The last one was an either/or — build the count or drop the badge — and was 
 | Phase | Trigger | Changes |
 |---|---|---|
 | 1. Local | now | Mac, SQLite, watcher, LAN |
-| 2. Hosted | want access away from home | Steps 7–11 below: Postgres cutover, Dockerize, upload endpoint replaces watcher, deploy, Android over HTTPS |
+| 2. Hosted | want access away from home | Steps 7–11 below: Postgres cutover, Dockerize, upload endpoint, deploy, Android over HTTPS |
 | 3. AWS | multi-user or reliability needs | ECS/Lambda + RDS Postgres, S3 drop zone, real auth |
 
 Phase 2 is Postgres from the start (ADR-016). Hugging Face Spaces no longer offers block storage — its disk is ephemeral and the replacement, Storage Buckets, is S3-like object storage that SQLite cannot run on — so SQLite has nowhere durable to live on a Space. Postgres is therefore forced by the hosting choice, and independently wanted: it moves the one lossy migration to the point where the database is still disposable.
@@ -97,8 +97,10 @@ The riskiest step, done first and entirely locally — no hosting involved, so a
 - **Tests**: `test_dockerfile_has_no_secrets` finds no key material baked into the image; `test_container_boots_and_serves_health`; `test_container_runs_migrations_on_boot` leaves an empty database at head; `test_health_reports_version` matches `pyproject.toml`.
 - **You verify**: `docker run` locally against the step 7 Postgres. `GET /health/auth` answers 200 with the key and 401 without.
 
-### 9. Upload endpoint replaces the watcher
-`POST /ingest` is already specified (`api-spec.md`, "Ingestion") and already noted as absent in `api/routers/ingest.py`. The watcher stays for local use; it has no role in the container.
+### 9. Upload endpoint for the hosted container
+`POST /ingest` is already specified (`api-spec.md`, "Ingestion") and already noted as absent in `api/routers/ingest.py`. The watcher stays for local use; it has no role in the container, where there is no folder to watch.
+
+**The endpoint and its Android client may already be built** by the Improvements sub-issue that adds the Decks import tile — it is unblocked from steps 7 and 8 because the upload works against local SQLite on the LAN. If so, this step is the deploy-time verification of work that already exists, not a second implementation. Check before building.
 
 - **Tests**: `test_ingest_upload_matches_watcher_counts` gives the same new/updated/removed counts as the watcher for the same fixture; `test_ingest_upload_requires_api_key` returns 401 without one; `test_ingest_upload_rejects_non_csv` returns 422; `test_ingest_upload_is_idempotent` reports 0/0/0 on the second upload of the same file.
 - **You verify**: upload the real 695-row export to the deployed Space; `GET /ingest/status` shows the counts the step 1 gate produced.

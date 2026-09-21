@@ -289,9 +289,10 @@ internal fun QueueCountTile(
  * books. The failure strip stays inside the section — the rest of Today is
  * untouched, decks being remote-only.
  *
- * The artboard's "Import" tile is deliberately not built: ingestion is the
- * watched folder on the Mac (docs/android.md) and `api-spec.md` documents no
- * client-initiated import — the app does not invent one (issue #154).
+ * No "Import" tile here. The app does import an export (the Decks screen's
+ * import tile posts it to `POST /ingest`), but this rail is a shortcut into
+ * books that already exist — import belongs next to the full list it adds to,
+ * not next to a preview of it (docs/android.md, *Screens → 1. Today*).
  */
 @Composable
 private fun YourBooksRail(

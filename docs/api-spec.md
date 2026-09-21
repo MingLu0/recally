@@ -225,7 +225,13 @@ The response carries no chapter counts: the list is complete and unpaginated, so
 ## Ingestion
 
 ### POST /ingest
-Multipart CSV upload (same pipeline as the watcher; enables HF Spaces phase).
+Multipart CSV upload: field `file`, a `*oreilly-annotations*.csv` export. Runs the *same* path as the watcher — both call `Container.ingest_oreilly_export`, so dedupe, the `ingest_runs` row and the agent pipeline are identical whichever route the file arrived by. Callers are the Android import tile (`android.md`, *Screens → 4. Decks*) and the hosted phase, where no folder can be watched.
+
+Returns the same body as `GET /ingest/status` — the `ingest_runs` row this upload produced — so the caller can report what the file actually did rather than only that it was accepted. **The response comes after the agent pipeline has run**, which takes minutes for a large export; clients must set a generous timeout and show progress for the whole wait.
+
+Idempotent by hard rule 6: re-uploading an unchanged file reports `0` new / `0` updated / `0` removed and writes no duplicate rows. Uploading a file the watcher already ingested is therefore harmless.
+
+`422` if the body is not a CSV the adapter can parse. `401` without a valid `X-API-Key`.
 
 ### GET /ingest/status
 Latest `ingest_runs` row; 404 before the first ingest, so "never ingested" stays distinguishable from "ingested nothing". `units_dropped`/`highlights_dropped` are the Curator's filter output: a dropped highlight produces no card, so without them a wrongly-dropped highlight is invisible everywhere (a wrongly-*grouped* one is not — `GET /cards/pending` shows every source highlight of a unit). They are also what makes the PRD's curation-yield metric computable.

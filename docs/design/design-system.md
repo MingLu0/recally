@@ -123,7 +123,7 @@ Rendered from `GET /decks` (G2, issue #133; rail built in #154). Decks are remot
 
 **A failed load is not an empty library** (issue #189). When `GET /decks` does not answer, the section renders with its header and a failure strip in place of the card row: a `line`-bordered `md`-radius box, "Couldn't load your books" in `body`/`ink-muted`, with a `Try again` outlined button right-aligned that calls Today's own refresh. It stays **inside the section** — the rail never raises the screen-level error row and never blanks the rest of Today, since decks are remote-only and Today must render without them. Before this, both cases were silence, and a rail that could not load was indistinguishable from a user with no books.
 
-The artboard's "Import" tile is deliberately not built: ingestion is the watched folder (`AGENTS.md` hard rule 12) and `api-spec.md` documents no client-initiated import. Do not add one to fill the space.
+**The artboard's "Import" tile is built** — it was held back only while `POST /ingest` was a stub, not because the design was wrong. It opens the system file picker and uploads the CSV; the app never parses it (`docs/android.md`, *Screens → 4. Decks*). The tile and the watched folder are peers, which is what its subtitle says: the watcher is the zero-tap path on the Mac running the backend, the tile is every other case. Keep the subtitle honest if that ever changes.
 
 ### Deck row (`ui/screens/decks/DecksScreen.kt`)
 
