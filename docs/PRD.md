@@ -23,7 +23,7 @@ Single user: me (Ming). Designed with `user_id` columns from day one so multi-us
 
 ## Goals (v1)
 
-- Automatic ingestion of `*oreilly-annotations*.csv` from a watched folder (O'Reilly prefixes the filename with the book slug, e.g. `30-agents-every-oreilly-annotations.csv`), idempotent across re-exports.
+- Ingestion of `*oreilly-annotations*.csv` (O'Reilly prefixes the filename with the book slug, e.g. `30-agents-every-oreilly-annotations.csv`), idempotent across re-exports. Two ways in, both landing on the same deterministic path: a **watched folder** on the machine running the backend, automatic and zero-tap; and an **import tile in the app**, which uploads the file to `POST /ingest` for exports that happen anywhere else.
 - LLM pipeline: Curator → Writer ⇄ Critic → human approval queue.
 - FSRS-based review scheduling with 4-button rating (Again / Hard / Good / Easy), including same-session relearning steps.
 - Post-approval card controls: fix wording without losing scheduling history, and defer a card (bury for the day, suspend indefinitely) rather than rating it dishonestly (ADR-008).
