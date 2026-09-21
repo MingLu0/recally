@@ -1,5 +1,6 @@
 package dev.recally.ui.screens.decks
 
+import android.net.Uri
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -7,6 +8,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.recally.domain.model.DeckCard
 import dev.recally.domain.repository.CardRepository
 import dev.recally.domain.repository.DeckRepository
+import dev.recally.domain.repository.IngestRepository
 import dev.recally.domain.repository.Result
 import dev.recally.domain.repository.displayMessage
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -33,6 +35,7 @@ class DecksViewModel
     constructor(
         private val deckRepository: DeckRepository,
         private val cardRepository: CardRepository,
+        private val ingestRepository: IngestRepository,
         savedStateHandle: SavedStateHandle,
     ) : ViewModel() {
         private val bookId: Long? = savedStateHandle.get<Long>("bookId")
@@ -45,6 +48,57 @@ class DecksViewModel
 
         init {
             refresh()
+        }
+
+        /**
+         * The import tile's pick resolved (issue #234). The upload and its
+         * state live here, in the ViewModel — a multi-minute call that must
+         * survive rotation and backgrounding, never in composable state. The
+         * deck list is untouched by the whole flow: a failed import changes
+         * only [DecksUiState.importState].
+         *
+         * A pick while one upload is in flight is ignored — one file at a
+         * time, foreground only (issue #234, "Scoped out").
+         */
+        fun onExportPicked(uri: Uri) {
+            if (uiState.value.importState == ImportState.Uploading) return
+            mutableUiState.update { it.copy(importState = ImportState.Uploading) }
+            viewModelScope.launch {
+                when (val result = ingestRepository.uploadOReillyExport(uri)) {
+                    is Result.Success ->
+                        mutableUiState.update {
+                            it.copy(
+                                importState =
+                                    ImportState.Success(
+                                        rowsNew = result.data.rowsNew,
+                                        rowsUpdated = result.data.rowsUpdated,
+                                        rowsRemoved = result.data.rowsRemoved,
+                                    ),
+                            )
+                        }
+
+                    is Result.Unauthorized ->
+                        mutableUiState.update { it.copy(importState = ImportState.Unauthorized) }
+
+                    is Result.NetworkError ->
+                        mutableUiState.update { it.copy(importState = ImportState.Unreachable) }
+
+                    is Result.HttpError ->
+                        mutableUiState.update {
+                            it.copy(
+                                importState =
+                                    if (result.status == HTTP_UNPROCESSABLE_ENTITY) {
+                                        ImportState.InvalidExport(result.detail)
+                                    } else {
+                                        ImportState.Unexpected(result.detail ?: "HTTP ${result.status}")
+                                    },
+                            )
+                        }
+
+                    is Result.UnexpectedError ->
+                        mutableUiState.update { it.copy(importState = ImportState.Unexpected(result.displayMessage())) }
+                }
+            }
         }
 
         fun refresh() {
@@ -296,5 +350,10 @@ class DecksViewModel
                     }
                 }
             }
+        }
+
+        private companion object {
+            /** `POST /ingest`'s "not an export the adapter can parse" (docs/api-spec.md). */
+            const val HTTP_UNPROCESSABLE_ENTITY = 422
         }
     }

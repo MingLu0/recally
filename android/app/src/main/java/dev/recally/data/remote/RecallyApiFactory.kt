@@ -5,6 +5,8 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
+import java.time.Duration
+import java.util.concurrent.TimeUnit
 
 /**
  * Builds the [RecallyApi] against runtime settings. Hilt wiring lands with
@@ -21,6 +23,15 @@ object RecallyApiFactory {
     const val PLACEHOLDER_BASE_URL = "http://recally.invalid/"
 
     /**
+     * The upload client's read timeout (issue #234). `POST /ingest` answers
+     * only after the server-side agent pipeline has run — minutes for a large
+     * export — while every other endpoint answers in milliseconds. OkHttp
+     * timeouts are per-client, not per-request, so this call gets its own
+     * client rather than stretching the default for the whole API.
+     */
+    val INGEST_READ_TIMEOUT: Duration = Duration.ofMinutes(15)
+
+    /**
      * `ignoreUnknownKeys` so a server-side field addition cannot break the
      * client; `explicitNulls = false` so optional request fields (PATCH edits,
      * `device_id`) are omitted from the body rather than sent as null.
@@ -31,11 +42,21 @@ object RecallyApiFactory {
             explicitNulls = false
         }
 
-    fun create(settings: ConnectionSettingsProvider): RecallyApi {
+    fun create(settings: ConnectionSettingsProvider): RecallyApi = build(settings, readTimeout = null)
+
+    /** The `POST /ingest` client: same interceptors, a read timeout that outlasts the pipeline. */
+    fun createIngest(settings: ConnectionSettingsProvider): RecallyApi = build(settings, readTimeout = INGEST_READ_TIMEOUT)
+
+    private fun build(
+        settings: ConnectionSettingsProvider,
+        readTimeout: Duration?,
+    ): RecallyApi {
         val client =
             OkHttpClient
                 .Builder()
-                .addInterceptor(ApiKeyInterceptor(settings))
+                .apply {
+                    if (readTimeout != null) readTimeout(readTimeout.toMillis(), TimeUnit.MILLISECONDS)
+                }.addInterceptor(ApiKeyInterceptor(settings))
                 .addInterceptor(BaseUrlInterceptor(settings))
                 .build()
         return Retrofit

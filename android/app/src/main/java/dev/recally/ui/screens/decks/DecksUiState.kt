@@ -37,6 +37,14 @@ data class DecksUiState(
     val expandedCards: List<DeckCard> = emptyList(),
     val isChapterLoading: Boolean = false,
     val editingCard: DeckCard? = null,
+    /**
+     * The import tile's upload state machine (issue #234). Idle until an
+     * export is picked; [ImportState.Uploading] for the whole server-side
+     * wait — the pipeline reports no progress, so the tile shows an
+     * indeterminate state rather than a lying percentage; then one result.
+     * Never touches [decks]: a failed import must leave the list intact.
+     */
+    val importState: ImportState = ImportState.Idle,
 ) {
     /**
      * Edit, suspend and unsuspend all require connectivity — they are
@@ -62,3 +70,43 @@ data class ChapterSummary(
 )
 
 const val UNGROUPED_CHAPTER = "Ungrouped"
+
+/**
+ * The import tile's upload lifecycle (issue #234). Each failure is its own
+ * case — unreachable, 401, "not a valid export" — so the tile can name the
+ * fix ("check Settings", "the backend is off") instead of reporting a generic
+ * failure, mirroring the connection-test convention (docs/android.md,
+ * "Connecting to the backend").
+ */
+sealed interface ImportState {
+    /** Nothing picked yet; the tile offers the picker. */
+    data object Idle : ImportState
+
+    /** Bytes are up; the server runs ingest and the pipeline. No progress
+     * exists to show — the pipeline reports none — so this is deliberately
+     * indeterminate. */
+    data object Uploading : ImportState
+
+    /** The run row came back; the tile reports what the export did. */
+    data class Success(
+        val rowsNew: Int,
+        val rowsUpdated: Int,
+        val rowsRemoved: Int,
+    ) : ImportState
+
+    /** The backend could not be reached at all. */
+    data object Unreachable : ImportState
+
+    /** 401 — the API key is wrong; the fix lives in Settings. */
+    data object Unauthorized : ImportState
+
+    /** 422 — the picked file is not an export the adapter can parse. */
+    data class InvalidExport(
+        val detail: String?,
+    ) : ImportState
+
+    /** A failure that is neither of the above: an unexpected server fault. */
+    data class Unexpected(
+        val detail: String?,
+    ) : ImportState
+}

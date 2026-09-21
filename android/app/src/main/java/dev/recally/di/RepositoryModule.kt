@@ -7,11 +7,13 @@ import dagger.hilt.components.SingletonComponent
 import dev.recally.data.repository.ApprovalRepositoryImpl
 import dev.recally.data.repository.CardRepositoryImpl
 import dev.recally.data.repository.DeckRepositoryImpl
+import dev.recally.data.repository.IngestRepositoryImpl
 import dev.recally.data.repository.ReviewRepositoryImpl
 import dev.recally.data.repository.StatsRepositoryImpl
 import dev.recally.domain.repository.ApprovalRepository
 import dev.recally.domain.repository.CardRepository
 import dev.recally.domain.repository.DeckRepository
+import dev.recally.domain.repository.IngestRepository
 import dev.recally.domain.repository.ReviewRepository
 import dev.recally.domain.repository.StatsRepository
 import javax.inject.Singleton
@@ -43,4 +45,8 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindReviewRepository(impl: ReviewRepositoryImpl): ReviewRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindIngestRepository(impl: IngestRepositoryImpl): IngestRepository
 }

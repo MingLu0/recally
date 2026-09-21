@@ -1,9 +1,13 @@
 package dev.recally.ui.screens.decks
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -11,17 +15,32 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.addPathNodes
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.recally.domain.model.Deck
 import dev.recally.ui.theme.CombinedPreviews
@@ -44,7 +63,8 @@ private fun deckSubtitle(deck: Deck): String {
 
 /**
  * The deck list (docs/design/RcDecks.dc.html): one row per book from
- * `GET /decks`. Pure composable — UiState in, callbacks out
+ * `GET /decks`, with the import tile at the foot of the list (issue #234).
+ * Pure composable — UiState in, callbacks out
  * (docs/android.md, "Pure screen composables").
  *
  * Rows show only what the endpoint documents: title, `total`, `chapters`,
@@ -60,9 +80,19 @@ fun DecksScreen(
     onDeckClick: (Long) -> Unit,
     onRetry: () -> Unit,
     onOpenSettings: () -> Unit,
+    onExportPicked: (Uri) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = MaterialTheme.recallyColors
+    // MIME `text/*`, not `text/csv`: some providers report `text/plain` for a
+    // .csv, and a narrower filter would make the export unpickable
+    // (docs/android.md, *Screens → 4. Decks*). The app is a transport: the
+    // Uri goes to the ViewModel, the bytes go to the server, nothing parses
+    // here.
+    val exportPicker =
+        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            if (uri != null) onExportPicked(uri)
+        }
     Column(
         modifier =
             modifier
@@ -94,6 +124,12 @@ fun DecksScreen(
             LazyColumn(verticalArrangement = Arrangement.spacedBy(RecallySpacing.md)) {
                 items(uiState.decks, key = { it.bookId }) { deck ->
                     DeckRow(deck = deck, onClick = { onDeckClick(deck.bookId) })
+                }
+                item(key = "import-tile") {
+                    ImportTile(
+                        state = uiState.importState,
+                        onClick = { exportPicker.launch(arrayOf("text/*")) },
+                    )
                 }
             }
         }
@@ -163,6 +199,138 @@ private fun DeckRow(
     }
 }
 
+/**
+ * The dashed import affordance at the foot of the deck list
+ * (docs/design/RcDecks.dc.html, issue #234). Idle offers the system picker;
+ * uploading shows an indeterminate state for the whole server-side wait — the
+ * pipeline reports no progress, so a percentage would sit at a lie; a result
+ * replaces the label. Tapping a finished tile (success or failure) offers the
+ * picker again. The rest of the list stays live throughout.
+ */
+@Composable
+private fun ImportTile(
+    state: ImportState,
+    onClick: () -> Unit,
+) {
+    val colors = MaterialTheme.recallyColors
+    val enabled = state != ImportState.Uploading
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .dashedBorder(1.5.dp, colors.line, RecallyRadius.md)
+                .then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier)
+                .padding(horizontal = RecallySpacing.cardPadding, vertical = RecallySpacing.lg),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier =
+                Modifier
+                    .size(34.dp)
+                    .clip(CircleShape)
+                    .background(colors.neutralWash),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (state == ImportState.Uploading) {
+                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = colors.inkFaint)
+            } else {
+                Icon(
+                    imageVector = ImportDownloadIcon,
+                    contentDescription = null,
+                    tint = colors.inkFaint,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
+        Spacer(Modifier.width(RecallySpacing.md))
+        Column(Modifier.weight(1f)) {
+            Text(
+                importHeadline(state),
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.SemiBold,
+                color = colors.inkMuted,
+            )
+            Text(importSubline(state), style = MaterialTheme.typography.labelMedium, color = colors.inkFaint)
+        }
+    }
+}
+
+/** Line one: the offer, the wait, or the outcome in the tile's own words. */
+private fun importHeadline(state: ImportState): String =
+    when (state) {
+        ImportState.Idle -> "Drop an O'Reilly export"
+        ImportState.Uploading -> "Importing your export…"
+        is ImportState.Success -> "Import complete"
+        ImportState.Unreachable -> "Couldn't reach your backend"
+        ImportState.Unauthorized -> "Check your API key in Settings"
+        is ImportState.InvalidExport -> "Not a valid O'Reilly export"
+        is ImportState.Unexpected -> "Import failed"
+    }
+
+/**
+ * Line two: peers for the watcher, the honest wait, the run's counts, or the
+ * failure's fix — three distinct failure messages mirroring the
+ * connection-test convention (docs/android.md, "Connecting to the backend").
+ */
+private fun importSubline(state: ImportState): String =
+    when (state) {
+        ImportState.Idle -> "Or use the watched folder on your Mac"
+        ImportState.Uploading -> "Cards appear in the approval queue when it finishes"
+        is ImportState.Success ->
+            "${state.rowsNew} new · ${state.rowsUpdated} updated · ${state.rowsRemoved} removed"
+        ImportState.Unreachable -> "It may be off or unreachable from this network"
+        ImportState.Unauthorized -> "The backend refused the key"
+        is ImportState.InvalidExport -> state.detail ?: "Pick the CSV your O'Reilly export downloaded as"
+        is ImportState.Unexpected -> state.detail ?: "Something went wrong on the server"
+    }
+
+/** The artboard's dashed border (docs/design/RcDecks.dc.html): 1.5dp `line` dashes. */
+private fun Modifier.dashedBorder(
+    width: Dp,
+    color: Color,
+    radius: Dp,
+): Modifier =
+    drawBehind {
+        drawRoundRect(
+            color = color,
+            cornerRadius = CornerRadius(radius.toPx()),
+            style =
+                Stroke(
+                    width = width.toPx(),
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(12f, 8f)),
+                ),
+        )
+    }
+
+/**
+ * Lucide `download`, verbatim from the import affordance in
+ * RcDecks.dc.html / DkDecks.dc.html (24×24, stroke 2, round caps). Private to
+ * this package like QueueTileIcons for Today — the core material-icons set
+ * this app builds on does not carry it.
+ */
+private fun ImageVector.Builder.strokePath(svgPath: String) =
+    addPath(
+        pathData = addPathNodes(svgPath),
+        stroke = SolidColor(Color.Black),
+        strokeLineWidth = 2f,
+        strokeLineCap = StrokeCap.Round,
+        strokeLineJoin = StrokeJoin.Round,
+    )
+
+private val ImportDownloadIcon: ImageVector by lazy {
+    ImageVector
+        .Builder(
+            name = "import_download",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f,
+        ).strokePath("M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4")
+        .strokePath("M7 10l5 5 5-5")
+        .strokePath("M12 15V3")
+        .build()
+}
+
 @CombinedPreviews
 @Composable
 private fun DecksScreenPreview() {
@@ -195,6 +363,7 @@ private fun DecksScreenPreview() {
             onDeckClick = {},
             onRetry = {},
             onOpenSettings = {},
+            onExportPicked = {},
         )
     }
 }
@@ -208,6 +377,7 @@ private fun DecksScreenLoadingPreview() {
             onDeckClick = {},
             onRetry = {},
             onOpenSettings = {},
+            onExportPicked = {},
         )
     }
 }
@@ -236,6 +406,27 @@ private fun DecksScreenOfflinePreview() {
             onDeckClick = {},
             onRetry = {},
             onOpenSettings = {},
+            onExportPicked = {},
         )
+    }
+}
+
+@CombinedPreviews
+@Composable
+private fun ImportTileUploadingPreview() {
+    RecallyTheme {
+        ImportTile(state = ImportState.Uploading, onClick = {})
+    }
+}
+
+@CombinedPreviews
+@Composable
+private fun ImportTileResultPreview() {
+    RecallyTheme {
+        Column(verticalArrangement = Arrangement.spacedBy(RecallySpacing.md)) {
+            ImportTile(state = ImportState.Success(rowsNew = 56, rowsUpdated = 0, rowsRemoved = 2), onClick = {})
+            ImportTile(state = ImportState.Unreachable, onClick = {})
+            ImportTile(state = ImportState.InvalidExport(detail = null), onClick = {})
+        }
     }
 }
