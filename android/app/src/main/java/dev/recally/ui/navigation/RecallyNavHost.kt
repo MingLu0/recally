@@ -111,6 +111,7 @@ fun RecallyNavHost(
                 onDeckClick = navController::openBookDetail,
                 onRetry = decksViewModel::refresh,
                 onOpenSettings = { navController.navigate(Screen.Settings.route) },
+                onExportPicked = decksViewModel::onExportPicked,
             )
         }
         composable(

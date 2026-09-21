@@ -1,9 +1,12 @@
 package dev.recally.data.remote
 
+import okhttp3.MultipartBody
 import retrofit2.http.Body
 import retrofit2.http.GET
+import retrofit2.http.Multipart
 import retrofit2.http.PATCH
 import retrofit2.http.POST
+import retrofit2.http.Part
 import retrofit2.http.Path
 import retrofit2.http.Query
 
@@ -93,6 +96,15 @@ interface RecallyApi {
     // Stats
     @GET("stats")
     suspend fun stats(): StatsResponse
+
+    // Ingestion — the Decks import tile. The response arrives after the
+    // server-side pipeline has run (minutes for a large export), so this
+    // client is built with its own long read timeout (RecallyApiFactory).
+    @Multipart
+    @POST("ingest")
+    suspend fun ingestExport(
+        @Part file: MultipartBody.Part,
+    ): IngestRunResponse
 
     // Devices — called on every app start and FCM token refresh.
     @POST("devices")

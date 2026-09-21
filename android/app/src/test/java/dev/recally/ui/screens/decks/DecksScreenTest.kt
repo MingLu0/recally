@@ -119,6 +119,29 @@ class DecksScreenTest {
         }
     }
 
+    /**
+     * Issue #234: the dashed import tile sits at the foot of the deck list
+     * (docs/design/RcDecks.dc.html), below the book rows.
+     */
+    @Test
+    fun `the import tile is shown at the foot of the deck list`() {
+        setScreen(decks = listOf(deck(total = 8, chapters = 9)))
+
+        composeTestRule.onNodeWithText("Drop an O'Reilly export").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Or use the watched folder on your Mac").assertIsDisplayed()
+    }
+
+    /**
+     * The empty state is exactly when import matters most: a fresh install
+     * with no watched folder must still offer the path in.
+     */
+    @Test
+    fun `the import tile is shown when there are no decks yet`() {
+        setScreen(decks = emptyList())
+
+        composeTestRule.onNodeWithText("Drop an O'Reilly export").assertIsDisplayed()
+    }
+
     private fun setScreen(decks: List<Deck>) {
         composeTestRule.setContent {
             RecallyTheme {
@@ -127,6 +150,7 @@ class DecksScreenTest {
                     onDeckClick = {},
                     onRetry = {},
                     onOpenSettings = {},
+                    onExportPicked = {},
                 )
             }
         }

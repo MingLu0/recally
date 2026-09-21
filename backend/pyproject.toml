@@ -17,6 +17,7 @@ dependencies = [
     "apscheduler>=3.10,<4",
     "watchdog>=6",
     "firebase-admin>=7.5.0",
+    "python-multipart>=0.0.20",
 ]
 
 # The nightly FSRS fit (scheduling/optimizer.py) needs torch + pandas via the

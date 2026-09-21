@@ -1,15 +1,21 @@
 package dev.recally.ui.screens.decks
 
+import android.net.Uri
 import androidx.lifecycle.SavedStateHandle
 import dev.recally.domain.model.Deck
 import dev.recally.domain.model.DeckCard
 import dev.recally.domain.model.DueSummary
+import dev.recally.domain.model.IngestCounts
 import dev.recally.domain.repository.CardRepository
 import dev.recally.domain.repository.DeckRepository
+import dev.recally.domain.repository.IngestRepository
 import dev.recally.domain.repository.Result
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -20,6 +26,9 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 import java.io.IOException
 import java.time.Instant
 
@@ -29,17 +38,26 @@ import java.time.Instant
  * browse list shows suspended cards, the ADR-008 controls never touch
  * scheduling, chapter filtering is a server filter, the screen is read-only
  * for review actions, and no G2/G5/G6 field is invented.
+ *
+ * Issue #234's import tests live here too: the upload state machine (idle →
+ * uploading → result) runs in the ViewModel so a rotation cannot tear it down
+ * mid-flight. Robolectric provides a real `android.net.Uri` for the picked
+ * export; the repository itself is faked, so no bytes move.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34])
 class DecksViewModelTest {
     private lateinit var deckRepository: FakeDeckRepository
     private lateinit var cardRepository: FakeCardRepository
+    private lateinit var ingestRepository: FakeIngestRepository
 
     @Before
     fun setUp() {
         Dispatchers.setMain(UnconfinedTestDispatcher())
         deckRepository = FakeDeckRepository()
         cardRepository = FakeCardRepository()
+        ingestRepository = FakeIngestRepository()
     }
 
     @After
@@ -227,7 +245,7 @@ class DecksViewModelTest {
                 Result.Success(
                     listOf(Deck(BOOK_ID, "30 Agents in 30 Days", 83, 6, 0.24f, chapters = 30, truncated = 7)),
                 )
-            val viewModel = DecksViewModel(deckRepository, cardRepository, SavedStateHandle())
+            val viewModel = listViewModel()
 
             assertEquals(
                 7,
@@ -244,7 +262,7 @@ class DecksViewModelTest {
             // deck list rather than serving the first load forever.
             deckRepository.decksResult =
                 Result.Success(listOf(Deck(BOOK_ID, "Evals for AI Engineers", 48, 6, 0.625f, chapters = 9, truncated = 0)))
-            val viewModel = DecksViewModel(deckRepository, cardRepository, SavedStateHandle())
+            val viewModel = listViewModel()
             assertEquals(
                 listOf("Evals for AI Engineers"),
                 viewModel.uiState.value.decks
@@ -279,11 +297,11 @@ class DecksViewModelTest {
     fun test_offline_is_set_only_for_a_network_error() =
         runTest {
             deckRepository.decksResult = Result.NetworkError(IOException("no route to host"))
-            val offlineViewModel = DecksViewModel(deckRepository, cardRepository, SavedStateHandle())
+            val offlineViewModel = listViewModel()
             assertTrue("a network failure raises the offline bar", offlineViewModel.uiState.value.isOffline)
 
             deckRepository.decksResult = Result.UnexpectedError(IllegalStateException("bad payload"))
-            val unexpectedViewModel = DecksViewModel(deckRepository, cardRepository, SavedStateHandle())
+            val unexpectedViewModel = listViewModel()
 
             val state = unexpectedViewModel.uiState.value
             assertFalse("an unexpected exception is not a connectivity failure", state.isOffline)
@@ -291,11 +309,65 @@ class DecksViewModelTest {
             assertTrue("the failure is still reported to the user", state.errorMessage != null)
         }
 
+    @Test
+    fun `import success reports the ingest counts`() =
+        runTest {
+            val viewModel = listViewModel()
+            ingestRepository.uploadResult =
+                CompletableDeferred(Result.Success(IngestCounts(rowsNew = 56, rowsUpdated = 2, rowsRemoved = 1)))
+
+            viewModel.onExportPicked(EXPORT_URI)
+
+            assertEquals(
+                ImportState.Success(rowsNew = 56, rowsUpdated = 2, rowsRemoved = 1),
+                viewModel.uiState.value.importState,
+            )
+        }
+
+    @Test
+    fun `import failure leaves the deck list intact`() =
+        runTest {
+            val deck = Deck(BOOK_ID, "Evals for AI Engineers", 48, 6, 0.625f, chapters = 9, truncated = 0)
+            deckRepository.decksResult = Result.Success(listOf(deck))
+            val viewModel = listViewModel()
+            val loaded = viewModel.uiState.value.decks
+
+            ingestRepository.uploadResult = CompletableDeferred(Result.NetworkError(IOException("unreachable")))
+            viewModel.onExportPicked(EXPORT_URI)
+
+            assertEquals("a failed import must not blank the deck list", loaded, viewModel.uiState.value.decks)
+            assertEquals(ImportState.Unreachable, viewModel.uiState.value.importState)
+        }
+
+    @Test
+    fun `an in-flight upload survives a configuration change`() =
+        runTest {
+            val viewModel = listViewModel()
+            val completion = CompletableDeferred<Result<IngestCounts>>()
+            ingestRepository.uploadResult = completion
+
+            viewModel.onExportPicked(EXPORT_URI)
+            assertEquals(ImportState.Uploading, viewModel.uiState.value.importState)
+
+            // Rotation tears the composable down and rebuilds it; the
+            // ViewModel is retained, so the upload it owns keeps running and
+            // its result lands in the surviving state.
+            completion.complete(Result.Success(IngestCounts(rowsNew = 3, rowsUpdated = 0, rowsRemoved = 0)))
+            advanceUntilIdle()
+
+            assertEquals(
+                ImportState.Success(rowsNew = 3, rowsUpdated = 0, rowsRemoved = 0),
+                viewModel.uiState.value.importState,
+            )
+        }
+
     private fun detailViewModel(): DecksViewModel {
         deckRepository.decksResult =
             Result.Success(listOf(Deck(BOOK_ID, "Evals for AI Engineers", 48, 6, 0.625f, chapters = 9, truncated = 0)))
-        return DecksViewModel(deckRepository, cardRepository, SavedStateHandle(mapOf("bookId" to BOOK_ID)))
+        return DecksViewModel(deckRepository, cardRepository, ingestRepository, SavedStateHandle(mapOf("bookId" to BOOK_ID)))
     }
+
+    private fun listViewModel(): DecksViewModel = DecksViewModel(deckRepository, cardRepository, ingestRepository, SavedStateHandle())
 
     /**
      * ADR-008 / hard rule 5, restated for the post-#172 shape. `state` and `due`
@@ -399,10 +471,24 @@ class DecksViewModelTest {
         }
     }
 
+    private class FakeIngestRepository : IngestRepository {
+        // A Deferred so the configuration-change test can hold the upload
+        // open mid-flight; other tests complete it immediately.
+        var uploadResult: Deferred<Result<IngestCounts>> =
+            CompletableDeferred(Result.Success(IngestCounts(rowsNew = 0, rowsUpdated = 0, rowsRemoved = 0)))
+        val uploadCalls = mutableListOf<Uri>()
+
+        override suspend fun uploadOReillyExport(uri: Uri): Result<IngestCounts> {
+            uploadCalls += uri
+            return uploadResult.await()
+        }
+    }
+
     private companion object {
         const val BOOK_ID = 7L
         const val CHAPTER = "3. Error Analysis"
         const val OTHER_CHAPTER = "4. Evaluators"
+        val EXPORT_URI: Uri = Uri.parse("content://dev.recally.test/export/1")
         val FAR_FUTURE: Instant = Instant.parse("9999-12-31T00:00:00Z")
     }
 }
