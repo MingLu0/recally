@@ -9,7 +9,7 @@ Rules that apply to only one module live in the nested file for that module — 
 
 ## What this project is
 
-Recally turns O'Reilly reading highlights into flashcards. A watched folder picks up `*oreilly-annotations*.csv` exports, an LLM pipeline (Curator → Writer ⇄ Critic) writes atomic Q&A and cloze cards, a human approval queue gates them, FSRS schedules reviews, and a native Android app delivers them with FCM push reminders. Single user (Ming) for v1, but every table carries `user_id`.
+Recally turns O'Reilly reading highlights into flashcards. A watched folder or an upload from the app picks up `*oreilly-annotations*.csv` exports — both routes run the same deterministic ingest — an LLM pipeline (Curator → Writer ⇄ Critic) writes atomic Q&A and cloze cards, a human approval queue gates them, FSRS schedules reviews, and a native Android app delivers them with FCM push reminders. Single user (Ming) for v1, but every table carries `user_id`.
 
 Build order and per-step gates are in `docs/roadmap.md`; what is built is what the closed issues say. Do not restate progress here — it rots.
 

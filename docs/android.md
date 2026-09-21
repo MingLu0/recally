@@ -149,7 +149,7 @@ Bottom navigation with four items: **Today, Decks, Stats, Settings**. Review and
 ### 1. Today
 - Due count + new card count, streak, start-review button.
 - Approval-queue row with the collection-wide `GET /cards/pending` counts.
-- "Your books" rail: one card per book from `GET /decks` — spine colour, card count and the server's `progress`, rendered unmodified (never recomputed from `total`/`due`). Tapping a card opens that book's Book detail, the same destination the Decks row opens — one book, one destination. The section heading and subtitle are not click targets. Decks are remote-only, so an unreachable endpoint leaves the rail absent without blanking the rest of the screen. No Import affordance: ingestion is the watched folder, and `api-spec.md` documents no client-initiated import.
+- "Your books" rail: one card per book from `GET /decks` — spine colour, card count and the server's `progress`, rendered unmodified (never recomputed from `total`/`due`). Tapping a card opens that book's Book detail, the same destination the Decks row opens — one book, one destination. The section heading and subtitle are not click targets. Decks are remote-only, so an unreachable endpoint leaves the rail absent without blanking the rest of the screen. No Import affordance **on Today**: the import tile lives on Decks, next to the books it adds to (see *4. Decks*).
 - Entry point from FCM notification deep link.
 
 ### 2. Review session
@@ -170,6 +170,9 @@ Bottom navigation with four items: **Today, Decks, Stats, Settings**. Review and
 ### 4. Decks
 - Book list → chapters → cards. Browsing, plus the per-card controls from ADR-008: edit (`PATCH /cards/{id}`), suspend and unsuspend. Suspended cards are shown here with their state — this screen is the only way back from a suspend, so it cannot filter them out.
 - A single book can reach ~1000 cards. `GET /decks/{book_id}/cards` is unpaginated in v1 by decision (`api-spec.md`), so the client fetches the book and filters by chapter (`?chapter=`) to keep the rendered list small; use a lazy list so the row count, not the response size, is what matters.
+- **Import tile** (the dashed affordance at the foot of the list in `RcDecks.dc.html`/`DkDecks.dc.html`): opens the system file picker (`ACTION_OPEN_DOCUMENT`, MIME `text/*` — O'Reilly exports are served as `text/csv` but some providers report `text/plain`) and uploads the chosen CSV to `POST /ingest` as multipart. **The app is a transport and nothing more**: it streams bytes and never parses the CSV, extracts a UUID or decides what is new. Dedupe needs the whole `highlights` table (hard rule 6, `ingest/dedupe.py`), so only the server can do it, and a second CSV parser in Kotlin would be a second thing to keep in step with the first.
+- Upload is **not** the only path and does not replace the watched folder — the two are peers, which is what the tile's subtitle says. The watcher stays the zero-tap path when exporting on the same Mac that runs the backend; the tile is for exporting anywhere else. Ingestion is idempotent (hard rule 6), so a file arriving by both routes is harmless.
+- The response is an `ingest_runs` row, so the tile can report what the upload did (`rows_new`/`rows_updated`/`rows_removed`) rather than only that it succeeded. The agent pipeline runs server-side after the upload and takes minutes; the request returns when ingestion **and** the pipeline are done, so the tile shows progress for the whole wait rather than pretending it finished early. New cards land in the approval queue, never straight into scheduling (hard rule 1).
 
 ### 5. Stats
 - Streak, retention, forecast chart, lapse rate by card type, lapse rate by Writer guidance version (the roadmap 6b gate; hidden until there is more than one version), curation yield.
@@ -186,7 +189,7 @@ Every screen and the endpoints behind it. Kept here so a gap between this doc an
 | Today | `GET /reviews/due` (counts), `GET /stats` (streak), `GET /cards/pending` (collection-wide queue `counts` for the approval tiles; silent when unreachable), `GET /decks` (the "Your books" rail; silent when unreachable) |
 | Review session | `GET /reviews/due`, `POST /reviews/{id}/rate`, `POST /reviews/rate-batch` (outbox flush), `PATCH /cards/{id}` (edit), `POST /cards/{id}/bury` |
 | Approval queue | `GET /cards/pending`, `POST /cards/{id}/approve`, `POST /cards/{id}/reject` |
-| Decks | `GET /decks`, `GET /decks/{book_id}/cards`, `PATCH /cards/{id}`, `POST /cards/{id}/suspend`, `POST /cards/{id}/unsuspend` |
+| Decks | `GET /decks`, `GET /decks/{book_id}/cards`, `PATCH /cards/{id}`, `POST /cards/{id}/suspend`, `POST /cards/{id}/unsuspend`, `POST /ingest` (import tile) |
 | Stats | `GET /stats` |
 | Settings | `GET /health/auth` (connection test); `POST /devices` on token refresh |
 
