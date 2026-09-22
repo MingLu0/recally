@@ -108,7 +108,12 @@ def list_pending_cards(
             )
         )
 
-    pending.sort(key=lambda card: (card.book, card.chapter or "", card.first_export_position))
+    # `id` breaks the tie cards of one unit share on every preceding key, so the
+    # order is defined no matter what arrival order the unordered select had
+    # (issue #232: undefined on Postgres, where ties surfaced in heap order).
+    pending.sort(
+        key=lambda card: (card.book, card.chapter or "", card.first_export_position, card.id)
+    )
     return pending
 
 
