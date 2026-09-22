@@ -46,6 +46,9 @@ backend/
         default.py
         prompts/learner.md
     pipeline.py                   # the runner; resolves agents via registry, owns all DB transitions
+    evals/
+      extract.py                  # builds the committed writer eval set from deliberate
+                                  #   human judgments; opens the database read-only (#242)
     llm.py                        # sole LiteLLM wrapper; logs every call to llm_calls
     logging_config.py             # configure_logging(): one handler on the `recally` logger, at INFO
     scheduling/
@@ -60,8 +63,8 @@ backend/
     migrate_to_postgres.py        # SQLite -> Postgres ORM-level copy + verify (roadmap step 7)
   alembic/                        # render_as_batch=True
   tests/
-    fixtures/                     # committed trimmed exports (roadmap step 1)
-    agents/  api/  scheduling/    # per-layer suites; the rest sits flat at tests/
+    fixtures/                     # committed trimmed exports (roadmap step 1) + eval/writer_eval.jsonl (#242)
+    agents/  api/  scheduling/  evals/   # per-layer suites; the rest sits flat at tests/
 ```
 
 ## Layering
