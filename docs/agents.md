@@ -86,13 +86,13 @@ Idempotency: `highlights.processed` flips to `true` only when the unit covering 
 
 ## Quality signals and evals
 
-v1 has no formal eval suite (ADR-006). The human approval queue is the labelled dataset, and the schema already captures it:
+The human approval queue is the labelled dataset, and the schema captures it:
 - `cards.status` and `status_reason` record accept/reject and why.
 - `cards.original_front/original_back` vs `front/back` record every edit made at approval time.
 - `cards.generation_rounds`, `model` and `guidance_version` make quality attributable to a prompt, model and guidance version.
 - `llm_calls.request/response` keep the exact prompts and outputs so they can be replayed.
 
-Formal evals (replaying the Critic over human-labelled cards, golden sets, LLM-as-judge) are added only when a model or prompt change needs a regression check. Until then the roadmap's two-week validation checkpoint is the eval.
+Prompt and loop changes are measured by the replay harness (`evals/harness.py`, #243): it replays the Writer ⇄ Critic loop over the committed 45-unit eval set (#242) and scores agreement, false-keep, round-1 accept and rework calls against the human's recorded verdicts — never against the Critic's opinion, which is all live-run metrics measure. The produced card text is also read side by side against the previous run by a human, because no score catches cards going vaguer.
 
 ## Cost controls
 

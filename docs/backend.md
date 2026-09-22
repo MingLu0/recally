@@ -49,6 +49,11 @@ backend/
     evals/
       extract.py                  # builds the committed writer eval set from deliberate
                                   #   human judgments; opens the database read-only (#242)
+      harness.py                  # replays Writer ⇄ Critic over the eval set via the registry;
+                                  #   runs against a throwaway db copy, refuses the production
+                                  #   path (`uv run python -m recally.evals.harness`) (#243)
+      score.py                    # scores a run against the human's recorded verdicts;
+                                  #   every rate reported with its denominator
     llm.py                        # sole LiteLLM wrapper; logs every call to llm_calls
     logging_config.py             # configure_logging(): one handler on the `recally` logger, at INFO
     scheduling/
