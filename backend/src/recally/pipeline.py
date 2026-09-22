@@ -145,13 +145,17 @@ class _CardOutcome:
     The Writer ⇄ Critic loop produces this and nothing else; `_write_card` turns it
     into a `cards` row on the main thread. Keeping resolution and persistence apart
     is what lets units resolve on worker threads (ADR-015) — a worker never holds a
-    `Session`, which SQLAlchemy does not make thread-safe.
+    `Session`, which SQLAlchemy does not make thread-safe. `terminal` records how the
+    loop ended (`accept`/`reject` from the Critic, `exhausted` at the round cap) so
+    callers — the eval harness counts rework calls from it (#243) — never have to
+    re-derive it from the status string.
     """
 
     draft: CardDraft
     status: str
     status_reason: str | None
     generation_rounds: int
+    terminal: Literal["accept", "reject", "exhausted"]
 
 
 @dataclass
@@ -838,6 +842,7 @@ def _resolve_card(
                 status=status,
                 status_reason=None,
                 generation_rounds=round_number,
+                terminal="accept",
             )
         if verdict.verdict == "reject":
             return _CardOutcome(
@@ -845,6 +850,7 @@ def _resolve_card(
                 status="needs_human",
                 status_reason=verdict.critique,
                 generation_rounds=round_number,
+                terminal="reject",
             )
         if round_number >= settings.llm_max_rounds:
             return _CardOutcome(
@@ -855,6 +861,7 @@ def _resolve_card(
                     f"Writer {settings.llm_max_rounds} rounds unresolved."
                 ),
                 generation_rounds=round_number,
+                terminal="exhausted",
             )
 
         round_number += 1
