@@ -94,6 +94,8 @@ The human approval queue is the labelled dataset, and the schema captures it:
 
 Prompt and loop changes are measured by the replay harness (`evals/harness.py`, #243): it replays the Writer ⇄ Critic loop over the committed 45-unit eval set (#242) and scores agreement, false-keep, round-1 accept and rework calls against the human's recorded verdicts — never against the Critic's opinion, which is all live-run metrics measure. The produced card text is also read side by side against the previous run by a human, because no score catches cards going vaguer.
 
+The eval judge (`evals/judge.py`, #244) predicts the human's keep/reject for a card against a rubric built from the 23 hand-written rejection reasons (triviality, context sufficiency, main-pointedness), and `evals/validate.py` measures how often it agrees with the 71 labels — overall, per axis, with confidence intervals — before it is trusted to score anything. The judge is an eval tool, **explicitly not a pipeline agent**: it is not a role in `agents/registry.py` and never will be, because anything registered there can be resolved into a real run, and the judge must never reach production card generation. It evaluates; the Critic gates (hard rule 9 is untouched), and nothing it says approves a card (hard rule 1).
+
 ## Cost controls
 
 - Every LLM call logged: model, tokens, cost_microusd, agent, latency.
