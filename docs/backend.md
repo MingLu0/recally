@@ -54,6 +54,15 @@ backend/
                                   #   path (`uv run python -m recally.evals.harness`) (#243)
       score.py                    # scores a run against the human's recorded verdicts;
                                   #   every rate reported with its denominator
+      judge.py                    # predicts the human's keep/reject against the 23 quoted
+                                  #   rejection reasons; an eval tool, never a registered
+                                  #   pipeline agent; called via llm.py as judge/default (#244)
+      prompts/judge.md            # the rubric: the human's standard (triviality, context
+                                  #   sufficiency, main-pointedness), reasons quoted verbatim
+      validate.py                 # runs the judge over the 71-label set and reports agreement
+                                  #   with Wilson CIs, per-axis breakdown and a confusion matrix;
+                                  #   same copy-and-refuse-production safety as the harness
+                                  #   (`uv run python -m recally.evals.validate`) (#244)
     llm.py                        # sole LiteLLM wrapper; logs every call to llm_calls
     logging_config.py             # configure_logging(): one handler on the `recally` logger, at INFO
     scheduling/
