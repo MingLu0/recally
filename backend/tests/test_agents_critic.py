@@ -57,6 +57,21 @@ def test_critic_prompt_names_the_measured_reject_shapes() -> None:
         assert reason in prompt
 
 
+def test_critic_prompt_routes_specific_fragments_to_revise_not_reject() -> None:
+    """The source shapes are suspicion triggers, not verdicts: a fragment or
+    generic-sounding source that still names something specific (a list, a
+    named pair, a concrete mechanism) routes to `revise`; `reject` is reserved
+    for sources with no nameable fact (#252 review — the v1 wording treated the
+    shapes as sufficient for reject and cost 6 missed-keeps)."""
+    prompt = _rendered_prompt().lower()
+    assert "names something specific" in prompt
+    assert "no nameable fact" in prompt
+    specific_idx = prompt.index("names something specific")
+    assert "revise" in prompt[max(0, specific_idx - 200) : specific_idx + 600]
+    empty_idx = prompt.index("no nameable fact")
+    assert "reject" in prompt[max(0, empty_idx - 200) : empty_idx + 600]
+
+
 def test_critic_prompt_keeps_all_five_criteria() -> None:
     """Atomicity, unambiguity, self-containedness, non-triviality and factual
     fidelity all survive the edit (regression guard)."""
