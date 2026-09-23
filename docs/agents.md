@@ -21,6 +21,7 @@ No LLM. Watch folder → adapter → dedupe → `highlights` rows with `processe
 **Input**: one curated unit (one or more source highlights) plus the current `writer_guidance` version.
 **Output**: 1–3 cards, each `{type: qa|cloze, front, back, rationale}`, stamped with `guidance_version`.
 **Rules** (enforced via prompt):
+- One card is the default. A second card must be earned by a second, independently useful fact in the source (#249); the prompt names the disqualified sibling shapes — a restatement of the first card in another format, a cloze whose deletion covers the same clause its sibling asks about, a question whose stem contains its own answer, and "what" where "why" is available.
 - Minimum information principle: one idea per card.
 - Card must be answerable without the book open.
 - Cloze cards: single deletion only (multi-deletion cards lapse more), written as one `{{c1::...}}` marker in the front. The Writer validates the marker count in code; the prompt alone will not hold it.
