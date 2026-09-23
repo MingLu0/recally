@@ -29,27 +29,36 @@ worth making?** The five checks below judge how well a card was made; they
 cannot see a source that should never have yielded one. A well-formed question
 about a worthless source is still a card nobody wants.
 
-Sources that cannot support a card:
+Suspect the source when it matches one of these shapes:
 
 - **Sentence fragments whose subject is missing** — the sentence that named
   what "they", "this" or "it" refers to was never exported, so the fragment
   starts mid-thought ("to handle complex tasks…", "transforming unstructured
-  input…"). On its own it does not make much sense.
+  input…").
 - **Chapter transitions and other connective prose** — "having established X,
   we turn next to Y". It carries no fact; there is nothing to recall.
 - **Claims so generic they are true of any system** — "components may be
   coordinated by a central supervisor or operate as decentralized nodes". True,
   unfalsifiable, worth nothing to recall.
 
+Suspicion is not a verdict. The deciding question is whether the surviving text
+still **names something specific** — a concrete list of functions or
+operations, a named pair, a mechanism, a claim a "why" card can be built on.
+
+- If it does, the source can support a card and the shapes above are `revise`
+  problems, not `reject` ones. A fragment like "manages data access, enriches
+  user prompts, and quality controls the generated outputs" names three
+  functions: a card that guesses at the missing subject is rewritten to ask
+  only about what the text says.
+- If it does not — a pure transition, navigation, a claim with nothing in it —
+  then no rewrite saves the source, and the verdict for every card from it is
+  `reject`. That is what "unsalvageable" means below: `reject` is for sources
+  with no nameable fact, not for sources whose facts survive awkwardly.
+
 The reviewer who approves these cards bins such sources as "too trivial",
 "too abstract", "too isolated", "does not make much sense". That is the
-standard. If the source reads that way, no card from it is worth their time.
-A source the export cut short is judged as it stands: if the surviving text
-carries nothing worth a card, that is a source-worthiness reject, not a
-penalty for the lost text.
-
-When the source cannot support a card, the verdict is `reject` for every card
-from it — not `revise`, because no rewrite saves a source that carries nothing.
+standard. A source the export cut short is judged as it stands: what survives
+either names something specific or it does not.
 
 ## The five checks
 
@@ -66,7 +75,8 @@ Judge each card on all five:
    named above: a sentence fragment missing its subject, connective prose
    between sections, a claim so generic it is true of any system. When the
    triviality is in the source rather than the card, that is the
-   source-worthiness question above — the verdict is `reject`, not `revise`.
+   source-worthiness question above: `revise` if the source still names
+   something specific, `reject` only when it names nothing.
 5. **Factual fidelity** — the card asserts nothing the source does not support.
    The rationale field is the Writer's claim about why the card matters; check the
    card text against the source, not the rationale.
@@ -78,10 +88,9 @@ Judge each card on all five:
   what to change, concretely enough that the Writer can act on it without asking
   you anything.
 - `reject` — the card is unsalvageable: no rewrite could save it, because the
-  source itself carries nothing worth a card (a bare heading, a navigation
-  line, a sentence fragment missing its subject, connective prose, a claim
-  true of any system). The critique must say why the source cannot support a
-  card.
+  source itself carries nothing worth a card — a bare heading, a navigation
+  line, a pure transition, a fragment or claim with no nameable fact in it.
+  The critique must say why the source cannot support a card.
 
 `reject` is for *unsalvageable*, not *bad*. A card that could be rewritten is
 `revise`. This distinction decides whether a human ever spends time on the card,
