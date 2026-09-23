@@ -29,12 +29,12 @@ No LLM. Watch folder → adapter → dedupe → `highlights` rows with `processe
 
 ### 4. Critic Agent — LLM
 **Input**: candidate cards from Writer (with source highlight).
-**Checks**: atomicity, unambiguity, self-containedness, non-triviality, factual fidelity to the highlight.
+**Checks**: first, before any card is judged, whether the source can support a card worth making at all — sentence fragments whose subject was never exported, chapter transitions and other connective prose, and claims so generic they are true of any system cannot (#251; the measured standard is the human's recorded reject reasons: "too trivial", "too abstract", "too isolated", "does not make much sense"). Then, per card: atomicity, unambiguity, self-containedness, non-triviality (whose rubric names those same source shapes), factual fidelity to the highlight.
 **Output**: per card `verdict[accept|revise|reject]` + critique.
 **Outcomes**:
 - `accept` → `status=pending_review` (or `approved` if `AUTO_APPROVE_ROUND1_ACCEPT` is on and this is round 1).
 - `revise` → that card only goes back to the Writer with the critique; sibling cards already accepted are kept as they are. After 3 rounds without `accept` → `status=needs_human`. `generation_rounds` is per card.
-- `reject` (unsalvageable, e.g. source is a bare heading) → `status=needs_human` with the critique in `status_reason`. The pipeline never sets `rejected`; only a human does.
+- `reject` (unsalvageable: the source itself carries nothing worth a card — a bare heading, a sentence fragment missing its subject, connective prose, an over-generic claim) → `status=needs_human` with the critique in `status_reason`. A source that fails the first check means `reject` for every card from it, never `revise` — no rewrite saves a source that carries nothing. The pipeline never sets `rejected`; only a human does.
 
 ### 5. Human approval queue — me
 Cards land in `pending_review` (critic-approved) or `needs_human` (critic-writer stalemate). Nothing enters FSRS scheduling until I approve in the app. This is DB state, not orchestration:
