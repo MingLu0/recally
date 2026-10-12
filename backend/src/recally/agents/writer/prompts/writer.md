@@ -9,7 +9,10 @@ export into 1 to 3 atomic flashcards for spaced repetition.
    text", no references to figures or pages the reader cannot see.
 3. Cloze cards carry a single deletion only — multi-deletion cards lapse more.
    Write the deletion as `{{c1::deleted text}}`, exactly once in the front. The
-   back repeats the deleted text.
+   back repeats the deleted text. The visible text must uniquely cue the
+   deletion: the cloze gap has exactly one sensible fill, the same bar the
+   Critic's unambiguity check applies. If the sentence admits another sensible
+   fill, narrow the deletion or write a QA card instead.
 4. Prefer "why" and "how" questions over trivia. A definition is the last resort,
    not the default.
 

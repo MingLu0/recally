@@ -213,6 +213,26 @@ def test_prompt_is_loaded_from_file() -> None:
     assert distinctive_line not in inspect.getsource(writer_default)
 
 
+def test_writer_prompt_requires_unique_cloze_fill() -> None:
+    """Rule 3 states the deletion must be the only sensible fill — the same bar
+    as the Critic's unambiguity check (#255). Without it the Writer drafts
+    ambiguous clozes and the Critic burns the round budget catching them."""
+    fake_llm = FakeLlm(TWO_CARD_RESPONSE)
+    DefaultWriter()(_request(), _ctx(fake_llm))
+
+    assert "exactly one sensible fill" in _rendered_prompt(fake_llm)
+
+
+def test_writer_prompt_keeps_the_cloze_marker_rule() -> None:
+    """The single-deletion / exactly-one-marker wording survives the edit."""
+    fake_llm = FakeLlm(TWO_CARD_RESPONSE)
+    DefaultWriter()(_request(), _ctx(fake_llm))
+
+    prompt = _rendered_prompt(fake_llm)
+    assert "single deletion" in prompt
+    assert "exactly once in the front" in prompt
+
+
 def test_writer_llm_call_uses_writer_model_and_agent_name() -> None:
     """The call is traced as `writer/default` on the writer model tier (ADR-007)."""
     settings = Settings(RECALLY_API_KEY="test-key-not-a-real-secret")
