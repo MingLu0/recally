@@ -219,6 +219,87 @@ def test_agent_writes_nothing_to_the_database() -> None:
     assert len(result.units) == 1
 
 
+# --- the #253 prompt gate ---------------------------------------------------------
+#
+# The Curator under-groups (#253): thin, truncated and subject-less sources reach
+# the Writer as single-highlight units. These tests pin the two prompt changes —
+# the widened Group job and the cardability drop — plus the rules the edit must
+# not break. Section sentinels are matched inside the job they belong to, so a
+# mention in the wrong job does not count.
+
+GROUP_SECTION_START = "2. **Group.**"
+GROUP_SECTION_END = "3. **Flag truncation.**"
+FILTER_SECTION_START = "1. **Filter.**"
+
+
+def _prompt() -> str:
+    return PROMPT_PATH.read_text(encoding="utf-8")
+
+
+def _section(prompt: str, start: str, end: str) -> str:
+    assert start in prompt, f"section start {start!r} missing from the prompt"
+    assert end in prompt, f"section end {end!r} missing from the prompt"
+    section = prompt.split(start, 1)[1].split(end, 1)[0]
+    # Collapse line wrapping so a sentinel is found wherever the prose wraps.
+    return " ".join(section.split())
+
+
+def _group_section(prompt: str) -> str:
+    return _section(prompt, GROUP_SECTION_START, GROUP_SECTION_END)
+
+
+def _filter_section(prompt: str) -> str:
+    return _section(prompt, FILTER_SECTION_START, GROUP_SECTION_START)
+
+
+def test_curator_prompt_requires_grouping_subjectless_fragments() -> None:
+    """The Group job directs folding mid-sentence / dangling-pronoun highlights
+    into the adjacent highlight that supplies the subject (#253)."""
+    group = _group_section(_prompt())
+    assert "mid-sentence" in group
+    assert "dangling pronoun" in group
+    assert "supplies its subject" in group
+    assert "must" in group  # a requirement, not a suggestion
+
+
+def test_curator_prompt_requires_pairing_truncated_with_fuller_sibling() -> None:
+    """The Group job directs pairing a truncated row with its fuller sibling
+    when one exists in the batch (#253)."""
+    group = _group_section(_prompt())
+    assert "truncated" in group.lower()
+    assert "fuller sibling" in group
+    assert "in the batch" in group
+
+
+def test_curator_prompt_never_reconstructs_truncated_text() -> None:
+    """Hard rule 7 survives the grouping edit: pairing changes which unit a
+    clipped row belongs to, never its text (negative assertion)."""
+    prompt = _prompt()
+    assert "never reconstruct or extend" in prompt
+    group = _group_section(prompt)
+    assert "never extend a truncated row" in group
+    assert "never use the sibling to complete" in group
+
+
+def test_curator_prompt_defines_cardability_drop() -> None:
+    """A fragment that supports no self-contained card — alone or grouped — is
+    dropped; the value filter's default-to-keep is untouched (#253)."""
+    prompt = _prompt()
+    filter_section = _filter_section(prompt)
+    assert "Default to `keep`" in filter_section
+    assert "no self-contained card" in filter_section
+    assert "`drop`" in filter_section
+
+
+def test_curator_prompt_keeps_output_contract() -> None:
+    """The output rules the runner and validator rely on survive the edit."""
+    prompt = _prompt()
+    assert "exactly one unit" in prompt
+    assert "`keep` or `drop`" in prompt
+    assert "only contains ids that are also in `highlight_ids`" in prompt
+    assert "non-empty for every `drop`" in prompt
+
+
 def test_prompt_is_loaded_from_file() -> None:
     """The rendered request carries prompt-file text the module does not contain."""
     prompt_text = PROMPT_PATH.read_text(encoding="utf-8")
