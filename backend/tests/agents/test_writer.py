@@ -23,6 +23,8 @@ from recally.config import Settings
 INGEST_RUN_ID = 7
 GUIDANCE_VERSION = 3
 GUIDANCE_TEXT = "Definition cards lapse 40% — prefer application questions."
+CRITIQUE_TEXT = "Card 1 bundles two ideas; split the crash-replay guarantee out."
+CURATED_TEXT = "WAL frames record changes before they are applied."
 TRUNCATED_TEXT = "A WAL frame is a record of the change, written to the san"
 
 QA_CARD = {
@@ -38,6 +40,7 @@ CLOZE_CARD = {
     "rationale": "Single-deletion cloze on the ordering guarantee.",
 }
 TWO_CARD_RESPONSE = json.dumps({"cards": [QA_CARD, CLOZE_CARD]})
+ONE_CARD_RESPONSE = json.dumps({"cards": [QA_CARD]})
 
 
 class FakeLlm:
@@ -62,7 +65,7 @@ def _ctx(fake_llm: FakeLlm) -> AgentContext:
 
 def _request(**overrides: Any) -> WriterRequest:
     fields: dict[str, Any] = {
-        "curated_text": "WAL frames record changes before they are applied.",
+        "curated_text": CURATED_TEXT,
         "tags": ["sqlite", "durability"],
         "guidance_version": GUIDANCE_VERSION,
         "guidance": GUIDANCE_TEXT,
@@ -225,3 +228,64 @@ def test_writer_llm_call_uses_writer_model_and_agent_name() -> None:
     assert kwargs["model"] == settings.llm_model_writer
     assert kwargs["agent"] == "writer/default"
     assert kwargs["ingest_run_id"] == INGEST_RUN_ID
+
+
+# --- The #249 gate: one card is the default --------------------------------
+# The #248 eval baseline measured the fan-out these tests guard against (1.67
+# cards/unit; false-keep 19/23, the extra card so often a weaker twin of the
+# keeper that the human binned it). The fix is prompt guidance, not code, so
+# every test asserts on the prompt as rendered through DefaultWriter. The two
+# new-behaviour tests (one-card default, named sibling cases) were confirmed
+# red against the unedited prompts/writer.md — the red output is in PR #250;
+# the other two are regression guards that must pass before and after.
+
+
+def test_writer_prompt_states_the_one_card_default() -> None:
+    """The rendered prompt says a single card is the default, so the 1–3 range in
+    `WriterResult` is filled only when the source earns it."""
+    fake_llm = FakeLlm(ONE_CARD_RESPONSE)
+    DefaultWriter()(_request(), _ctx(fake_llm))
+
+    assert "one card is the default" in _rendered_prompt(fake_llm).lower()
+
+
+def test_writer_prompt_names_the_redundant_sibling_cases() -> None:
+    """The four disqualified second-card shapes from the ticket's evidence all
+    appear: restatement in another format, a same-clause cloze, an answer-leaking
+    stem, and "what" where "why" is available."""
+    fake_llm = FakeLlm(ONE_CARD_RESPONSE)
+    DefaultWriter()(_request(), _ctx(fake_llm))
+
+    prompt = _rendered_prompt(fake_llm).lower()
+    assert "restates the first" in prompt and "another format" in prompt
+    assert "same clause" in prompt
+    assert "stem contains its own answer" in prompt
+    assert '"what" when "why" is available' in prompt
+
+
+def test_writer_prompt_keeps_the_existing_card_rules() -> None:
+    """The pre-#249 rules survive the edit: atomicity, self-containedness, the
+    single cloze deletion and prefer-why/how over trivia."""
+    fake_llm = FakeLlm(ONE_CARD_RESPONSE)
+    DefaultWriter()(_request(), _ctx(fake_llm))
+
+    prompt = _rendered_prompt(fake_llm)
+    assert "Minimum information principle" in prompt
+    assert "answerable without the book open" in prompt
+    assert "single deletion" in prompt
+    assert "{{c1::" in prompt
+    assert 'Prefer "why" and "how" questions over trivia' in prompt
+
+
+def test_writer_prompt_renders_all_placeholders() -> None:
+    """`$guidance`, `$tags`, `$curated_text` and `$critique_section` all substitute
+    and no stray `$` survives rendering."""
+    fake_llm = FakeLlm(ONE_CARD_RESPONSE)
+    DefaultWriter()(_request(critique=CRITIQUE_TEXT), _ctx(fake_llm))
+
+    prompt = _rendered_prompt(fake_llm)
+    assert GUIDANCE_TEXT in prompt
+    assert "sqlite, durability" in prompt
+    assert CURATED_TEXT in prompt
+    assert CRITIQUE_TEXT in prompt
+    assert "$" not in prompt
