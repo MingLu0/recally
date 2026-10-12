@@ -1,11 +1,16 @@
-"""Seed a throwaway QA database with real production highlights, for the phone
-approval-queue pass over the changed Curator (#253).
+"""Seed the evals database with real production highlights, for phone
+approval-queue passes and eval harness runs (#253, #256).
 
 Not a test and not part of `src/recally/` — a developer tool, same precedent as
 `scripts/seed_demo.py`. Unlike the demo seed, what lands in the queue is real
 LLM output: this script only copies `books` + `highlights` (reset to
 `processed=false`) out of the production database — opened read-only — into a
-fresh, migrated throwaway. The pipeline trigger and the phone then do the rest.
+fresh, migrated target. The pipeline trigger and the phone then do the rest.
+
+The default target is `evals.db` in the main checkout's `data/` dir — the
+canonical eval set (#256), which accumulates human labels and must survive
+worktree cleanup. Because those labels are irreplaceable, an existing target
+is never silently overwritten: re-seeding it requires `--overwrite`.
 
 Default scope is the five chapters behind the 45 rejected cards (211 highlights
 across 3 books, measured 2026-09-24), so the phone queue holds exactly the
@@ -42,7 +47,27 @@ from recally.db import create_database_engine, create_session_factory  # noqa: E
 from recally.models.ingest import Book, Highlight, IngestRun  # noqa: E402
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
-DEFAULT_TARGET = BACKEND_DIR.parent / "data" / "qa-curator.db"
+
+
+def _default_target() -> Path:
+    """`evals.db` in the main checkout's data/ — the same path from any worktree.
+
+    `--git-common-dir` resolves to the main checkout's .git from a linked
+    worktree and to the checkout's own .git otherwise, so its parent is always
+    the main checkout root — seeding from a disposable worktree can no longer
+    strand the database inside it.
+    """
+    git_common = subprocess.run(
+        ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
+        cwd=BACKEND_DIR,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    return Path(git_common).parent / "data" / "evals.db"
+
+
+DEFAULT_TARGET = _default_target()
 
 
 def _sqlite_path(database_url: str) -> Path:
@@ -206,14 +231,17 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--source",
-        default=os.environ.get("RECALLY_DATABASE_URL", "sqlite:///../data/recally.db"),
-        help="production database to copy from (opened read-only)",
+        default=os.environ.get(
+            "RECALLY_DATABASE_URL", f"sqlite:///{DEFAULT_TARGET.parent / 'recally.db'}"
+        ),
+        help="production database to copy from (opened read-only; default: the "
+        "main checkout's data/recally.db)",
     )
     parser.add_argument(
         "--target",
         type=Path,
         default=DEFAULT_TARGET,
-        help="throwaway QA database to (re)create (default: data/qa-curator.db)",
+        help="database to (re)create (default: evals.db in the main checkout's data/)",
     )
     parser.add_argument("--book", action="append", default=[], help="book title substring or id")
     parser.add_argument("--chapter", action="append", default=[], help="chapter substring")
@@ -222,6 +250,12 @@ def main() -> int:
         action="store_true",
         help="run the pipeline over an already-seeded target instead of seeding",
     )
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="replace an existing target — required because the default target "
+        "accumulates irreplaceable human labels",
+    )
     args = parser.parse_args()
 
     target = args.target.expanduser().resolve()
@@ -229,6 +263,10 @@ def main() -> int:
     if args.run:
         _run_pipeline(target)
         return 0
+
+    if target.exists() and not args.overwrite:
+        print(f"refusing to overwrite existing {target} — pass --overwrite to replace it")
+        return 1
 
     source = _connect_read_only(_sqlite_path(args.source))
     try:
