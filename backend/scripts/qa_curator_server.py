@@ -240,8 +240,9 @@ def main() -> int:
     parser.add_argument(
         "--target",
         type=Path,
-        default=DEFAULT_TARGET,
-        help="database to (re)create (default: evals.db in the main checkout's data/)",
+        default=None,
+        help="database to (re)create or run on (default: the path in "
+        "RECALLY_DATABASE_URL when set, else evals.db in the main checkout's data/)",
     )
     parser.add_argument("--book", action="append", default=[], help="book title substring or id")
     parser.add_argument("--chapter", action="append", default=[], help="chapter substring")
@@ -258,7 +259,16 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    target = args.target.expanduser().resolve()
+    # Resolve the target: --target wins, then RECALLY_DATABASE_URL, then the
+    # default. Without the env leg, `--run` with only RECALLY_DATABASE_URL set
+    # silently runs against the default DB — which is exactly the DB holding the
+    # human labels.
+    if args.target is not None:
+        target = args.target.expanduser().resolve()
+    elif os.environ.get("RECALLY_DATABASE_URL"):
+        target = _sqlite_path(os.environ["RECALLY_DATABASE_URL"])
+    else:
+        target = DEFAULT_TARGET
 
     if args.run:
         _run_pipeline(target)
