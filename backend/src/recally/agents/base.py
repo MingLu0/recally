@@ -69,7 +69,9 @@ class CuratedUnitDraft:
 
     `truncated_highlight_ids` names source rows the runner flags `truncated=true`;
     the unit itself does not store the flag. `decision` is the whole vocabulary —
-    `keep` or `drop` — never a status.
+    `keep` or `drop` — never a status. `llm_call_id` names the batch call that
+    produced the unit (from `LlmReply.llm_call_id`); the runner stores it on
+    `curated_units.llm_call_id`.
     """
 
     highlight_ids: list[int]
@@ -78,6 +80,7 @@ class CuratedUnitDraft:
     truncated_highlight_ids: list[int]
     decision: Literal["keep", "drop"]
     reason: str
+    llm_call_id: int | None = None
 
 
 @dataclass(frozen=True)

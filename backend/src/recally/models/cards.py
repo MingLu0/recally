@@ -26,6 +26,11 @@ class CuratedUnit(UserScopedMixin, Base):
     tags: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     decision: Mapped[str] = mapped_column(String(16), nullable=False)
     reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # The Curator batch call that produced this unit (not the chapter: a long chapter
+    # is several calls). `use_alter` because `llm_calls.unit_id` points back here.
+    llm_call_id: Mapped[int | None] = mapped_column(
+        ForeignKey("llm_calls.id", use_alter=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now)
 
     highlight_links: Mapped[list["CuratedUnitHighlight"]] = relationship(back_populates="unit")
@@ -97,6 +102,10 @@ class Card(UserScopedMixin, Base):
     suspended_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     # Writer ⇄ Critic rounds spent on this card, per card rather than per unit.
     generation_rounds: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Which of the unit's round-1 Writer drafts (0, 1, 2) this card resolved from; its
+    # Critic and revision calls carry the same index, so `(unit_id, draft_index)` joins
+    # a card to its own loop in `llm_calls`. Null for a leech rewrite.
+    draft_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
     model: Mapped[str] = mapped_column(String(128), nullable=False)
     guidance_version: Mapped[int | None] = mapped_column(
         ForeignKey("writer_guidance.version"), nullable=True

@@ -79,7 +79,7 @@ from recally.agents.base import (
 )
 from recally.agents.registry import AgentRegistry, default_registry
 from recally.config import Settings
-from recally.llm import LlmCaller
+from recally.llm import LlmCaller, LlmReply
 from recally.models import (
     Card,
     CuratedUnit,
@@ -110,11 +110,13 @@ class _CorrelatedLlm(LlmCaller):
         unit_id: int | None = None,
         card_id: int | None = None,
         round: int | None = None,
+        draft_index: int | None = None,
     ) -> None:
         self._inner = inner
         self._unit_id = unit_id
         self._card_id = card_id
         self._round = round
+        self._draft_index = draft_index
 
     def __call__(
         self,
@@ -126,7 +128,8 @@ class _CorrelatedLlm(LlmCaller):
         unit_id: int | None = None,
         card_id: int | None = None,
         round: int | None = None,
-    ) -> str:
+        draft_index: int | None = None,
+    ) -> LlmReply:
         return self._inner(
             messages,
             model=model,
@@ -135,6 +138,7 @@ class _CorrelatedLlm(LlmCaller):
             unit_id=self._unit_id if unit_id is None else unit_id,
             card_id=self._card_id if card_id is None else card_id,
             round=self._round if round is None else round,
+            draft_index=self._draft_index if draft_index is None else draft_index,
         )
 
 
@@ -148,7 +152,8 @@ class _CardOutcome:
     `Session`, which SQLAlchemy does not make thread-safe. `terminal` records how the
     loop ended (`accept`/`reject` from the Critic, `exhausted` at the round cap) so
     callers — the eval harness counts rework calls from it (#243) — never have to
-    re-derive it from the status string.
+    re-derive it from the status string. `draft_index` is the draft's position in
+    the round-1 Writer result, already stamped on every call of its loop (#262).
     """
 
     draft: CardDraft
@@ -156,6 +161,7 @@ class _CardOutcome:
     status_reason: str | None
     generation_rounds: int
     terminal: Literal["accept", "reject", "exhausted"]
+    draft_index: int | None = None
 
 
 @dataclass
@@ -182,6 +188,7 @@ def _agent_context(
     unit_id: int | None = None,
     card_id: int | None = None,
     round: int | None = None,
+    draft_index: int | None = None,
 ) -> tuple[Curator, AgentContext]: ...
 
 
@@ -196,6 +203,7 @@ def _agent_context(
     unit_id: int | None = None,
     card_id: int | None = None,
     round: int | None = None,
+    draft_index: int | None = None,
 ) -> tuple[Writer, AgentContext]: ...
 
 
@@ -210,6 +218,7 @@ def _agent_context(
     unit_id: int | None = None,
     card_id: int | None = None,
     round: int | None = None,
+    draft_index: int | None = None,
 ) -> tuple[Critic, AgentContext]: ...
 
 
@@ -223,13 +232,16 @@ def _agent_context(
     unit_id: int | None = None,
     card_id: int | None = None,
     round: int | None = None,
+    draft_index: int | None = None,
 ) -> tuple[Any, AgentContext]:
     """Resolve `role` through the registry and build the context for one invocation."""
     implementation = registry.resolve(role, settings)
     context = AgentContext(
         ingest_run_id=ingest_run_id,
         settings=settings,
-        llm=_CorrelatedLlm(llm_caller, unit_id=unit_id, card_id=card_id, round=round),
+        llm=_CorrelatedLlm(
+            llm_caller, unit_id=unit_id, card_id=card_id, round=round, draft_index=draft_index
+        ),
     )
     return implementation, context
 
@@ -710,6 +722,7 @@ def _persist_chapter(
 
     The runner writes `truncated=true` back onto the flagged `highlights` rows —
     the Curator only names ids (agents hold no session, ADR-007; hard rule 7).
+    Each unit records the Curator batch call that produced it (`llm_call_id`).
     Returns each persisted unit with the highlight ids it covers.
     """
     truncated_ids = {
@@ -728,6 +741,7 @@ def _persist_chapter(
             tags=draft.tags,
             decision=draft.decision,
             reason=draft.reason or None,
+            llm_call_id=draft.llm_call_id,
         )
         session.add(unit)
         session.flush()
@@ -753,6 +767,10 @@ def _resolve_unit_cards(
     Session-free (ADR-015), so a whole unit's LLM chain can run on a worker thread
     while the main thread persists whichever units have already finished. The
     caller turns each outcome into a `cards` row.
+
+    Each draft gets its `draft_index` before its loop starts, so its Critic and
+    revision calls are told apart from a sibling's by key, not by id order (#262).
+    This round-1 call drafts every card at once and so carries none.
     """
     source_truncated = any(highlight.truncated for highlight in highlights)
     writer, writer_context = _agent_context(
@@ -779,8 +797,9 @@ def _resolve_unit_cards(
             source_truncated=source_truncated,
             guidance_version=guidance_version,
             guidance=guidance,
+            draft_index=draft_index,
         )
-        for draft in result.cards
+        for draft_index, draft in enumerate(result.cards)
     ]
 
 
@@ -796,6 +815,7 @@ def _resolve_card(
     guidance_version: int | None,
     guidance: str | None,
     card_id: int | None = None,
+    draft_index: int | None = None,
 ) -> _CardOutcome:
     """One card's Critic ⇄ Writer rounds, bounded by LLM_MAX_ROUNDS (hard rule 9).
 
@@ -821,6 +841,7 @@ def _resolve_card(
             unit_id=unit.id,
             card_id=card_id,
             round=round_number,
+            draft_index=draft_index,
         )
         verdict = critic(
             CriticRequest(
@@ -843,6 +864,7 @@ def _resolve_card(
                 status_reason=None,
                 generation_rounds=round_number,
                 terminal="accept",
+                draft_index=draft_index,
             )
         if verdict.verdict == "reject":
             return _CardOutcome(
@@ -851,6 +873,7 @@ def _resolve_card(
                 status_reason=verdict.critique,
                 generation_rounds=round_number,
                 terminal="reject",
+                draft_index=draft_index,
             )
         if round_number >= settings.llm_max_rounds:
             return _CardOutcome(
@@ -862,6 +885,7 @@ def _resolve_card(
                 ),
                 generation_rounds=round_number,
                 terminal="exhausted",
+                draft_index=draft_index,
             )
 
         round_number += 1
@@ -874,6 +898,7 @@ def _resolve_card(
             unit_id=unit.id,
             card_id=card_id,
             round=round_number,
+            draft_index=draft_index,
         )
         revised = writer(
             WriterRequest(
@@ -917,6 +942,7 @@ def _write_card(
         status=outcome.status,
         status_reason=outcome.status_reason,
         generation_rounds=outcome.generation_rounds,
+        draft_index=outcome.draft_index,
         model=settings.llm_model_writer,
         guidance_version=draft.guidance_version,
     )

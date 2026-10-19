@@ -426,6 +426,170 @@ def test_every_call_writes_an_llm_calls_row(
     assert [call.round for call in calls if call.agent == "critic/default"] == [1, 1, 2]
 
 
+# --- Trace links (#262) ------------------------------------------------------------
+
+
+def curator_batch_highlight_ids(call: LlmCall) -> set[int]:
+    """The highlight ids a Curator call's rendered request sent, from its user message."""
+    user_message = next(message for message in call.request if message["role"] == "user")
+    return {highlight["id"] for highlight in json.loads(user_message["content"])["highlights"]}
+
+
+def unit_highlight_ids(container: Container, unit_id: int) -> set[int]:
+    with container.session() as session:
+        return set(
+            session.scalars(
+                select(CuratedUnitHighlight.highlight_id).where(
+                    CuratedUnitHighlight.unit_id == unit_id
+                )
+            ).all()
+        )
+
+
+def test_each_unit_links_to_the_curator_call_that_produced_it(
+    container: Container, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Gap 1: every unit — keep and drop alike — names the Curator call behind it, and
+    that call's request batch holds every one of the unit's highlight ids."""
+    run_id, highlights = ingest_fixture(container)
+    ids = [highlight.id for highlight in highlights]
+    ScriptedLlm(
+        monkeypatch,
+        [
+            curator_response(keep_unit(ids[0:2]), drop_unit([ids[2]])),
+            writer_response("Why group these two?"),
+            critic_response(ACCEPT),
+        ],
+    )
+
+    container.run_pipeline(run_id)
+
+    units = all_units(container)
+    assert len(units) == 2
+    calls_by_id = {call.id: call for call in all_llm_calls(container, run_id)}
+    for unit in units:
+        assert unit.llm_call_id is not None
+        curator_call = calls_by_id[unit.llm_call_id]
+        assert curator_call.agent.startswith("curator/")
+        assert unit_highlight_ids(container, unit.id) <= curator_batch_highlight_ids(curator_call)
+
+
+def test_split_chapter_units_link_to_their_own_batch_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """With `CURATOR_MAX_BATCH` splitting the 15-highlight chapter into two batches,
+    each unit links to the batch call that produced it, not to the chapter."""
+    batch_container, engine = make_container(LLM_CONCURRENCY=1, CURATOR_MAX_BATCH=8)
+    try:
+        run_id, highlights = ingest_fixture(batch_container)
+        first_batch_id, second_batch_id = highlights[0].id, highlights[8].id
+        ScriptedLlm(
+            monkeypatch,
+            [
+                curator_response(keep_unit([first_batch_id])),  # batch 1: highlights 0-7
+                curator_response(keep_unit([second_batch_id])),  # batch 2: highlights 8-14
+                writer_response("First batch card?"),
+                critic_response(ACCEPT),
+                writer_response("Second batch card?"),
+                critic_response(ACCEPT),
+            ],
+        )
+
+        batch_container.run_pipeline(run_id)
+
+        curator_calls = [
+            call
+            for call in all_llm_calls(batch_container, run_id)
+            if call.agent.startswith("curator/")
+        ]
+        assert len(curator_calls) == 2
+        units = all_units(batch_container)
+        assert len(units) == 2
+        link_by_highlight = {
+            next(iter(unit_highlight_ids(batch_container, unit.id))): unit.llm_call_id
+            for unit in units
+        }
+        assert link_by_highlight[first_batch_id] == curator_calls[0].id
+        assert link_by_highlight[second_batch_id] == curator_calls[1].id
+    finally:
+        engine.dispose()
+
+
+def test_critic_and_revision_calls_carry_the_cards_draft_index(
+    container: Container, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Gap 2: every Critic and round-≥2 Writer call carries the `draft_index` of the
+    card it produced, so `(unit_id, draft_index)` joins a card to exactly its loop."""
+    run_id, highlights = ingest_fixture(container)
+    ScriptedLlm(
+        monkeypatch,
+        [
+            curator_response(keep_unit([highlights[0].id])),
+            writer_response("Card A?", "Card B?"),
+            critic_response(ACCEPT),  # card A, round 1
+            critic_response(REVISE),  # card B, round 1
+            writer_response("Card B revised?"),
+            critic_response(ACCEPT),  # card B, round 2
+        ],
+    )
+
+    container.run_pipeline(run_id)
+
+    card_a, card_b = all_cards(container)
+    assert (card_a.draft_index, card_b.draft_index) == (0, 1)
+    calls = all_llm_calls(container, run_id)
+    loop_calls = [
+        call
+        for call in calls
+        if call.agent.startswith("critic/")
+        or (call.agent.startswith("writer/") and call.round is not None and call.round >= 2)
+    ]
+    assert all(call.draft_index is not None for call in loop_calls)
+
+    def trace(card: Card) -> list[LlmCall]:
+        return [
+            call
+            for call in calls
+            if call.unit_id == card.unit_id and call.draft_index == card.draft_index
+        ]
+
+    card_a_calls, card_b_calls = trace(card_a), trace(card_b)
+    assert [(call.agent, call.round) for call in card_a_calls] == [("critic/default", 1)]
+    assert [(call.agent, call.round) for call in card_b_calls] == [
+        ("critic/default", 1),
+        ("writer/default", 2),
+        ("critic/default", 2),
+    ]
+    assert not {call.id for call in card_a_calls} & {call.id for call in card_b_calls}
+
+
+def test_round_one_writer_call_has_no_draft_index(
+    container: Container, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The round-1 Writer call drafts every card at once, so it belongs to no single
+    draft and keeps `draft_index=null`."""
+    run_id, highlights = ingest_fixture(container)
+    ScriptedLlm(
+        monkeypatch,
+        [
+            curator_response(keep_unit([highlights[0].id])),
+            writer_response("Card A?", "Card B?"),
+            critic_response(ACCEPT),
+            critic_response(ACCEPT),
+        ],
+    )
+
+    container.run_pipeline(run_id)
+
+    round_one_writer_calls = [
+        call
+        for call in all_llm_calls(container, run_id)
+        if call.agent.startswith("writer/") and call.round == 1
+    ]
+    assert len(round_one_writer_calls) == 1
+    assert round_one_writer_calls[0].draft_index is None
+
+
 # --- Loop and status behaviour ---------------------------------------------------
 
 
