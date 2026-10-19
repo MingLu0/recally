@@ -286,8 +286,8 @@ def test_harness_emits_one_result_per_unit(
         _registry(writer, StubCritic()),
     )
 
-    assert len(artifact["units"]) == 45
+    assert len(artifact["units"]) == 91
     (failed,) = [unit for unit in artifact["units"] if unit["error"] is not None]
     assert failed["unit_id"] == entries[0]["unit_id"]
     assert failed["cards"] == []
-    assert artifact["summary"]["agreement"]["n"] == 71
+    assert artifact["summary"]["agreement"]["n"] == 160
