@@ -52,6 +52,9 @@ backend/
       harness.py                  # replays Writer ⇄ Critic over the eval set via the registry;
                                   #   runs against a throwaway db copy, refuses the production
                                   #   path (`uv run python -m recally.evals.harness`) (#243)
+      curator_replay.py           # re-curates a read-only source db's highlights into a
+                                  #   throwaway copy and reports before/after grouping metrics
+                                  #   (`uv run python -m recally.evals.curator_replay`) (#253)
       score.py                    # scores a run against the human's recorded verdicts;
                                   #   every rate reported with its denominator
     llm.py                        # sole LiteLLM wrapper; logs every call to llm_calls
