@@ -6,10 +6,13 @@ SDK; structured output is requested in the prompt text and parsed by the agent, 
 nothing here uses provider-specific prompt features (ADR-003).
 
 Every call — successful or not — writes exactly one `llm_calls` row. The correlation
-fields (`agent`, `ingest_run_id`, `unit_id`, `card_id`, `round`) are supplied by the
-caller: the agent returns a typed result and the runner is the one that knows which
+fields (`agent`, `ingest_run_id`, `unit_id`, `card_id`, `round`, `draft_index`) are
+supplied by the caller: the agent returns a typed result and the runner is the one that knows which
 unit/card/round a call served. `agent` is `role/variant` (e.g. `writer/default`) so
-the trace names the implementation (ADR-007).
+the trace names the implementation (ADR-007). The reply is an `LlmReply`: the
+assistant text as a `str`, carrying the id of the row just written, so an agent can
+name the call behind each result (the Curator stamps it on its units) without ever
+holding a session.
 
 Failure handling (docs/architecture.md): a provider exception still writes its row
 (`response` null, zero tokens/cost) and then propagates, so the runner can record the
@@ -30,6 +33,21 @@ from recally.models import LlmCall
 logger = logging.getLogger(__name__)
 
 MICROUSD_PER_USD = 1_000_000
+
+
+class LlmReply(str):
+    """The assistant message text, plus the `llm_calls.id` of the row that logged it.
+
+    A `str` subclass so every agent that treats the reply as text keeps working; only
+    a caller that needs the trace link reads `llm_call_id`.
+    """
+
+    llm_call_id: int
+
+    def __new__(cls, content: str, llm_call_id: int) -> "LlmReply":
+        reply = super().__new__(cls, content)
+        reply.llm_call_id = llm_call_id
+        return reply
 
 
 class LlmCaller:
@@ -53,7 +71,8 @@ class LlmCaller:
         unit_id: int | None = None,
         card_id: int | None = None,
         round: int | None = None,
-    ) -> str:
+        draft_index: int | None = None,
+    ) -> LlmReply:
         """Make one completion call, log it, and return the assistant message text."""
         started = time.monotonic()
         try:
@@ -66,6 +85,7 @@ class LlmCaller:
                 unit_id=unit_id,
                 card_id=card_id,
                 round=round,
+                draft_index=draft_index,
                 request=messages if self._log_payloads else None,
                 response=None,
                 input_tokens=0,
@@ -78,13 +98,14 @@ class LlmCaller:
 
         content = response.choices[0].message.content or ""
         usage = response.usage
-        self._write_row(
+        llm_call_id = self._write_row(
             agent=agent,
             model=model,
             ingest_run_id=ingest_run_id,
             unit_id=unit_id,
             card_id=card_id,
             round=round,
+            draft_index=draft_index,
             request=messages if self._log_payloads else None,
             response=content if self._log_payloads else None,
             input_tokens=usage.prompt_tokens if usage else 0,
@@ -92,13 +113,15 @@ class LlmCaller:
             cost_microusd=_cost_microusd(model, response),
             latency_ms=latency_ms,
         )
-        return content
+        return LlmReply(content, llm_call_id)
 
-    def _write_row(self, **fields: Any) -> None:
-        """Persist one `llm_calls` row on its own session, committed immediately."""
+    def _write_row(self, **fields: Any) -> int:
+        """Persist one `llm_calls` row on its own session, committed immediately; return its id."""
         with self._session_factory() as session:
-            session.add(LlmCall(**fields))
+            llm_call = LlmCall(**fields)
+            session.add(llm_call)
             session.commit()
+            return llm_call.id
 
 
 def _elapsed_ms(started: float) -> int:

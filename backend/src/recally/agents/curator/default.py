@@ -13,6 +13,7 @@ unit — raises `CuratorValidationError` here, so the runner's failure path
 (docs/architecture.md, "Failure handling") records it and the next run retries.
 """
 
+import dataclasses
 import json
 from pathlib import Path
 from typing import Any, Literal, cast
@@ -71,7 +72,12 @@ class DefaultCurator:
             agent=AGENT_NAME,
             ingest_run_id=ctx.ingest_run_id,
         )
-        return _parse_units(response_text, batch)
+        # `getattr`: a stand-in caller (the agent tests' fakes) returns a plain `str`.
+        llm_call_id = getattr(response_text, "llm_call_id", None)
+        return [
+            dataclasses.replace(unit, llm_call_id=llm_call_id)
+            for unit in _parse_units(response_text, batch)
+        ]
 
 
 def _render_user_message(book_title: str, chapter: str | None, batch: list[HighlightInput]) -> str:

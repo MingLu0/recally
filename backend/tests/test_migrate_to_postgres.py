@@ -198,12 +198,30 @@ def _build_source_database(session: Session) -> None:
     session.add(guidance)
     session.flush()
 
+    # The Curator call is logged before the unit it produced, and the unit points back
+    # at it: one half of the `curated_units` ⇄ `llm_calls` FK cycle (#262).
+    curator_call = LlmCall(
+        agent="curator/default",
+        ingest_run_id=ingest_run.id,
+        model="claude-haiku-5",
+        request=None,
+        response=None,
+        input_tokens=2310,
+        output_tokens=402,
+        cost_microusd=96,
+        latency_ms=5120,
+        created_at=REFERENCE_NOW - timedelta(minutes=1),
+    )
+    session.add(curator_call)
+    session.flush()
+
     unit = CuratedUnit(
         ingest_run_id=ingest_run.id,
         curated_text="Leader-based replication sends every write through a single leader.",
         tags=["replication", "distributed-systems"],
         decision="keep",
         reason=None,
+        llm_call_id=curator_call.id,
         created_at=REFERENCE_NOW,
     )
     session.add(unit)
@@ -512,6 +530,27 @@ def test_migration_copies_every_table_row_count(source_database: Path, postgres_
     finally:
         target_engine.dispose()
     assert all(count > 0 for count in source_counts.values()), source_counts
+
+
+def test_migration_copies_the_curator_call_link_across_the_fk_cycle(
+    source_database: Path, postgres_url: str
+) -> None:
+    """`curated_units.llm_call_id` and `llm_calls.unit_id` point at each other, so no
+    table order satisfies an immediate FK on Postgres. The link must still arrive
+    intact, pointing at the Curator call (#262)."""
+
+    migrate(source_url=_sqlite_url(source_database), target_url=postgres_url)
+
+    target_engine = create_engine(postgres_url)
+    try:
+        with Session(target_engine) as session:
+            unit = session.execute(select(CuratedUnit)).scalars().one()
+            assert unit.llm_call_id is not None
+            curator_call = session.get(LlmCall, unit.llm_call_id)
+            assert curator_call is not None
+            assert curator_call.agent == "curator/default"
+    finally:
+        target_engine.dispose()
 
 
 def test_migration_preserves_card_state_values(source_database: Path, postgres_url: str) -> None:

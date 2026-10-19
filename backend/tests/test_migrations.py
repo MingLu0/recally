@@ -77,7 +77,8 @@ def test_supersedes_card_id_migration_round_trips(
         columns = {column["name"] for column in inspect(connection).get_columns("cards")}
     assert "supersedes_card_id" in columns
 
-    command.downgrade(config, "-1")
+    # Pinned to its parent revision rather than "-1": later migrations sit above it.
+    command.downgrade(config, "9c4e2b17f0a1")
     with engine.connect() as connection:
         columns = {column["name"] for column in inspect(connection).get_columns("cards")}
     assert "supersedes_card_id" not in columns
@@ -86,6 +87,39 @@ def test_supersedes_card_id_migration_round_trips(
     with engine.connect() as connection:
         columns = {column["name"] for column in inspect(connection).get_columns("cards")}
     assert "supersedes_card_id" in columns
+
+
+TRACE_LINK_COLUMNS = {
+    "curated_units": "llm_call_id",
+    "llm_calls": "draft_index",
+    "cards": "draft_index",
+}
+
+
+def test_trace_link_columns_migrate_up_and_down(
+    migration_target: tuple[Config, Engine],
+) -> None:
+    """#262: `curated_units.llm_call_id` and the two `draft_index` columns apply and
+    roll back cleanly under `render_as_batch=True` (ADR-004)."""
+    config, engine = migration_target
+
+    def present_columns() -> dict[str, bool]:
+        with engine.connect() as connection:
+            inspector = inspect(connection)
+            return {
+                table_name: column_name
+                in {column["name"] for column in inspector.get_columns(table_name)}
+                for table_name, column_name in TRACE_LINK_COLUMNS.items()
+            }
+
+    command.upgrade(config, "head")
+    assert all(present_columns().values())
+
+    command.downgrade(config, "-1")
+    assert not any(present_columns().values())
+
+    command.upgrade(config, "head")
+    assert all(present_columns().values())
 
 
 def test_every_table_carries_user_id() -> None:

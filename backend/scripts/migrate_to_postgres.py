@@ -61,12 +61,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 from sqlalchemy import (  # noqa: E402
     Engine,
     Table,
+    and_,
+    bindparam,
     create_engine,
     func,
     inspect,
     make_url,
+    or_,
     select,
     text,
+    update,
 )
 from sqlalchemy.orm import Session  # noqa: E402
 
@@ -158,6 +162,8 @@ def migrate(*, source_url: str, target_url: str) -> VerificationReport:
 
         for table in Base.metadata.sorted_tables:
             _copy_table(table, source_engine=source_engine, target_engine=target_engine)
+        for table in Base.metadata.sorted_tables:
+            _backfill_cycle_columns(table, source_engine=source_engine, target_engine=target_engine)
 
         _reset_sequences(target_engine)
 
@@ -273,13 +279,66 @@ def _copy_table(table: Table, *, source_engine: Engine, target_engine: Engine) -
 
     Ids are copied explicitly rather than regenerated: every foreign key in the
     database refers to them, and `_reset_sequences` fixes up the sequences afterwards.
+    Columns of a cycle-breaking FK are inserted as NULL and filled in by
+    `_backfill_cycle_columns` once every table is copied.
     """
+    cycle_columns = _cycle_columns(table)
     with (
         Session(source_engine) as source_session,
         Session(target_engine) as target_session,
     ):
         for batch in _read_in_batches(source_session, table):
+            for row in batch:
+                row.update(dict.fromkeys(cycle_columns))
             target_session.execute(table.insert(), batch)
+        target_session.commit()
+
+
+def _cycle_columns(table: Table) -> list[str]:
+    """Columns of the table's `use_alter` foreign keys: the ones that close an FK cycle.
+
+    `curated_units.llm_call_id` → `llm_calls` and `llm_calls.unit_id` → `curated_units`
+    point at each other (#262), so no table order satisfies Postgres' immediate FK
+    checks. `sorted_tables` ignores `use_alter` FKs when ordering, which puts the
+    referencing table first — so those columns must arrive after their target rows.
+    """
+    return [
+        column.name
+        for constraint in table.foreign_key_constraints
+        if constraint.use_alter
+        for column in constraint.columns
+    ]
+
+
+def _backfill_cycle_columns(table: Table, *, source_engine: Engine, target_engine: Engine) -> None:
+    """Copy the values `_copy_table` held back, now that every referenced row exists."""
+    cycle_columns = _cycle_columns(table)
+    if not cycle_columns:
+        return
+    primary_key_columns = list(table.primary_key.columns)
+    statement = (
+        update(table)
+        .where(and_(*(column == bindparam(f"key_{column.name}") for column in primary_key_columns)))
+        .values({name: bindparam(f"value_{name}") for name in cycle_columns})
+    )
+    with (
+        Session(source_engine) as source_session,
+        Session(target_engine) as target_session,
+    ):
+        result = source_session.execute(
+            select(*primary_key_columns, *(table.c[name] for name in cycle_columns))
+            .where(or_(*(table.c[name].is_not(None) for name in cycle_columns)))
+            .order_by(*primary_key_columns)
+        )
+        while batch := result.mappings().fetchmany(COPY_BATCH_SIZE):
+            parameters = [
+                {
+                    **{f"key_{column.name}": row[column.name] for column in primary_key_columns},
+                    **{f"value_{name}": row[name] for name in cycle_columns},
+                }
+                for row in batch
+            ]
+            target_session.execute(statement, parameters)
         target_session.commit()
 
 

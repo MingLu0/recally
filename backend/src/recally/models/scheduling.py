@@ -134,6 +134,9 @@ class LlmCall(UserScopedMixin, Base):
     card_id: Mapped[int | None] = mapped_column(ForeignKey("cards.id"), nullable=True)
     # 1-based Writer ⇄ Critic round; null outside the loop.
     round: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # The card's draft within its unit, on every Critic and revision-Writer call of
+    # initial generation; null for the round-1 Writer call, which drafts every card.
+    draft_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
     model: Mapped[str] = mapped_column(String(128), nullable=False)
     # Both null when `LLM_LOG_PAYLOADS=false`.
     request: Mapped[Any | None] = mapped_column(JSON, nullable=True)
