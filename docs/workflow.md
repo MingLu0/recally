@@ -48,7 +48,7 @@ Rules:
 
 - **At most 10 worktrees live at once** (raised from 3 in ADR-013, when the orchestrator took over parallel dispatch). Reviewer bandwidth is still the throttle; it moved from per-PR review to the parent You verify gates, and the dependency graph is what sequences it (ADR-014).
 - **One gate per PR.** Nothing merges without the gate command and its output in the PR description.
-- **No branch reaches `main` without its named tests green**, with the output pasted in the PR (ADR-012). The agent that wrote the code is the worst judge of whether it is right, so the gate is evidence rather than self-assessment: a listed test either exists and passes or it does not. The design-invariant suite (#31) runs on every PR.
+- **No branch reaches `main` without its named tests green**, with the output pasted in the PR (ADR-012). The agent that wrote the code is the worst judge of whether it is right, so the gate is evidence rather than self-assessment: a listed test either exists and passes or it does not. The design-invariant suite (#31) runs with the backend suite, i.e. on every PR that touches backend-relevant paths (ADR-017).
 - **A hard rule is Ming's call, never the agent's.** An agent that believes an `AGENTS.md` hard rule is wrong — or that its ticket asks it to work around one — stops and asks. It never quietly overrules one.
 - **Verifying is not decoration.** A card there means a roadmap step is merged but unproven against the real system — real exports, running server, real provider. Fixtures cannot reach those failures. The column should usually be empty.
 - Branch names follow `AGENTS.md`: `feat/…`, `fix/…`, `docs/…`.
@@ -63,8 +63,11 @@ Rules:
 | **You verify** | Does it work against the real system? | Ming, after merge | the issue closing |
 
 The *Tests* gate is the roadmap's own assertion — exact new/removed/updated counts, a 401 without the key — and
-belongs in the PR description in its own words. CI (`ruff`, `mypy`, `pytest`, `bandit`, `pip-audit`) runs on every
-PR and is the only automated check independent of the agent that wrote the code.
+belongs in the PR description in its own words. CI is path-scoped (ADR-017): the backend suite (`ruff`, `mypy`,
+`pytest`, `bandit`, `pip-audit`) runs on PRs and pushes touching backend-relevant paths (`backend/**`,
+`.python-version`, `.github/workflows/ci.yml`), the Android suite on Android-relevant paths (`android/**`, the
+workflow file); both full suites run when a change touches both, and v* tag / manual-dispatch runs are untouched.
+It is the only automated check independent of the agent that wrote the code.
 
 A sub-issue's Tests gate is written out as **named test functions** (ADR-012). Every ticket carries:
 
