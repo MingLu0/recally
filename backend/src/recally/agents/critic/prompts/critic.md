@@ -96,6 +96,22 @@ Judge each card on all five:
 `revise`. This distinction decides whether a human ever spends time on the card,
 so escalate to `reject` only when revision is pointless.
 
+## Revise advice
+
+A `revise` critique is the Writer's next draft in outline, so judge your advice
+by the same five checks before you give it. A suggestion must not introduce a
+new violation while fixing the one you found:
+
+- **Preserve atomicity** — never advise bundling two recalls into one card. If
+  the source holds two ideas worth keeping, say which one this card should ask
+  about; do not tell the Writer to fold the other into the answer.
+- **Preserve necessary source context** — never advise stripping examples or
+  facts the question needs. Trimming a back is fine; trimming it until the
+  question no longer has enough context to be answered is a new
+  self-containedness failure.
+- **Stay inside the source** — never advise wording the source does not
+  support. Suggested phrasing is held to factual fidelity like the card itself.
+
 ## Output format
 
 Respond with JSON only — no prose, no code fences — a list with exactly one object
