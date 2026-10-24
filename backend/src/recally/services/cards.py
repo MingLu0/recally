@@ -17,7 +17,7 @@ single FSRS authority (ADR-005).
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime, time, timedelta, timezone
+from datetime import UTC, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select
@@ -191,7 +191,7 @@ def next_day_boundary(now: datetime, timezone_name: str) -> datetime:
     (docs/api-spec.md shows the local offset); the row stores its naive-UTC form.
     """
     zone = ZoneInfo(timezone_name)
-    aware_now = now.replace(tzinfo=timezone.utc) if now.tzinfo is None else now
+    aware_now = now.replace(tzinfo=UTC) if now.tzinfo is None else now
     local_tomorrow = aware_now.astimezone(zone).date() + timedelta(days=1)
     return datetime.combine(local_tomorrow, time.min, tzinfo=zone)
 
@@ -204,14 +204,14 @@ def bury(card: Card, *, now: datetime, timezone_name: str) -> datetime:
     (ADR-008). Returns the aware local boundary for the response.
     """
     boundary = next_day_boundary(now, timezone_name)
-    card.suspended_until = boundary.astimezone(timezone.utc).replace(tzinfo=None)
+    card.suspended_until = boundary.astimezone(UTC).replace(tzinfo=None)
     return boundary
 
 
 def suspend(card: Card) -> datetime:
     """Take the card out of rotation indefinitely. Returns the aware sentinel."""
     card.suspended_until = SUSPEND_SENTINEL
-    return SUSPEND_SENTINEL.replace(tzinfo=timezone.utc)
+    return SUSPEND_SENTINEL.replace(tzinfo=UTC)
 
 
 def unsuspend(card: Card) -> None:

@@ -33,7 +33,7 @@ retried and never raised (single user, one device — token cleanup is scoped ou
 
 import logging
 from collections import Counter
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 from zoneinfo import ZoneInfo
@@ -111,7 +111,7 @@ def send_due_push(container: "Container", *, now: datetime | None = None) -> Non
 
 def _local_date_or_time(moment: datetime, zone: ZoneInfo) -> datetime:
     """The naive-UTC instant as a local wall time in `zone`."""
-    return moment.replace(tzinfo=timezone.utc).astimezone(zone)
+    return moment.replace(tzinfo=UTC).astimezone(zone)
 
 
 def _local_date(moment: datetime, zone: ZoneInfo) -> date:

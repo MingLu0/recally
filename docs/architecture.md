@@ -80,7 +80,7 @@ Native Kotlin + Jetpack Compose, offline-first with Room cache and rating sync q
 
 | Phase | Hosting | Ingestion | DB | Notes |
 |---|---|---|---|---|
-| 1. Local (now) | Mac (Python ≥ 3.10) | watch folder | SQLite | LAN access for the app |
+| 1. Local (now) | Mac (Python ≥ 3.11) | watch folder | SQLite | LAN access for the app |
 | 2. Hosted | Docker on HF Spaces, a small VPS or Fly.io | manual upload endpoint (no folder to watch in a container) | **Postgres** (hosted; Neon/Supabase) | single user |
 | 3. AWS | ECS/Lambda + RDS | S3 drop → trigger | Postgres (RDS) | real auth, multi-user ready |
 

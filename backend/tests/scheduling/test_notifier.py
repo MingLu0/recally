@@ -18,7 +18,7 @@ boundary being exercised are the timezone's, never UTC's by accident.
 import ast
 import itertools
 from collections.abc import Callable, Iterator
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -109,7 +109,7 @@ def fcm_sends(monkeypatch: pytest.MonkeyPatch, _firebase_app: None) -> list[mess
 
 def _utc(local: datetime) -> datetime:
     """A wall time in RECALLY_TIMEZONE as the naive UTC the columns store."""
-    return local.replace(tzinfo=LOCAL_TZ).astimezone(timezone.utc).replace(tzinfo=None)
+    return local.replace(tzinfo=LOCAL_TZ).astimezone(UTC).replace(tzinfo=None)
 
 
 def _seed_book(session: Session, *, title: str, isbn: str) -> Book:
@@ -412,8 +412,8 @@ def test_day_boundary_uses_recally_timezone_not_utc(
     second_tick = _utc(datetime(2026, 1, 11, 9, 0))
     assert first_tick.date() == second_tick.date(), "the trap: both ticks share one UTC day"
     assert (
-        first_tick.replace(tzinfo=timezone.utc).astimezone(LOCAL_TZ).date()
-        != second_tick.replace(tzinfo=timezone.utc).astimezone(LOCAL_TZ).date()
+        first_tick.replace(tzinfo=UTC).astimezone(LOCAL_TZ).date()
+        != second_tick.replace(tzinfo=UTC).astimezone(LOCAL_TZ).date()
     ), "but they fall on different local days"
     with container.session() as session:
         book = _seed_book(session, title="Evals for AI Engineers", isbn="9781098188283")
