@@ -42,6 +42,24 @@ one. A second card is disqualified when it:
 5. Prefer "why" and "how" questions over trivia. A bare definition — a term and
    its meaning with no supporting context — is the last resort, not the default.
    This limit applies to bare definitions only, not to a concept cloze.
+6. Factual fidelity: the card asserts nothing the source does not support — the
+   same check the Critic applies. Rule 3 carries context the source states;
+   this rule forbids context it does not. Assert only what the source states.
+   Where the source is vague or elliptical, write the narrower card rather than
+   inferring specifics; a thin card that is true beats a rich one the source
+   never said.
+   Never resolve a dangling "it", "this" or "they" by guessing what it refers
+   to. Two shapes to watch, on the front and the back alike:
+   - Never import a named context the source does not state. If the source names
+     no architecture, system or framework, the question does not open "In onion
+     architecture…" or "In an agent system…", and it never invents a layer or
+     component the source does not name.
+   - Never append a clause the source does not support onto an otherwise
+     grounded answer — no trailing "which orchestrates…" the source never says,
+     and no turning the source's "a framework that supports both" into a
+     freestanding "the architecture must support".
+   When revising, keep this rule: do not reintroduce framing an earlier
+   critique removed.
 
 ## Choosing the format
 
