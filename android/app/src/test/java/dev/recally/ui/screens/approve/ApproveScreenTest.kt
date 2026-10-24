@@ -360,12 +360,16 @@ class ApproveScreenTest {
 
     @Test
     fun test_bulk_bar_pill_stays_enabled_and_clickable_after_the_layout_change() {
-        var approveAllCalls = 0
+        var bulkClicks = 0
         var state by mutableStateOf(queueState(listOf(queueCard(1)), bulkApprovableCount = 3))
-        setApproveContent(state, onApproveAllClean = { approveAllCalls++ }, readState = { state })
+        setApproveContent(
+            state,
+            onBulkApproveClick = { bulkClicks++ },
+            readState = { state },
+        )
 
         composeTestRule.onNodeWithTag(BULK_APPROVE_PILL_TAG).assertIsEnabled().performClick()
-        assertEquals("onApproveAllClean still fires", 1, approveAllCalls)
+        assertEquals("onBulkApproveClick still fires", 1, bulkClicks)
 
         for (
         (caseName, disabledState) in
@@ -378,11 +382,59 @@ class ApproveScreenTest {
             state = disabledState
             composeTestRule.waitForIdle()
             composeTestRule.onNodeWithTag(BULK_APPROVE_PILL_TAG).assertIsNotEnabled()
-            approveAllCalls = 0
+            bulkClicks = 0
             // Semantics clicks refuse disabled nodes, so assert the disabled
             // semantics itself is what guards the action.
             composeTestRule.onNodeWithTag(BULK_APPROVE_PILL_TAG).assertExists()
-            assertEquals("$caseName: no approve-all fired", 0, approveAllCalls)
+            assertEquals("$caseName: no approve-all fired", 0, bulkClicks)
+        }
+    }
+
+    @Test
+    fun test_pill_tap_shows_the_confirm_dialog_with_the_exact_count() {
+        val cards = (1L..3L).map(::queueCard)
+        var state by mutableStateOf(queueState(cards, bulkApprovableCount = cards.size))
+        var confirmClicks = 0
+        setApproveContent(
+            state,
+            onBulkApproveClick = { state = state.copy(showBulkApproveConfirm = true) },
+            onConfirmBulkApprove = { confirmClicks++ },
+            readState = { state },
+        )
+
+        composeTestRule.onNodeWithTag(BULK_APPROVE_PILL_TAG).performClick()
+        composeTestRule.waitForIdle()
+
+        // Issue #266: the dialog names the scale — the exact clean-card count
+        // is what makes a stray tap stop and think.
+        composeTestRule.onNodeWithTag(BULK_APPROVE_CONFIRM_DIALOG_TAG).assertIsDisplayed()
+        composeTestRule.onNodeWithText("Approve all 3 cards?").assertIsDisplayed()
+        assertEquals("the pill tap alone must never approve", 0, confirmClicks)
+    }
+
+    @Test
+    fun test_cancel_dismisses_the_dialog_without_approving() {
+        val cards = (1L..3L).map(::queueCard)
+        var state by mutableStateOf(
+            queueState(cards, bulkApprovableCount = cards.size).copy(showBulkApproveConfirm = true),
+        )
+        var confirmClicks = 0
+        setApproveContent(
+            state,
+            onConfirmBulkApprove = { confirmClicks++ },
+            onDismissBulkApproveConfirm = { state = state.copy(showBulkApproveConfirm = false) },
+            readState = { state },
+        )
+
+        composeTestRule.onNodeWithText("Cancel").performClick()
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag(BULK_APPROVE_CONFIRM_DIALOG_TAG).assertDoesNotExist()
+        assertEquals("cancel must not approve", 0, confirmClicks)
+        // The queue behind the dialog is untouched — every card still present.
+        composeTestRule.onNodeWithTag(QUEUE_LIST_TAG).assertIsDisplayed()
+        for (id in cards.map { it.id }) {
+            composeTestRule.onNode(hasText("Question $id", substring = true)).assertExists()
         }
     }
 
@@ -424,7 +476,9 @@ class ApproveScreenTest {
         darkTheme: Boolean = false,
         onToggleHighlights: (Long) -> Unit = {},
         onApproveCard: (Long) -> Unit = {},
-        onApproveAllClean: () -> Unit = {},
+        onBulkApproveClick: () -> Unit = {},
+        onConfirmBulkApprove: () -> Unit = {},
+        onDismissBulkApproveConfirm: () -> Unit = {},
         readState: (() -> ApproveUiState)? = null,
         readDarkTheme: (() -> Boolean)? = null,
     ) {
@@ -443,7 +497,9 @@ class ApproveScreenTest {
                         onOpenSettings = {},
                         onNavigateBack = {},
                         onRetry = {},
-                        onApproveAllClean = onApproveAllClean,
+                        onBulkApproveClick = onBulkApproveClick,
+                        onConfirmBulkApprove = onConfirmBulkApprove,
+                        onDismissBulkApproveConfirm = onDismissBulkApproveConfirm,
                         modifier = Modifier.padding(innerPadding),
                     )
                 }

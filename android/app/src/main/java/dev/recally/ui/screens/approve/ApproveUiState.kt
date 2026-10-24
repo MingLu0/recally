@@ -71,6 +71,12 @@ data class ApproveUiState(
     /** Cards in the collection-wide `pending_review` bucket — the bulk action's N. */
     val bulkApprovableCount: Int? = null,
     val isBulkApproving: Boolean = false,
+    /**
+     * The bulk confirm dialog is open (issue #266): the pill tap arms it
+     * instead of approving, because one stray tap approved 152 cards. Set by
+     * the tap, cleared by confirm (which runs the bulk approve) or dismiss.
+     */
+    val showBulkApproveConfirm: Boolean = false,
     val errorMessage: String? = null,
 ) {
     /**

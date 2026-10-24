@@ -168,6 +168,66 @@ class ApproveViewModelTest {
         }
 
     @Test
+    fun test_pill_tap_sets_confirm_flag_and_does_not_call_the_repository() =
+        runTest {
+            // Issue #266: a stray tap on "Approve N ready" approved 152 cards
+            // in one minute; the tap must arm a confirmation dialog and never
+            // the repository call itself.
+            val (viewModel, repository) =
+                loadedViewModel(
+                    listOf(
+                        pendingCard(id = 1),
+                        pendingCard(id = 2),
+                        pendingCard(id = 3, status = PendingCard.STATUS_NEEDS_HUMAN),
+                    ),
+                )
+            advanceUntilIdle()
+
+            viewModel.onBulkApproveClick()
+            advanceUntilIdle()
+
+            assertTrue(
+                "the pill tap arms the confirmation dialog",
+                viewModel.uiState.value.showBulkApproveConfirm,
+            )
+            assertTrue(
+                "the pill tap must not call the repository (negative, #266)",
+                repository.batchCalls.isEmpty(),
+            )
+        }
+
+    @Test
+    fun test_confirm_runs_bulk_approve() =
+        runTest {
+            val (viewModel, repository) =
+                loadedViewModel(
+                    listOf(
+                        pendingCard(id = 1),
+                        pendingCard(id = 2),
+                        pendingCard(id = 3, status = PendingCard.STATUS_NEEDS_HUMAN),
+                    ),
+                )
+            advanceUntilIdle()
+
+            viewModel.onBulkApproveClick()
+            advanceUntilIdle()
+            assertTrue(viewModel.uiState.value.showBulkApproveConfirm)
+
+            viewModel.onConfirmBulkApprove()
+            advanceUntilIdle()
+
+            assertEquals(
+                "confirming approves exactly the clean ids — needs_human stays out (hard rule 1)",
+                listOf(listOf(1L, 2L)),
+                repository.batchCalls,
+            )
+            assertFalse(
+                "confirming clears the dialog flag",
+                viewModel.uiState.value.showBulkApproveConfirm,
+            )
+        }
+
+    @Test
     fun test_bulk_approve_count_comes_from_counts_not_list_size() =
         runTest {
             // The queue is served whole today, but the count must come from

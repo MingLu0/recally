@@ -98,7 +98,9 @@ fun RecallyNavHost(
                 onOpenSettings = { navController.navigate(Screen.Settings.route) },
                 onNavigateBack = { navController.popBackStack() },
                 onRetry = approveViewModel::refresh,
-                onApproveAllClean = approveViewModel::approveAllClean,
+                onBulkApproveClick = approveViewModel::onBulkApproveClick,
+                onConfirmBulkApprove = approveViewModel::onConfirmBulkApprove,
+                onDismissBulkApproveConfirm = approveViewModel::onDismissBulkApproveConfirm,
             )
         }
         composable(Screen.Decks.route) {
