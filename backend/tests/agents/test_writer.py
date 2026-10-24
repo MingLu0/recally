@@ -217,7 +217,7 @@ def test_prompt_is_loaded_from_file() -> None:
 
 
 def test_writer_prompt_requires_unique_cloze_fill() -> None:
-    """Rule 3 states the deletion must be the only sensible fill — the same bar
+    """Rule 4 states the deletion must be the only sensible fill — the same bar
     as the Critic's unambiguity check (#255). Without it the Writer drafts
     ambiguous clozes and the Critic burns the round budget catching them."""
     fake_llm = FakeLlm(TWO_CARD_RESPONSE)
@@ -319,8 +319,8 @@ def test_writer_prompt_renders_all_placeholders() -> None:
 # prompts/writer.md — the red output is in the PR; the third is a regression
 # guard that must pass before and after.
 
-RULE_3_CLOZE_TEXT = """\
-3. Cloze cards carry a single deletion only — multi-deletion cards lapse more.
+CLOZE_RULE_TEXT = """\
+4. Cloze cards carry a single deletion only — multi-deletion cards lapse more.
    Write the deletion as `{{c1::deleted text}}`, exactly once in the front. The
    back repeats the deleted text. The visible text must uniquely cue the
    deletion: the cloze gap has exactly one sensible fill, the same bar the
@@ -363,9 +363,64 @@ def test_writer_prompt_scopes_definition_last_resort_to_bare_definitions() -> No
 
 
 def test_writer_prompt_keeps_cloze_rules() -> None:
-    """Rule 3 — the single-deletion marker rule and #257's unique-fill rule —
+    """The cloze rule — the single-deletion marker rule and #257's unique-fill rule —
     survives the edit verbatim."""
     fake_llm = FakeLlm(ONE_CARD_RESPONSE)
     DefaultWriter()(_request(), _ctx(fake_llm))
 
-    assert RULE_3_CLOZE_TEXT in _rendered_prompt(fake_llm)
+    assert CLOZE_RULE_TEXT in _rendered_prompt(fake_llm)
+
+
+# --- The #278 gate: carry source context into the question -----------------
+# Cycle-3 rejects 107, 110 and 130 had the explaining examples, the sibling fact
+# or the named structure verbatim in `curated_text`, and the Writer's question
+# dropped them — a Writer omission, not a Curator grouping failure. The fix is
+# prompt guidance, so these assert on the prompt as rendered through
+# DefaultWriter. The two new-behaviour tests were confirmed red against the
+# unedited prompts/writer.md — the red output is in the #278 PR; the third is a
+# regression guard that must pass before and after. The prompt is hard-wrapped,
+# so the new-behaviour phrases are matched with whitespace collapsed.
+
+
+def test_writer_prompt_requires_source_context_in_questions() -> None:
+    """Examples, facts or a named structure the question needs belong in the
+    stem, and the prompt says that context is neither a second idea nor extra
+    answer content, so it does not fight the one-card default."""
+    fake_llm = FakeLlm(ONE_CARD_RESPONSE)
+    DefaultWriter()(_request(), _ctx(fake_llm))
+
+    prompt = " ".join(_rendered_prompt(fake_llm).lower().split())
+    assert "examples, facts, or a named structure" in prompt
+    assert "carry them into the question stem" in prompt
+    assert "grouped sibling" in prompt
+    assert "context is not a second idea" in prompt
+
+
+def test_writer_prompt_forbids_generalizing_named_structure() -> None:
+    """A specific named structure must not be swapped for a generic referent —
+    card 130 turned "this architecture" into "agent architecture"."""
+    fake_llm = FakeLlm(ONE_CARD_RESPONSE)
+    DefaultWriter()(_request(), _ctx(fake_llm))
+
+    prompt = " ".join(_rendered_prompt(fake_llm).lower().split())
+    assert "never generalize a specific named structure" in prompt
+    assert '"this architecture" must not become "agent architecture"' in prompt
+
+
+def test_writer_prompt_keeps_card_rules_and_placeholders() -> None:
+    """The one-card default, unique cloze fill, single-deletion rule and the
+    truncated-source rule survive, and every placeholder still substitutes."""
+    fake_llm = FakeLlm(ONE_CARD_RESPONSE)
+    DefaultWriter()(_request(critique=CRITIQUE_TEXT), _ctx(fake_llm))
+
+    prompt = _rendered_prompt(fake_llm)
+    assert "one card is the default" in prompt.lower()
+    assert "exactly one sensible fill" in prompt
+    assert "single deletion" in prompt
+    assert "exactly once in the front" in prompt
+    assert "never reconstruct" in prompt.lower()
+    assert GUIDANCE_TEXT in prompt
+    assert "sqlite, durability" in prompt
+    assert CURATED_TEXT in prompt
+    assert CRITIQUE_TEXT in prompt
+    assert "$" not in prompt
