@@ -10,7 +10,7 @@ explicit `review_datetime` — the client's `rated_at` — and never substitutes
 current time, so offline ratings replay at their true timestamps.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fsrs import Card as LibraryCard
 from fsrs import Rating, ReviewLog, Scheduler, State
@@ -49,13 +49,13 @@ def rating_from_int(value: int) -> Rating:
 def _as_utc_iso(value: datetime) -> str:
     """A stored naive-UTC datetime as the ISO string the library's dict shape holds."""
     if value.tzinfo is None:
-        value = value.replace(tzinfo=timezone.utc)
+        value = value.replace(tzinfo=UTC)
     return value.isoformat()
 
 
 def _from_utc_iso(value: str) -> datetime:
     """The reverse of `_as_utc_iso`: the table stores naive UTC datetimes."""
-    return datetime.fromisoformat(value).astimezone(timezone.utc).replace(tzinfo=None)
+    return datetime.fromisoformat(value).astimezone(UTC).replace(tzinfo=None)
 
 
 def card_to_library(state: CardState) -> LibraryCard:
@@ -150,7 +150,7 @@ class FsrsScheduler:
         (roadmap step 3b).
         """
         if review_datetime.tzinfo is None:
-            review_datetime = review_datetime.replace(tzinfo=timezone.utc)
+            review_datetime = review_datetime.replace(tzinfo=UTC)
         card, review_log = self._scheduler.review_card(
             card_to_library(state), rating, review_datetime=review_datetime
         )

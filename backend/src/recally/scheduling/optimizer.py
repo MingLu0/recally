@@ -24,7 +24,7 @@ how two schedulers start to disagree.
 """
 
 import logging
-from datetime import timezone
+from datetime import UTC
 from typing import TYPE_CHECKING
 
 from sqlalchemy import func, select
@@ -68,7 +68,7 @@ def fit_parameters(container: "Container") -> FsrsParams | None:
                 card_id=row.card_id,
                 rating=Rating(row.rating),
                 # Stored naive UTC; the library's own docs use aware datetimes.
-                review_datetime=row.rated_at.replace(tzinfo=timezone.utc),
+                review_datetime=row.rated_at.replace(tzinfo=UTC),
                 review_duration=row.response_ms,
             )
             for row in rows

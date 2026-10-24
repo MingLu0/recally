@@ -14,7 +14,7 @@ Type choices are deliberately portable (ADR-004, "no SQLite-specific SQL"):
   and a rewritten CHECK constraint on SQLite, for no gain over validating in Python.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import Integer, MetaData, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -41,7 +41,7 @@ class Base(DeclarativeBase):
 
 def utc_now() -> datetime:
     """Timezone-naive UTC, matching what the `DateTime` columns store."""
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 class UserScopedMixin:

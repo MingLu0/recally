@@ -2,7 +2,7 @@
 name = "recally"
 version = "0.1.0"
 description = "Turns O'Reilly reading highlights into scheduled flashcards"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.32",

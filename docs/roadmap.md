@@ -6,7 +6,7 @@ Every step has two gates. **Tests** is the merge requirement: the PR pastes the 
 
 ### 0. Prerequisites
 Done by hand, once.
-- Python ≥ 3.10 (`py-fsrs` 6.x requires it; the Mac ships 3.9). Install via `uv` or Homebrew.
+- Python ≥ 3.11 (floor set by filelock 4.x; `py-fsrs` 6.x itself requires only 3.10; the Mac ships 3.9). Install via `uv` or Homebrew.
 - Pin APScheduler 3.x.
 - An LLM provider key in `backend/.env` (LiteLLM variable names, see `config.md`). Needed from step 2.
 - A Firebase project with FCM enabled, its `google-services.json` for the app and a service-account JSON for `FIREBASE_CREDENTIALS_FILE`. Both gitignored. Needed from step 5; can be deferred until then.
