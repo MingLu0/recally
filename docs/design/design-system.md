@@ -150,6 +150,8 @@ A single 6dp `pill` bar with proportional fills — `success` for cards answered
 
 Critique length is unbounded by design (the Writer ⇄ Critic loop runs up to 3 rounds), so a body longer than 4 lines clamps to 4 lines behind a chevron disclosure — the same idiom as the source-highlight disclosure below: chevron + "Read full critique" / "Show less" in `label`/`ink-muted`, expanding in place. The toggle appears only when the text actually overflows; a short critique renders bare. Without the clamp a long critique buries the card's own action row, inverting the subordination (issue #150).
 
+The block's read-only text participates in the card's platform text selection: long-press offers copy, so the Critic's exact wording can be lifted without retyping (issue #267).
+
 ### Cloze rendering (`ui/components/ClozeText.kt`)
 `{{c1::answer}}` renders as the answer text on `primary-wash` with a 2dp `primary` bottom border, 4dp radius, 1×7dp padding, weight 700, colour `primary`. **Never show raw braces.** In review (unflipped) the same span renders as a blank of equivalent width. `docs/android.md` does not specify this; it is a design decision recorded here.
 
@@ -158,7 +160,7 @@ Critique length is unbounded by design (the Writer ⇄ Critic loop runs up to 3 
 The alternative was to clamp the placeholder and ellipsise inside it. Rejected: the revealed side of a cloze card exists to show the answer, and hiding part of it to keep a rounded corner trades the content for the decoration. Shortening the card's own text to fit was never available (hard rule 7). The threshold is measured, not a character count — the same answer boxes on a wide screen and wraps on a narrow one, which is correct: the box is kept wherever it fits.
 
 ### Source-highlight disclosure (`ui/screens/approve/HighlightDisclosure.kt`)
-Collapsed by default, above a `line-soft` top divider: chevron + "N source highlight(s)" in `label`/`ink-muted`. A grouped unit can carry several and they would otherwise dominate the card. Expanded, each highlight is `body-sm`/`ink-muted` with a `warn` "truncated" chip where `truncated` is true.
+Collapsed by default, above a `line-soft` top divider: chevron + "N source highlight(s)" in `label`/`ink-muted`. A grouped unit can carry several and they would otherwise dominate the card. Expanded, each highlight is `body-sm`/`ink-muted` with a `warn` "truncated" chip where `truncated` is true. The label and expanded highlights participate in the card's platform text selection (long-press to copy, issue #267); collapsed highlights stay collapsed until the disclosure is expanded.
 
 ### Bottom sheet
 `ground`, `lg` top radius, 38dp `rgba(20,26,24,0.38)` scrim. 38×4dp `#DEDEDA` grab handle, centred. Content padding 20dp horizontal, 26dp bottom.

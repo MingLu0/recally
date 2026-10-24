@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
@@ -444,6 +445,11 @@ private fun QueueList(
  * One pending card. Every card carries the Reject / Edit / Approve row — an
  * approval card without it was a bug caught in the design audit
  * (design-system.md, "API gaps this design depends on").
+ *
+ * The read-only content (badges, card text, critique, source disclosure) sits
+ * in one `SelectionContainer` so long-press opens the platform text-selection
+ * UX (issue #267); the action row, inline editor and reject dialog stay
+ * outside it so their click and text-field behaviour is untouched.
  */
 @Composable
 private fun ApproveCard(
@@ -472,35 +478,39 @@ private fun ApproveCard(
                     RoundedCornerShape(RecallyRadius.md),
                 ),
     ) {
-        BadgeRow(card = card)
-        Column(
-            verticalArrangement = Arrangement.spacedBy(RecallySpacing.md),
-            modifier = Modifier.padding(RecallySpacing.cardPadding),
-        ) {
-            if (card.isCloze) {
-                ClozeText(text = card.front, revealed = true)
-            } else {
-                Column(verticalArrangement = Arrangement.spacedBy(RecallySpacing.sm)) {
-                    Text(
-                        text = card.front,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.recallyColors.ink,
-                    )
-                    Text(
-                        text = card.back,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.recallyColors.inkMuted,
+        SelectionContainer {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                BadgeRow(card = card)
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(RecallySpacing.md),
+                    modifier = Modifier.padding(RecallySpacing.cardPadding),
+                ) {
+                    if (card.isCloze) {
+                        ClozeText(text = card.front, revealed = true)
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(RecallySpacing.sm)) {
+                            Text(
+                                text = card.front,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.recallyColors.ink,
+                            )
+                            Text(
+                                text = card.back,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.recallyColors.inkMuted,
+                            )
+                        }
+                    }
+                    card.statusReason?.let { CritiqueBlock(critique = it) }
+                    HighlightDisclosure(
+                        highlights = card.sourceHighlights,
+                        truncated = card.truncated,
+                        expanded = highlightsExpanded,
+                        onToggle = onToggleHighlights,
                     )
                 }
             }
-            card.statusReason?.let { CritiqueBlock(critique = it) }
-            HighlightDisclosure(
-                highlights = card.sourceHighlights,
-                truncated = card.truncated,
-                expanded = highlightsExpanded,
-                onToggle = onToggleHighlights,
-            )
         }
 
         if (isEditing) {
