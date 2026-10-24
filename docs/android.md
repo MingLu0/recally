@@ -164,6 +164,7 @@ Bottom navigation with four items: **Today, Decks, Stats, Settings**. Review and
 
 ### 3. Approval queue
 - Pending cards grouped by chapter, with front/back, critic critique, and all source highlights shown for context (a grouped card has several). Expanded source highlights are labelled Source 1, Source 2, and so on, per card — the numbering restarts for every card and follows the server's export-position order.
+- Read-only card text — badges, front/back or rendered cloze, critique, and the source-highlight disclosure — supports long-press text selection and copying, so exact wording can be lifted into an edit or a note about a bad generation. The Reject / Edit / Approve row, reject dialog, and inline editor sit outside the selection context; collapsed highlights stay collapsed until expanded (issue #267).
 - Approve / edit inline / reject (with optional reason).
 - `needs_human` cards get their own **"needs you" filter chip** rather than being folded indistinguishably into the single queue — they are the cards the Writer ⇄ Critic loop could not clear, so they are opened individually and excluded from any bulk approve (hard rule 1).
 

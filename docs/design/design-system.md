@@ -150,6 +150,8 @@ A single 6dp `pill` bar with proportional fills — `success` for cards answered
 
 Critique length is unbounded by design (the Writer ⇄ Critic loop runs up to 3 rounds), so a body longer than 4 lines clamps to 4 lines behind a chevron disclosure — the same idiom as the source-highlight disclosure below: chevron + "Read full critique" / "Show less" in `label`/`ink-muted`, expanding in place. The toggle appears only when the text actually overflows; a short critique renders bare. Without the clamp a long critique buries the card's own action row, inverting the subordination (issue #150).
 
+The block's read-only text participates in the card's platform text selection: long-press offers copy, so the Critic's exact wording can be lifted without retyping (issue #267).
+
 ### Cloze rendering (`ui/components/ClozeText.kt`)
 `{{c1::answer}}` renders as the answer text on `primary-wash` with a 2dp `primary` bottom border, 4dp radius, 1×7dp padding, weight 700, colour `primary`. **Never show raw braces.** In review (unflipped) the same span renders as a blank of equivalent width. `docs/android.md` does not specify this; it is a design decision recorded here.
 

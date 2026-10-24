@@ -12,13 +12,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.getBoundsInRoot
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -26,10 +30,12 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.height
 import androidx.compose.ui.unit.width
 import dev.recally.domain.model.PendingCard
+import dev.recally.shadows.ShadowMagnifier
 import dev.recally.ui.theme.DarkRecallyColorTokens
 import dev.recally.ui.theme.LightRecallyColorTokens
 import dev.recally.ui.theme.RecallyTheme
@@ -63,10 +69,16 @@ import kotlin.math.roundToInt
  * [dev.recally.ui.screens.today.QueueCountTileTest]), so they draw the
  * compose root view into a software bitmap and sample it, in both light and
  * dark because the artboards' hairlines differ per theme.
+ *
+ * The two selection guards (issue #267) hold the card's read-only text to the
+ * platform contract: long-press enters text-selection mode (asserted via the
+ * selection context `SelectionContainer` installs — see the test for why the
+ * semantics `TextSelectionRange` itself is not assertable under Robolectric)
+ * and the wrapper must not swallow the disclosure toggle or the card actions.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(sdk = [34], qualifiers = "w411dp-h891dp")
+@Config(sdk = [34], qualifiers = "w411dp-h891dp", shadows = [ShadowMagnifier::class])
 class ApproveScreenTest {
     @get:Rule
     val composeTestRule = createAndroidComposeRule<ComponentActivity>()
@@ -109,6 +121,76 @@ class ApproveScreenTest {
         composeTestRule.onNode(hasText("Edit") and hasClickAction()).assertIsDisplayed()
         composeTestRule.onNode(hasText("Approve") and hasClickAction()).assertIsDisplayed()
         composeTestRule.onNodeWithContentDescription("Expand critique").assertIsDisplayed()
+    }
+
+    /**
+     * Issue #267: the card's read-only text participates in the platform
+     * text-selection UX — long-press is the entry point, served by a Compose
+     * `SelectionContainer` around the card content.
+     *
+     * The ticket named the assertion "the text node carries a non-collapsed
+     * `TextSelectionRange` in semantics". That is not observable under
+     * Robolectric: the long-press gesture itself runs (the selection handlers
+     * complete and consume the release), but the selection never materialises
+     * — no `TextSelectionRange` appears in merged or unmerged semantics, no
+     * selection toolbar is requested, on SDKs 27 and 34, with legacy and
+     * native graphics, for stationary, jitter, drag and double-tap gestures.
+     * Verified with a scratch `SelectionContainer { Text(...) }` repro: the
+     * gap is in the framework's text hit-test/registrar propagation under
+     * Robolectric, not in this screen. On device the interaction is the
+     * platform default.
+     *
+     * What IS observable, and red on `main`: a `SelectionContainer` installs
+     * a focusable selection root around its content (the selection manager's
+     * `focusable()`, which also drives clear-selection-on-focus-loss). So this
+     * test performs the ticket's long-press on the card text and asserts the
+     * text sits under that focusable selection root — the marker that the
+     * read-only content is inside the platform selection context. Without the
+     * wrapper there is no focusable node anywhere in the card, so this fails
+     * before the implementation exists.
+     */
+    @Test
+    fun test_card_text_long_press_enters_selection_mode() {
+        val card = queueCard(1)
+        setApproveContent(queueState(listOf(card), bulkApprovableCount = null))
+
+        composeTestRule
+            .onNodeWithText(card.front)
+            .assertIsDisplayed()
+            .performTouchInput { longClick(durationMillis = 1000) }
+
+        val focusableSelectionRoot =
+            SemanticsMatcher("is a focusable selection root") { node ->
+                SemanticsProperties.Focused in node.config
+            }
+        composeTestRule
+            .onNode(
+                hasText(card.front) and hasAnyAncestor(focusableSelectionRoot),
+                useUnmergedTree = true,
+            ).assertIsDisplayed()
+    }
+
+    /**
+     * Issue #267: wrapping the card text in a `SelectionContainer` must not
+     * swallow the interactions around it — the source-highlight disclosure
+     * still toggles and the Approve action still raises its card-id callback.
+     */
+    @Test
+    fun test_text_selection_preserves_card_actions_and_source_toggle() {
+        val card = queueCard(1)
+        var toggledCardId: Long? = null
+        var approvedCardId: Long? = null
+        setApproveContent(
+            queueState(listOf(card), bulkApprovableCount = null),
+            onToggleHighlights = { toggledCardId = it },
+            onApproveCard = { approvedCardId = it },
+        )
+
+        composeTestRule.onNodeWithText("1 source highlight").performClick()
+        assertEquals("disclosure tap must still toggle", card.id, toggledCardId)
+
+        composeTestRule.onNode(hasText("Approve") and hasClickAction()).performClick()
+        assertEquals("approve action must still fire", card.id, approvedCardId)
     }
 
     @Test
@@ -340,6 +422,7 @@ class ApproveScreenTest {
     private fun setApproveContent(
         uiState: ApproveUiState,
         darkTheme: Boolean = false,
+        onToggleHighlights: (Long) -> Unit = {},
         onApproveCard: (Long) -> Unit = {},
         onApproveAllClean: () -> Unit = {},
         readState: (() -> ApproveUiState)? = null,
@@ -351,7 +434,7 @@ class ApproveScreenTest {
                     ApproveScreen(
                         uiState = readState?.invoke() ?: uiState,
                         onFilterChange = {},
-                        onToggleHighlights = {},
+                        onToggleHighlights = onToggleHighlights,
                         onApproveCard = onApproveCard,
                         onStartEdit = {},
                         onDismissEdit = {},
