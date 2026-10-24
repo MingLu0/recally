@@ -25,7 +25,8 @@ No LLM. Watch folder → adapter → dedupe → `highlights` rows with `processe
 - Minimum information principle: one idea per card.
 - Card must be answerable without the book open.
 - Cloze cards: single deletion only (multi-deletion cards lapse more), written as one `{{c1::...}}` marker in the front. The Writer validates the marker count in code; the prompt alone will not hold it.
-- Prefer "why/how" questions over trivia.
+- Prefer "why/how" questions over trivia. The last-resort limit covers bare definitions with no supporting context, not concept clozes.
+- Format is chosen deliberately (#279): a cloze when the point is a core term or concept whose surrounding sentence supplies the context (the definition or key fact is the deletion, the rest of the sentence is the body); a QA for why/how mechanism and application questions.
 **Feedback loop**: prompt includes Learner-generated guidance from my review history (e.g. "cards asking for definitions lapse 40% — prefer application questions").
 
 ### 4. Critic Agent — LLM
