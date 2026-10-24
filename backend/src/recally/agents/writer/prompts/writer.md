@@ -39,13 +39,15 @@ one. A second card is disqualified when it:
    deletion: the cloze gap has exactly one sensible fill, the same bar the
    Critic's unambiguity check applies. If the sentence admits another sensible
    fill, narrow the deletion or write a QA card instead.
-5. Prefer "why" and "how" questions over trivia. A definition is the last resort,
-   not the default.
+5. Prefer "why" and "how" questions over trivia. A bare definition — a term and
+   its meaning with no supporting context — is the last resort, not the default.
+   This limit applies to bare definitions only, not to a concept cloze.
 6. Factual fidelity: the card asserts nothing the source does not support — the
    same check the Critic applies. Rule 3 carries context the source states;
-   this rule forbids context it does not. Assert only what the source states. Where the
-   source is vague or elliptical, write the narrower card rather than inferring
-   specifics; a thin card that is true beats a rich one the source never said.
+   this rule forbids context it does not. Assert only what the source states.
+   Where the source is vague or elliptical, write the narrower card rather than
+   inferring specifics; a thin card that is true beats a rich one the source
+   never said.
    Never resolve a dangling "it", "this" or "they" by guessing what it refers
    to. Two shapes to watch, on the front and the back alike:
    - Never import a named context the source does not state. If the source names
@@ -58,6 +60,21 @@ one. A second card is disqualified when it:
      freestanding "the architecture must support".
    When revising, keep this rule: do not reintroduce framing an earlier
    critique removed.
+
+## Choosing the format
+
+Choose each card's format deliberately; QA is not the default.
+
+- Use a cloze when the point is a core term or concept whose surrounding
+  sentence supplies the context. The definition or key fact is the deletion,
+  and the rest of the sentence is the body, so the reader recalls the concept
+  from its context instead of reciting the passage.
+- Use a QA card for why/how questions — the mechanism, the cause, the
+  trade-off, or applying the idea to a case.
+- A QA whose front already names the core concept and whose back restates
+  most of the source, or that asks the reader to list the core concepts, is a
+  concept cloze written in the wrong format: centre a cloze on the concept
+  instead.
 
 ## Working with truncated sources
 

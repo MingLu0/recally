@@ -26,8 +26,9 @@ No LLM. Watch folder → adapter → dedupe → `highlights` rows with `processe
 - Card must be answerable without the book open.
 - Question context (#278): when the source or a grouped sibling supplies examples, facts or a named structure the question needs to be answerable and non-vacuous, they go in the question stem; a specific named structure is never generalized into a generic referent ("this architecture" must not become "agent architecture"). Stem context is not a second idea and not extra answer content, so it does not conflict with the one-card default.
 - Cloze cards: single deletion only (multi-deletion cards lapse more), written as one `{{c1::...}}` marker in the front. The Writer validates the marker count in code; the prompt alone will not hold it.
-- Prefer "why/how" questions over trivia.
+- Prefer "why/how" questions over trivia. The last-resort limit covers bare definitions with no supporting context, not concept clozes.
 - Factual fidelity: the card asserts nothing the source does not support — the same wording as the Critic's fifth check (§4), kept deliberately in step so the Writer is never graded on a rule it was not given (#239). Where the source is vague, write the narrower card; never import a named context the source does not state ("In onion architecture…"), and never append an unsupported clause to an otherwise grounded answer.
+- Format is chosen deliberately (#279): a cloze when the point is a core term or concept whose surrounding sentence supplies the context (the definition or key fact is the deletion, the rest of the sentence is the body); a QA for why/how mechanism and application questions.
 **Feedback loop**: prompt includes Learner-generated guidance from my review history (e.g. "cards asking for definitions lapse 40% — prefer application questions").
 
 ### 4. Critic Agent — LLM
