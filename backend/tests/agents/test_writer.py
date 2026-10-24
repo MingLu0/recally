@@ -311,6 +311,66 @@ def test_writer_prompt_renders_all_placeholders() -> None:
     assert "$" not in prompt
 
 
+# --- The #279 gate: choose cloze vs QA deliberately ------------------------
+# Cycle 3 measured the format mix collapsing (clozes 90 → 8 on the same seed)
+# and two human rejects (cards 95, 106) asked for concept clozes back. The fix
+# is prompt guidance, so these assert on the prompt as rendered through
+# DefaultWriter. The first two were confirmed red against the unedited
+# prompts/writer.md — the red output is in the PR; the third is a regression
+# guard that must pass before and after.
+
+CLOZE_RULE_TEXT = """\
+4. Cloze cards carry a single deletion only — multi-deletion cards lapse more.
+   Write the deletion as `{{c1::deleted text}}`, exactly once in the front. The
+   back repeats the deleted text. The visible text must uniquely cue the
+   deletion: the cloze gap has exactly one sensible fill, the same bar the
+   Critic's unambiguity check applies. If the sentence admits another sensible
+   fill, narrow the deletion or write a QA card instead."""
+
+
+def _normalised_prompt(fake_llm: FakeLlm) -> str:
+    """The rendered prompt lower-cased with line wraps collapsed, so phrase
+    assertions do not depend on where the prompt file breaks its lines."""
+    return " ".join(_rendered_prompt(fake_llm).split()).lower()
+
+
+def test_writer_prompt_states_format_choice() -> None:
+    """The prompt says when a cloze is the right format (a core term or concept
+    whose surrounding sentence supplies the context) and when a QA is (why/how
+    mechanism), instead of leaving the format to drift toward QA."""
+    fake_llm = FakeLlm(ONE_CARD_RESPONSE)
+    DefaultWriter()(_request(), _ctx(fake_llm))
+
+    prompt = _normalised_prompt(fake_llm)
+    assert "use a cloze when the point is a core term or concept" in prompt
+    assert "surrounding sentence supplies the context" in prompt
+    assert "use a qa card for why/how questions" in prompt
+    assert "mechanism" in prompt
+
+
+def test_writer_prompt_scopes_definition_last_resort_to_bare_definitions() -> None:
+    """The anti-definition wording covers only bare definitions with no
+    supporting context; the unscoped "a definition is the last resort" that
+    pushed the Writer away from concept clozes is gone."""
+    fake_llm = FakeLlm(ONE_CARD_RESPONSE)
+    DefaultWriter()(_request(), _ctx(fake_llm))
+
+    prompt = _normalised_prompt(fake_llm)
+    assert "a bare definition" in prompt
+    assert "no supporting context" in prompt
+    assert "not to a concept cloze" in prompt
+    assert "a definition is the last resort" not in prompt
+
+
+def test_writer_prompt_keeps_cloze_rules() -> None:
+    """The cloze rule — the single-deletion marker rule and #257's unique-fill rule —
+    survives the edit verbatim."""
+    fake_llm = FakeLlm(ONE_CARD_RESPONSE)
+    DefaultWriter()(_request(), _ctx(fake_llm))
+
+    assert CLOZE_RULE_TEXT in _rendered_prompt(fake_llm)
+
+
 # --- The #278 gate: carry source context into the question -----------------
 # Cycle-3 rejects 107, 110 and 130 had the explaining examples, the sibling fact
 # or the named structure verbatim in `curated_text`, and the Writer's question
