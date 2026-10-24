@@ -48,6 +48,10 @@ dev = [
     # The driver SQLAlchemy uses for `postgresql+psycopg://`. The `binary` extra
     # ships libpq, so nothing has to be built or linked against a system Postgres.
     "psycopg[binary]>=3.2",
+    # Dev-only YAML parser for tests/test_ci_workflow.py, which asserts the
+    # structure of .github/workflows/ci.yml by parsing it (#271). Test-only: the
+    # app never imports it, and workflows are data, not runtime input.
+    "pyyaml>=6",
 ]
 
 [build-system]

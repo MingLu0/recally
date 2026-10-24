@@ -24,7 +24,32 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # Path scoping (#271, ADR-017): on PRs and branch pushes, the expensive
+      # steps below gate on this job's filter result, so an Android-only change
+      # pays nothing but checkout + detection while the ruleset-required
+      # `backend` check still completes. v* tag pushes and workflow_dispatch
+      # runs are the release path: detection itself is skipped on those events
+      # and every gated step falls back to running unconditionally.
+      #
+      # Detection failure fails this job — there is no continue-on-error — so a
+      # broken detection can never silently select "no changes".
+      - name: Detect changed paths
+        id: changes
+        if: github.event_name == 'pull_request' || (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/'))
+        uses: dorny/paths-filter@v4
+        with:
+          # The backend-relevant set (#271): backend code, the root interpreter
+          # pin uv sync reads, and this workflow file — a CI edit must exercise
+          # both suites. PRs are diffed against the PR base via the GitHub API;
+          # branch pushes against the merge-base / previous commit via git.
+          filters: |
+            backend:
+              - 'backend/**'
+              - '.python-version'
+              - '.github/workflows/ci.yml'
+
       - name: Install uv
+        if: steps.changes.outputs.backend == 'true' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
         uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
@@ -32,29 +57,36 @@ jobs:
       # Interpreter comes from .python-version at the repo root; uv.lock is
       # committed, so --frozen installs bit-identical dependencies.
       - name: Install dependencies
+        if: steps.changes.outputs.backend == 'true' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
         run: uv sync --frozen
 
       - name: Ruff lint
+        if: steps.changes.outputs.backend == 'true' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
         run: uv run ruff check .
 
       - name: Ruff format
+        if: steps.changes.outputs.backend == 'true' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
         run: uv run ruff format --check .
 
       - name: Mypy
+        if: steps.changes.outputs.backend == 'true' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
         run: uv run mypy src/
 
       - name: Pytest
+        if: steps.changes.outputs.backend == 'true' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
         run: uv run pytest
 
       # Security scanners are CI-only (docs/backend.md, "Tooling"). Run via
       # `uvx` so they stay out of the project's locked dependency set.
       - name: Bandit
+        if: steps.changes.outputs.backend == 'true' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
         run: uvx bandit -r src/
 
       # pip-audit cannot read uv.lock directly, so export it to a fully-resolved
       # requirements file first. --disable-pip audits that list as-is instead of
       # re-resolving it in a throwaway venv.
       - name: pip-audit
+        if: steps.changes.outputs.backend == 'true' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
         run: |
           uv export --frozen --no-dev --no-emit-project -o requirements-audit.txt
           uvx pip-audit -r requirements-audit.txt --strict --disable-pip
@@ -70,6 +102,22 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # Path scoping (#271, ADR-017): same contract as the backend job — gate the
+      # expensive steps on the Android filter result for PRs and branch pushes,
+      # and fall back to running unconditionally on v* tags and workflow_dispatch.
+      # Skipped here too, so a tag push can never fail on change detection.
+      - name: Detect changed paths
+        id: changes
+        if: github.event_name == 'pull_request' || (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/'))
+        uses: dorny/paths-filter@v4
+        with:
+          # The Android-relevant set (#271): android code and this workflow file,
+          # which a shared CI edit must exercise.
+          filters: |
+            android:
+              - 'android/**'
+              - '.github/workflows/ci.yml'
+
       - name: Check for a Gradle project
         id: gradle_project
         working-directory: .
@@ -84,7 +132,7 @@ jobs:
       # AGP 8.x needs JDK 17+. Keep this in step with the Gradle toolchain
       # declared in android/app/build.gradle.kts — a mismatch fails obscurely.
       - name: Set up JDK
-        if: steps.gradle_project.outputs.present == 'true'
+        if: steps.gradle_project.outputs.present == 'true' && (steps.changes.outputs.android == 'true' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/'))
         uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -93,28 +141,28 @@ jobs:
       # Supersedes the deprecated gradle/gradle-build-action. Caching is
       # load-bearing: an uncached Compose build is slow enough to hurt.
       - name: Set up Gradle
-        if: steps.gradle_project.outputs.present == 'true'
+        if: steps.gradle_project.outputs.present == 'true' && (steps.changes.outputs.android == 'true' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/'))
         uses: gradle/actions/setup-gradle@v4
 
       - name: ktlint
-        if: steps.gradle_project.outputs.present == 'true'
+        if: steps.gradle_project.outputs.present == 'true' && (steps.changes.outputs.android == 'true' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/'))
         run: ./gradlew ktlintCheck
 
       # Android Lint is the Android-specific correctness gate (permissions,
       # resources, API level vs min SDK 26), not a type gate — Kotlin's compiler
       # already covers what mypy does for the backend.
       - name: Android Lint
-        if: steps.gradle_project.outputs.present == 'true'
+        if: steps.gradle_project.outputs.present == 'true' && (steps.changes.outputs.android == 'true' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/'))
         run: ./gradlew :app:lintDebug
 
       - name: Unit tests
-        if: steps.gradle_project.outputs.present == 'true'
+        if: steps.gradle_project.outputs.present == 'true' && (steps.changes.outputs.android == 'true' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/'))
         run: ./gradlew :app:testDebugUnitTest
 
       # Separate from the tests on purpose: Hilt's graph is validated by KSP at
       # compile time, so a test-only run can pass while the app does not build.
       - name: Assemble debug
-        if: steps.gradle_project.outputs.present == 'true'
+        if: steps.gradle_project.outputs.present == 'true' && (steps.changes.outputs.android == 'true' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/'))
         run: ./gradlew :app:assembleDebug
 
   # MVP-DIST-b (#136): build the signed debug APK and upload it to Firebase
