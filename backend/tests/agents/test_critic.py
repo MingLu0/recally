@@ -354,3 +354,59 @@ def test_critic_prompt_renders_all_placeholders() -> None:
     assert "$" not in truncated
     assert "TRUNCATION_NOTE" not in truncated
     assert "clipped" in truncated.lower()
+
+
+# --- The #280 gate: revise advice must not introduce new violations ----------
+# In the cycle-3 traces the Critic's own revise advice caused defects: card 166
+# was told to bundle two capabilities into one card and was then flagged for
+# exactly that bundling; card 110 was told to trim context the question needed.
+# The prompt constrained verdicts but not the advice behind a `revise`.
+
+
+def _revise_advice_section(prompt: str) -> str:
+    """The body of the rendered prompt's `## Revise advice` section, lowercased
+    with whitespace collapsed so a reflowed line break cannot split a phrase."""
+    marker = "## revise advice"
+    lowered = prompt.lower()
+    assert marker in lowered, "the rendered prompt has no `## Revise advice` section"
+    section_start = lowered.index(marker) + len(marker)
+    next_heading = lowered.find("\n## ", section_start)
+    section = lowered[section_start:] if next_heading == -1 else lowered[section_start:next_heading]
+    return " ".join(section.split())
+
+
+def test_critic_prompt_constrains_revise_advice() -> None:
+    """The rendered prompt states that a revise suggestion must not introduce a
+    new violation of any check (#280)."""
+    advice_section = _revise_advice_section(_rendered_gate_prompt())
+    assert "must not introduce a new violation" in advice_section
+    assert "revise" in advice_section
+
+
+def test_critic_prompt_advice_preserves_atomicity_and_context() -> None:
+    """The advice rule explicitly forbids advising two-recall bundling, stripping
+    context the question needs, and wording the source does not support (#280)."""
+    advice_section = _revise_advice_section(_rendered_gate_prompt())
+    assert "never advise bundling two recalls" in advice_section
+    assert "never advise stripping" in advice_section
+    assert "context" in advice_section
+    assert "the source does not support" in advice_section
+
+
+def test_critic_prompt_keeps_five_criteria_and_verdict_rules() -> None:
+    """The five checks and the unsalvageable-vs-rewrite distinction survive the
+    advice rule, which sits alongside them rather than replacing them (#280)."""
+    prompt = _rendered_gate_prompt()
+    lowered = prompt.lower()
+    for criterion in (
+        "atomicity",
+        "unambiguity",
+        "self-containedness",
+        "non-triviality",
+        "factual fidelity",
+    ):
+        assert criterion in lowered
+    assert "unsalvageable" in lowered
+    assert "could be rewritten" in lowered
+    for heading in ("## The five checks", "## Verdicts"):
+        assert heading in prompt
