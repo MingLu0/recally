@@ -163,7 +163,7 @@ Bottom navigation with four items: **Today, Decks, Stats, Settings**. Review and
 - Session summary at end: reviewed count, elapsed time, and the session's ratings grouped into three rows — **Good or Easy / Rated Hard / Rated Again**. Reviewed count and elapsed time are local. The rows are named by rating, never "lapses": whether an Again is a lapse depends on FSRS state the server owns (Again on a card already in `learning` is not a lapse, and a replayed rating reports `lapsed: false`), so a client-side lapse count would misname the bucket. The server-side `lapsed` flag on rate responses remains the source for the lapse figures on Stats.
 
 ### 3. Approval queue
-- Pending cards grouped by chapter, with front/back, critic critique, and all source highlights shown for context (a grouped card has several).
+- Pending cards grouped by chapter, with front/back, critic critique, and all source highlights shown for context (a grouped card has several). Expanded source highlights are labelled Source 1, Source 2, and so on, per card — the numbering restarts for every card and follows the server's export-position order.
 - Approve / edit inline / reject (with optional reason).
 - `needs_human` cards get their own **"needs you" filter chip** rather than being folded indistinguishably into the single queue — they are the cards the Writer ⇄ Critic loop could not clear, so they are opened individually and excluded from any bulk approve (hard rule 1).
 

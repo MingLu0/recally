@@ -29,6 +29,8 @@ import dev.recally.ui.theme.recallyColors
  * Source-highlight disclosure (design-system.md, "Source-highlight
  * disclosure"): collapsed by default behind "N source highlight(s)" — a
  * grouped unit carries several and they would otherwise dominate the card.
+ * Expanded, each highlight renders under a numbered "Source N" heading
+ * (issue #268), restarting at 1 for every card.
  *
  * The `truncated` flag is card-level in `GET /cards/pending` ("true if any
  * source highlight is clipped", docs/api-spec.md), so the warn chip is shown
@@ -80,12 +82,25 @@ fun HighlightDisclosure(
                 if (truncated) {
                     TruncatedChip()
                 }
-                highlights.forEach { highlight ->
-                    Text(
-                        text = highlight,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.recallyColors.inkMuted,
-                    )
+                // Numbered from 1 per card (issue #268): the labels give a long
+                // group a stable ordering cue and a source a discussable name.
+                // The label sits in the same content context as its highlight
+                // text, so the card's read-only text selection (issue #267)
+                // covers both. Input order is the display order — the
+                // repository supplies server export position.
+                highlights.forEachIndexed { index, highlight ->
+                    Column(verticalArrangement = Arrangement.spacedBy(RecallySpacing.xs)) {
+                        Text(
+                            text = "Source ${index + 1}",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.recallyColors.inkFaint,
+                        )
+                        Text(
+                            text = highlight,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.recallyColors.inkMuted,
+                        )
+                    }
                 }
             }
         }

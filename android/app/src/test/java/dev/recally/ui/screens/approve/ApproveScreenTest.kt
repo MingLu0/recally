@@ -19,9 +19,11 @@ import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.unit.DpRect
@@ -107,6 +109,31 @@ class ApproveScreenTest {
         composeTestRule.onNode(hasText("Edit") and hasClickAction()).assertIsDisplayed()
         composeTestRule.onNode(hasText("Approve") and hasClickAction()).assertIsDisplayed()
         composeTestRule.onNodeWithContentDescription("Expand critique").assertIsDisplayed()
+    }
+
+    @Test
+    fun test_source_numbering_restarts_for_each_card() {
+        val firstCard =
+            queueCard(1).copy(sourceHighlights = listOf("First alpha source.", "Second alpha source."))
+        val secondCard =
+            queueCard(2).copy(sourceHighlights = listOf("First beta source.", "Second beta source."))
+        setApproveContent(
+            ApproveUiState(
+                groups = groupIntoChapters(listOf(firstCard, secondCard)),
+                pendingCount = 2,
+                isLoading = false,
+                expandedHighlightCardIds = setOf(firstCard.id, secondCard.id),
+            ),
+        )
+
+        // Each card numbers its own sources from 1 — no global numbering
+        // across the queue. With two two-source cards expanded, "Source 1"
+        // and "Source 2" each appear once per card and "Source 3" must not
+        // exist; a global counter would number the second card's sources 3
+        // and 4 instead.
+        composeTestRule.onAllNodesWithText("Source 1").also { assertEquals(2, it.fetchSemanticsNodes().size) }
+        composeTestRule.onAllNodesWithText("Source 2").also { assertEquals(2, it.fetchSemanticsNodes().size) }
+        composeTestRule.onNodeWithText("Source 3").assertDoesNotExist()
     }
 
     @Test
