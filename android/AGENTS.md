@@ -11,6 +11,7 @@ Kotlin rules for `android/`. The cross-cutting hard rules, the doc index and the
 - Use injected dispatchers, not hard-coded `Dispatchers.IO`. Include exception handlers on coroutines.
 - Build to `docs/design/design-system.md` — colour tokens (light and dark), type scale, component specs and the required states are settled there.
 - A Compose overflow/truncation test must measure the child, not the root: a width-constrained root can never fail the assertion.
+- Debug builds point at the QA server on port `8001` (`evals.db`, key `qa-key`), never at production — and 8001 is for UI/display testing only: no real approvals or rejects through it. The port map lives in `docs/config.md`, "QA servers (evals)"; the seed/serve/extract workflow is the `recally-qa-env` skill.
 
 ## Commands
 
