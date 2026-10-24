@@ -26,9 +26,10 @@ import javax.inject.Inject
  * Requires connectivity: a network failure on load is the offline state, and
  * offline (or mid-action) approve/reject/edit are no-ops — those writes are
  * never queued, ratings are the only queued write (docs/android.md,
- * "Offline-first sync"). [approveAllClean] adds a bulk path (issue #168); it
- * sends only `pending_review` ids, and the server refuses `needs_human`
- * per card besides (hard rule 1).
+ * "Offline-first sync"). [approveAllClean] adds a bulk path (issue #168);
+ * it sends only `pending_review` ids, and the server refuses `needs_human`
+ * per card besides (hard rule 1). Since issue #266 the pill tap arms a
+ * confirmation dialog rather than calling it directly.
  */
 @HiltViewModel
 class ApproveViewModel
@@ -142,6 +143,32 @@ class ApproveViewModel
         ) = actOnCard(cardId) { approvalRepository.rejectCard(cardId, reason) }
 
         /**
+         * Pill tap: arm the confirmation dialog instead of approving (issue
+         * #266). One stray tap on "Approve N ready" approved 152 cards in a
+         * minute; the same guards that gate [approveAllClean] apply here, so
+         * the dialog cannot be armed while offline, mid-bulk, or with a card
+         * busy. Cancel ([onDismissBulkApproveConfirm]) is a pure flag clear —
+         * no repository call.
+         */
+        fun onBulkApproveClick() {
+            val snapshot = mutableUiState.value
+            if (snapshot.isOffline || snapshot.isBulkApproving || snapshot.busyCardId != null) return
+            if (!snapshot.showBulkApprove) return
+            mutableUiState.update { it.copy(showBulkApproveConfirm = true) }
+        }
+
+        /** Confirm the dialog: clear the flag, then run the bulk approve. */
+        fun onConfirmBulkApprove() {
+            mutableUiState.update { it.copy(showBulkApproveConfirm = false) }
+            approveAllClean()
+        }
+
+        /** Dismiss the dialog with no repository call (issue #266). */
+        fun onDismissBulkApproveConfirm() {
+            mutableUiState.update { it.copy(showBulkApproveConfirm = false) }
+        }
+
+        /**
          * Bulk approve every clean card in the collection (issue #168).
          *
          * Sends only `pending_review` ids: `needs_human` cards are opened
@@ -152,6 +179,10 @@ class ApproveViewModel
          * A partial failure is not an error for the action: entries that come
          * back `ok = false` stay in the queue, so one stale id cannot defeat
          * clearing the backlog.
+         *
+         * Called from the confirm dialog only (issue #266); the pill tap goes
+         * to [onBulkApproveClick] instead, so one stray tap cannot empty the
+         * queue.
          */
         fun approveAllClean() {
             val snapshot = mutableUiState.value

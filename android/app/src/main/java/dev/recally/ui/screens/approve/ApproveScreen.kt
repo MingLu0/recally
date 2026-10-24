@@ -66,9 +66,10 @@ import dev.recally.ui.theme.recallyColors
  *
  * The header carries the collection-wide "N pending" from `GET
  * /cards/pending`'s `counts` (G1, issue #132), and the floating "Approve N
- * ready" bar acts on every clean card in the collection (issue #168).
- * `needs_human` cards are excluded from it and opened individually
- * (hard rule 1).
+ * ready" bar acts on every clean card in the collection (issue #168) —
+ * behind a confirmation dialog, since one stray tap approved 152 cards
+ * (issue #266). `needs_human` cards are excluded from it and opened
+ * individually (hard rule 1).
  */
 @Composable
 fun ApproveScreen(
@@ -83,7 +84,9 @@ fun ApproveScreen(
     onOpenSettings: () -> Unit,
     onNavigateBack: () -> Unit,
     onRetry: () -> Unit,
-    onApproveAllClean: () -> Unit,
+    onBulkApproveClick: () -> Unit,
+    onConfirmBulkApprove: () -> Unit,
+    onDismissBulkApproveConfirm: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier.fillMaxSize()) {
@@ -121,10 +124,22 @@ fun ApproveScreen(
                 BulkApproveBar(
                     count = uiState.bulkApprovableCount ?: 0,
                     enabled = !uiState.isOffline && !uiState.isBulkApproving && uiState.busyCardId == null,
-                    onApproveAllClean = onApproveAllClean,
+                    onBulkApproveClick = onBulkApproveClick,
                     modifier = Modifier.align(Alignment.BottomCenter),
                 )
             }
+        }
+
+        // Issue #266: the pill tap arms this dialog instead of approving —
+        // one stray tap approved 152 cards. Confirm runs the bulk approve;
+        // cancel (or the backdrop) dismisses with no repository call.
+        if (uiState.showBulkApproveConfirm) {
+            BulkApproveConfirmDialog(
+                count = uiState.bulkApprovableCount ?: 0,
+                approveEnabled = !uiState.isOffline && !uiState.isBulkApproving && uiState.busyCardId == null,
+                onConfirm = onConfirmBulkApprove,
+                onDismiss = onDismissBulkApproveConfirm,
+            )
         }
 
         uiState.errorMessage?.let { message ->
@@ -155,7 +170,7 @@ fun ApproveScreen(
 private fun BulkApproveBar(
     count: Int,
     enabled: Boolean,
-    onApproveAllClean: () -> Unit,
+    onBulkApproveClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = MaterialTheme.recallyColors
@@ -180,7 +195,7 @@ private fun BulkApproveBar(
                     .testTag(BULK_APPROVE_PILL_TAG)
                     .clip(RoundedCornerShape(RecallyRadius.md))
                     .background(if (enabled) colors.primary else colors.primaryMuted)
-                    .clickable(enabled = enabled, onClick = onApproveAllClean),
+                    .clickable(enabled = enabled, onClick = onBulkApproveClick),
         ) {
             Text(
                 text = "Approve $count ready",
@@ -190,6 +205,51 @@ private fun BulkApproveBar(
             )
         }
     }
+}
+
+/**
+ * The confirmation gate in front of bulk approve (issue #266): a stray tap on
+ * the pill approved 152 cards in eval-r3, so the tap now ends here. The title
+ * carries the exact count — the scale is the point of the dialog. `needs_human`
+ * cards stay excluded, exactly as the pill's own action excludes them
+ * (hard rule 1). The Approve button keeps the pill's guards: offline,
+ * mid-bulk, or a busy card disables it, and [ApproveViewModel.approveAllClean]
+ * re-checks them anyway.
+ */
+@Composable
+private fun BulkApproveConfirmDialog(
+    count: Int,
+    approveEnabled: Boolean,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Approve all $count cards?") },
+        text = {
+            Text(
+                "Every ready card enters FSRS review. " +
+                    "Needs-you cards stay in the queue for individual review.",
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm, enabled = approveEnabled) {
+                Text(
+                    text = "Approve",
+                    color =
+                        if (approveEnabled) {
+                            MaterialTheme.recallyColors.primary
+                        } else {
+                            MaterialTheme.recallyColors.inkFaint
+                        },
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        },
+        modifier = Modifier.testTag(BULK_APPROVE_CONFIRM_DIALOG_TAG),
+    )
 }
 
 @Composable
@@ -782,6 +842,7 @@ private val BULK_BAR_HEIGHT = RecallySpacing.md + BULK_BAR_PILL_HEIGHT + Recally
 internal const val QUEUE_LIST_TAG = "approveQueueList"
 internal const val BULK_APPROVE_BAR_TAG = "bulkApproveBar"
 internal const val BULK_APPROVE_PILL_TAG = "bulkApprovePill"
+internal const val BULK_APPROVE_CONFIRM_DIALOG_TAG = "bulkApproveConfirmDialog"
 
 // --- Previews (docs/android.md, "Every previewable composable has a preview") ---
 
@@ -849,7 +910,9 @@ private fun ApproveScreenPreviewHost(uiState: ApproveUiState) {
             onOpenSettings = {},
             onNavigateBack = {},
             onRetry = {},
-            onApproveAllClean = {},
+            onBulkApproveClick = {},
+            onConfirmBulkApprove = {},
+            onDismissBulkApproveConfirm = {},
         )
     }
 }
@@ -903,5 +966,19 @@ private fun ApproveScreenLoadingPreview() {
 private fun ApproveScreenOfflinePreview() {
     ApproveScreenPreviewHost(
         uiState = sampleLoadedState.copy(isOffline = true),
+    )
+}
+
+@CombinedPreviews
+@Composable
+private fun ApproveScreenBulkConfirmPreview() {
+    // The dialog names the scale: "Approve all 1 cards?" here, one per clean
+    // card in the sample (issue #266).
+    ApproveScreenPreviewHost(
+        uiState =
+            sampleLoadedState.copy(
+                bulkApprovableCount = 1,
+                showBulkApproveConfirm = true,
+            ),
     )
 }
