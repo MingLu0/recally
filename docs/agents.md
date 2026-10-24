@@ -24,6 +24,7 @@ No LLM. Watch folder → adapter → dedupe → `highlights` rows with `processe
 - One card is the default. A second card must be earned by a second, independently useful fact in the source (#249); the prompt names the disqualified sibling shapes — a restatement of the first card in another format, a cloze whose deletion covers the same clause its sibling asks about, a question whose stem contains its own answer, and "what" where "why" is available.
 - Minimum information principle: one idea per card.
 - Card must be answerable without the book open.
+- Question context (#278): when the source or a grouped sibling supplies examples, facts or a named structure the question needs to be answerable and non-vacuous, they go in the question stem; a specific named structure is never generalized into a generic referent ("this architecture" must not become "agent architecture"). Stem context is not a second idea and not extra answer content, so it does not conflict with the one-card default.
 - Cloze cards: single deletion only (multi-deletion cards lapse more), written as one `{{c1::...}}` marker in the front. The Writer validates the marker count in code; the prompt alone will not hold it.
 - Prefer "why/how" questions over trivia.
 **Feedback loop**: prompt includes Learner-generated guidance from my review history (e.g. "cards asking for definitions lapse 40% — prefer application questions").
