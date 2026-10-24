@@ -8,7 +8,7 @@ is scored at its explicit client `rated_at`.
 """
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import ColumnElement, or_, select
 from sqlalchemy.orm import Session
@@ -361,4 +361,4 @@ def _as_naive_utc(value: datetime) -> datetime:
     """The client timestamp as naive UTC, matching what the `DateTime` columns store."""
     if value.tzinfo is None:
         return value
-    return value.astimezone(timezone.utc).replace(tzinfo=None)
+    return value.astimezone(UTC).replace(tzinfo=None)
