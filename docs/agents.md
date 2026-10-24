@@ -26,6 +26,7 @@ No LLM. Watch folder → adapter → dedupe → `highlights` rows with `processe
 - Card must be answerable without the book open.
 - Cloze cards: single deletion only (multi-deletion cards lapse more), written as one `{{c1::...}}` marker in the front. The Writer validates the marker count in code; the prompt alone will not hold it.
 - Prefer "why/how" questions over trivia.
+- Factual fidelity: the card asserts nothing the source does not support — the same wording as the Critic's fifth check (§4), kept deliberately in step so the Writer is never graded on a rule it was not given (#239). Where the source is vague, write the narrower card; never import a named context the source does not state ("In onion architecture…"), and never append an unsupported clause to an otherwise grounded answer.
 **Feedback loop**: prompt includes Learner-generated guidance from my review history (e.g. "cards asking for definitions lapse 40% — prefer application questions").
 
 ### 4. Critic Agent — LLM

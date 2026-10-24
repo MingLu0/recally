@@ -7,12 +7,15 @@ are not dead code.
 """
 
 from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from recally.agents import critic as critic_package
+from recally.agents import writer as writer_package
 from recally.agents.base import (
     AgentContext,
     CardDraft,
@@ -118,3 +121,18 @@ def test_conforming_stub_satisfies_protocol(ctx: AgentContext) -> None:
         ctx,
     )
     assert learner_result.guidance is None
+
+
+FIDELITY_CONTRACT = "asserts nothing the source does not support"
+
+
+def test_writer_and_critic_prompts_both_name_fidelity() -> None:
+    """The Writer is told the fidelity rule the Critic grades it on, in the same
+    words (#239). The two prompt files are a contract: when only the Critic
+    stated it, 69% of rework cited a rule the Writer was never given."""
+    writer_prompt = (Path(writer_package.__file__).parent / "prompts" / "writer.md").read_text()
+    critic_prompt = (Path(critic_package.__file__).parent / "prompts" / "critic.md").read_text()
+
+    for prompt_text in (writer_prompt, critic_prompt):
+        assert "factual fidelity" in prompt_text.lower()
+        assert FIDELITY_CONTRACT in " ".join(prompt_text.split())

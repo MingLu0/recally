@@ -309,3 +309,37 @@ def test_writer_prompt_renders_all_placeholders() -> None:
     assert CURATED_TEXT in prompt
     assert CRITIQUE_TEXT in prompt
     assert "$" not in prompt
+
+
+# --- The #239 gate: the Writer is told the fidelity rule the Critic grades ---
+# 69% of revise/reject critiques in the 2026-09-12 run cited fidelity, a check
+# `critic.md` enforces and `writer.md` never stated. The first test was
+# confirmed red against the unedited prompts/writer.md (red output in the PR);
+# the second is a regression guard that passes before and after.
+
+
+def test_writer_prompt_states_the_fidelity_rule() -> None:
+    """The rendered prompt carries the fidelity rule in the Critic's wording, and
+    names both cycle-3 shapes: an imported context on the front and an
+    unsupported clause appended to an otherwise grounded answer."""
+    fake_llm = FakeLlm(ONE_CARD_RESPONSE)
+    DefaultWriter()(_request(), _ctx(fake_llm))
+
+    prompt = _rendered_prompt(fake_llm).lower()
+    assert "factual fidelity" in prompt
+    assert "asserts nothing the source does not support" in prompt
+    assert "narrower card" in prompt
+    assert "dangling" in prompt
+    assert "never import a named context" in prompt
+    assert "never append a clause" in prompt
+
+
+def test_writer_prompt_keeps_the_truncation_rule() -> None:
+    """The hard-rule-7 section survives the edit (regression guard)."""
+    fake_llm = FakeLlm(ONE_CARD_RESPONSE)
+    DefaultWriter()(_request(), _ctx(fake_llm))
+
+    prompt = _rendered_prompt(fake_llm)
+    assert "## Working with truncated sources" in prompt
+    assert "You must never reconstruct, complete, or extend clipped" in prompt
+    assert "Work only\nfrom the text as given" in prompt
