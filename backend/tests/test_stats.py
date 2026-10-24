@@ -12,7 +12,7 @@ during learning is not one. The tests pin that definition.
 
 import uuid
 from collections.abc import Iterator
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -75,7 +75,7 @@ def client(container: Container, monkeypatch: pytest.MonkeyPatch) -> Iterator[Te
 
 def _utc(local_dt: datetime) -> datetime:
     """A naive-UTC stamp for an Auckland wall-clock time, as the columns store it."""
-    return local_dt.replace(tzinfo=AKL).astimezone(timezone.utc).replace(tzinfo=None)
+    return local_dt.replace(tzinfo=AKL).astimezone(UTC).replace(tzinfo=None)
 
 
 def _local(day_offset: int, hour: int, minute: int = 0) -> datetime:

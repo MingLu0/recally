@@ -8,7 +8,7 @@ so a whole response fails to map. [UtcDatetime] is the single place that adds
 the offset back on the way out.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Annotated
 
 from pydantic import PlainSerializer
@@ -16,11 +16,7 @@ from pydantic import PlainSerializer
 
 def _to_utc_z(value: datetime) -> str:
     """Render as RFC 3339 UTC. A naive value is assumed to already be UTC."""
-    as_utc = (
-        value.replace(tzinfo=timezone.utc)
-        if value.tzinfo is None
-        else value.astimezone(timezone.utc)
-    )
+    as_utc = value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
     return as_utc.isoformat().replace("+00:00", "Z")
 
 

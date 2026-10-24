@@ -27,7 +27,7 @@ Conventions:
 """
 
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import or_, select
@@ -67,7 +67,7 @@ class StatsSummary:
 
 def _local_day(instant_utc: datetime, tz: ZoneInfo) -> date:
     """The local calendar day a stored naive instant falls on."""
-    return instant_utc.replace(tzinfo=timezone.utc).astimezone(tz).date()
+    return instant_utc.replace(tzinfo=UTC).astimezone(tz).date()
 
 
 def _is_lapse(log: ReviewLog) -> bool:

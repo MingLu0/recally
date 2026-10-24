@@ -17,7 +17,7 @@ Structural rules from `docs/backend.md` and ADR-007. Verify these in any backend
 
 ## Conventions
 
-- Python ≥ 3.10 (required by `py-fsrs` 6.x). FastAPI, SQLAlchemy, Alembic, `py-fsrs`, LiteLLM, APScheduler 3.x (not 4.x pre-release), `watchdog`. "py-fsrs" is the GitHub repo name; it publishes to PyPI as **`fsrs`**, so `pyproject.toml` declares `fsrs>=6,<7` and the import is `from fsrs import ...`. Declaring `py-fsrs` fails resolution. Keep saying "py-fsrs" in prose to match the docs.
+- Python ≥ 3.11 (floor set by filelock 4.x, the pip-audit-clean line; `py-fsrs` 6.x itself requires only 3.10). FastAPI, SQLAlchemy, Alembic, `py-fsrs`, LiteLLM, APScheduler 3.x (not 4.x pre-release), `watchdog`. "py-fsrs" is the GitHub repo name; it publishes to PyPI as **`fsrs`**, so `pyproject.toml` declares `fsrs>=6,<7` and the import is `from fsrs import ...`. Declaring `py-fsrs` fails resolution. Keep saying "py-fsrs" in prose to match the docs.
 - Each agent is a module with one LLM call, a prompt file, and typed structured input/output. Keep prompts in files, not inline strings.
 - Ingestion adapters implement `BaseAdapter.parse(file) -> list[NormalizedHighlight]`. Add new sources (Kindle) as new adapters, never by special-casing the pipeline.
 - `truncated` is a property of a `highlights` row. Units and cards do not store it; derive "any source highlight truncated" when needed.

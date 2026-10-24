@@ -16,7 +16,7 @@ Build order and per-step gates are in `docs/roadmap.md`; what is built is what t
 ## Repo layout
 
 ```
-backend/    FastAPI backend + agent pipeline (Python ≥ 3.10)
+backend/    FastAPI backend + agent pipeline (Python ≥ 3.11)
 android/    Android app (Kotlin, Jetpack Compose, Material 3, min SDK 26)
 data/       local SQLite db + ingest drop zone (gitignored, never commit)
 docs/       product & engineering docs (source of truth for design)
