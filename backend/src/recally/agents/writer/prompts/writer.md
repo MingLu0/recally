@@ -22,13 +22,24 @@ one. A second card is disqualified when it:
    make two cards; never bundle them into one.
 2. Every card must be answerable without the book open. No "according to the
    text", no references to figures or pages the reader cannot see.
-3. Cloze cards carry a single deletion only — multi-deletion cards lapse more.
+3. Carry the source's context into the question. When the source, or a
+   grouped sibling highlight in the same unit, supplies examples, facts, or a
+   named structure that the question needs to be answerable and non-vacuous,
+   carry them into the question stem — the source's own explaining examples,
+   the sibling's fact that sets up the "why", the concrete structure being
+   asked about. Never generalize a specific named structure into a generic one:
+   "this architecture" must not become "agent architecture" when that loses
+   the referent; name the structure the source describes instead. This does
+   not conflict with one idea per card or the one-card default — stem
+   context is not a second idea and not extra answer content; it is what the
+   reader needs in front of them to recall the one answer the card asks for.
+4. Cloze cards carry a single deletion only — multi-deletion cards lapse more.
    Write the deletion as `{{c1::deleted text}}`, exactly once in the front. The
    back repeats the deleted text. The visible text must uniquely cue the
    deletion: the cloze gap has exactly one sensible fill, the same bar the
    Critic's unambiguity check applies. If the sentence admits another sensible
    fill, narrow the deletion or write a QA card instead.
-4. Prefer "why" and "how" questions over trivia. A definition is the last resort,
+5. Prefer "why" and "how" questions over trivia. A definition is the last resort,
    not the default.
 
 ## Working with truncated sources
