@@ -492,14 +492,17 @@ def test_writer_prompt_keeps_one_card_default() -> None:
 
 
 def test_writer_prompt_keeps_card_rules_and_placeholders() -> None:
-    """The one-card default, unique cloze fill, single-deletion rule and the
-    truncated-source rule survive, and every placeholder still substitutes."""
+    """The one-card default, unique cloze fill, question-context rule,
+    fidelity rule, single-deletion rule and the truncated-source rule survive,
+    and every placeholder still substitutes."""
     fake_llm = FakeLlm(ONE_CARD_RESPONSE)
     DefaultWriter()(_request(critique=CRITIQUE_TEXT), _ctx(fake_llm))
 
     prompt = _rendered_prompt(fake_llm)
     assert "one card is the default" in prompt.lower()
     assert "exactly one sensible fill" in prompt
+    assert "Carry the source's context into the question" in prompt
+    assert "asserts nothing the source does not support" in prompt
     assert "single deletion" in prompt
     assert "exactly once in the front" in prompt
     assert "never reconstruct" in prompt.lower()
@@ -508,3 +511,42 @@ def test_writer_prompt_keeps_card_rules_and_placeholders() -> None:
     assert CURATED_TEXT in prompt
     assert CRITIQUE_TEXT in prompt
     assert "$" not in prompt
+
+
+# --- The #292 gate: answer structure — summary sentence first ---------------
+# Cycle-4 traces: cards 82, 84 and 90 were all accepted by the Critic at round
+# 1, yet each packed the summary and its examples into one dense back — the
+# Writer had no answer-layout rule and neither does the Critic. The fix is
+# prompt guidance, so these assert on the prompt as rendered through
+# DefaultWriter. The first two were confirmed red against the unedited
+# prompts/writer.md — the red output is in the PR; the third is a regression
+# guard that must pass before and after.
+
+
+def test_writer_prompt_states_summary_first_answer_structure() -> None:
+    """The back opens with one short sentence stating the core claim or
+    difference, and the supporting examples and details follow it."""
+    fake_llm = FakeLlm(ONE_CARD_RESPONSE)
+    DefaultWriter()(_request(), _ctx(fake_llm))
+
+    prompt = " ".join(_rendered_prompt(fake_llm).lower().split())
+    assert (
+        "open the back with one short sentence that states the core claim or difference" in prompt
+    )
+    assert "supporting examples and details" in prompt
+    assert prompt.index("one short sentence") < prompt.index("supporting examples and details")
+
+
+def test_writer_prompt_summary_is_the_recall_target() -> None:
+    """The summary sentence is the recall target and the examples are support,
+    not additional recalls — the rule must not bend one idea per card or the
+    cloze rules."""
+    fake_llm = FakeLlm(ONE_CARD_RESPONSE)
+    DefaultWriter()(_request(), _ctx(fake_llm))
+
+    prompt = " ".join(_rendered_prompt(fake_llm).lower().split())
+    assert "the summary sentence is the recall target" in prompt
+    assert "support for that recall" in prompt
+    assert "not additional recalls" in prompt
+    assert "one idea per card" in prompt
+    assert "cloze rules" in prompt

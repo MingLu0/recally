@@ -70,6 +70,12 @@ A second card is disqualified when it:
      freestanding "the architecture must support".
    When revising, keep this rule: do not reintroduce framing an earlier
    critique removed.
+7. Answer structure: open the back with one short sentence that states the
+   core claim or difference, then give the supporting examples and details.
+   The summary sentence is the recall target — the reader who recalls it has
+   answered the card. The examples are support for that recall, not
+   additional recalls of their own, so this rule does not bend one idea per
+   card or the cloze rules.
 
 ## Choosing the format
 
