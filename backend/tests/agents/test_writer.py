@@ -441,6 +441,56 @@ def test_writer_prompt_forbids_generalizing_named_structure() -> None:
     assert '"this architecture" must not become "agent architecture"' in prompt
 
 
+# --- The #293 gate: cover every distinct card-worthy concept ---------------
+# Cycle-4 trace analysis found omissions the Critic accepted at round 1 (card
+# 93: a "Crucially, ..." highlight left uncarded; cards 115/116: the source's
+# State/Role/Status trio got State and Status cards but no Role card). The
+# writer.md told the Writer how many cards to make, never that every distinct
+# card-worthy concept gets a card or an explicit skip reason. The fix is
+# prompt guidance, so these assert on the prompt as rendered through
+# DefaultWriter. All three were confirmed red against the unedited
+# prompts/writer.md — the red output is in the PR.
+
+
+def test_writer_prompt_states_the_coverage_rule() -> None:
+    """The rendered prompt requires every distinct card-worthy concept to be
+    covered or explicitly skipped with a reason: a valuable concept left
+    uncarded is a miss, not a save."""
+    fake_llm = FakeLlm(ONE_CARD_RESPONSE)
+    DefaultWriter()(_request(), _ctx(fake_llm))
+
+    prompt = _normalised_prompt(fake_llm)
+    assert "distinct card-worthy concept" in prompt
+    assert "a card or an explicit skip reason" in prompt
+    assert "a miss, not a save" in prompt
+
+
+def test_writer_prompt_coverage_is_not_fanout() -> None:
+    """Coverage never means restating the same concept: a second concept earns
+    a card only when it is independently worth recalling, and the disqualified
+    sibling shapes from #249 survive."""
+    fake_llm = FakeLlm(ONE_CARD_RESPONSE)
+    DefaultWriter()(_request(), _ctx(fake_llm))
+
+    prompt = _normalised_prompt(fake_llm)
+    assert "coverage is not fan-out" in prompt
+    assert "never as a restatement" in prompt
+    assert "restates the first" in prompt
+    assert "another format" in prompt
+
+
+def test_writer_prompt_keeps_one_card_default() -> None:
+    """The coverage rule does not retire the one-card default: the prompt still
+    calls one card the default, and the default still governs single-idea
+    units."""
+    fake_llm = FakeLlm(ONE_CARD_RESPONSE)
+    DefaultWriter()(_request(), _ctx(fake_llm))
+
+    prompt = _normalised_prompt(fake_llm)
+    assert "distinct card-worthy concept" in prompt
+    assert "one card is the default" in prompt
+
+
 def test_writer_prompt_keeps_card_rules_and_placeholders() -> None:
     """The one-card default, unique cloze fill, single-deletion rule and the
     truncated-source rule survive, and every placeholder still substitutes."""
