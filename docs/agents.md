@@ -22,6 +22,7 @@ No LLM. Watch folder → adapter → dedupe → `highlights` rows with `processe
 **Output**: 1–3 cards, each `{type: qa|cloze, front, back, rationale}`, stamped with `guidance_version`.
 **Rules** (enforced via prompt):
 - One card is the default. A second card must be earned by a second, independently useful fact in the source (#249); the prompt names the disqualified sibling shapes — a restatement of the first card in another format, a cloze whose deletion covers the same clause its sibling asks about, a question whose stem contains its own answer, and "what" where "why" is available.
+- Coverage (#293): when a unit holds several distinct card-worthy concepts, each gets a card or an explicit skip reason — a valuable concept left uncarded is a miss, not a save. Coverage is not fan-out: a second concept earns a card only when it is independently worth recalling, never as a restatement, and the one-card default still governs single-idea units.
 - Minimum information principle: one idea per card.
 - Card must be answerable without the book open.
 - Question context (#278): when the source or a grouped sibling supplies examples, facts or a named structure the question needs to be answerable and non-vacuous, they go in the question stem; a specific named structure is never generalized into a generic referent ("this architecture" must not become "agent architecture"). Stem context is not a second idea and not extra answer content, so it does not conflict with the one-card default.
