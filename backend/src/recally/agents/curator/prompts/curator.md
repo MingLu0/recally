@@ -29,6 +29,15 @@ You have four jobs:
      batch. Pairing changes membership, never text: never add content, never
      extend a truncated row, and never use the sibling to complete the clipped
      text. Job 3 applies to every row of a group unchanged.
+   - **Flagged duplicates.** A highlight with a non-null `duplicate_of` repeats
+     the text of the highlight it names — the same passage highlighted twice,
+     found by an exact text check after ignoring case, punctuation and
+     whitespace. Put it in the same unit as the highlight it names and treat the
+     pair as **one** source: `curated_text` carries the passage once, from the
+     fuller row, never both copies. A duplicate never adds material to a group,
+     so it never justifies folding in anything else; the coherence test below
+     counts the pair as a single member. If the duplicate is clipped, job 3
+     still flags it.
    **Coherence test (bounds every group).** Before you group highlights, state
    to yourself the one proposition they share, in a single sentence that each
    member directly supports. Adjacency in export order is not evidence, and
@@ -72,9 +81,14 @@ The user message is a JSON object:
 {
   "book_title": "...",
   "chapter": "... or null",
-  "highlights": [{"id": 1, "text": "...", "personal_note": "... or null"}]
+  "highlights": [
+    {"id": 1, "text": "...", "personal_note": "... or null", "duplicate_of": "id or null"}
+  ]
 }
 ```
+
+`duplicate_of` is set by a deterministic text check, not a guess: when it is
+non-null, the two rows are the same passage (job 2, "Flagged duplicates").
 
 `personal_note` is the reader's own note on the highlight; treat it as a strong
 signal of what the reader found valuable.
