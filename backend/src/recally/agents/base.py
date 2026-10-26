@@ -47,11 +47,16 @@ class HighlightInput:
 
     `text` may be clipped mid-word; the Curator flags such rows via
     `truncated_highlight_ids` rather than reconstructing them (hard rule 7).
+
+    `duplicate_of` names the fuller highlight in the same chapter whose text this
+    one repeats under a different annotation UUID, as the runner detected it
+    lexically (`near_duplicates.py`, #291). A flag for the Curator, never a merge.
     """
 
     id: int
     text: str
     personal_note: str | None
+    duplicate_of: int | None = None
 
 
 @dataclass(frozen=True)

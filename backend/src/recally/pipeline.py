@@ -90,6 +90,7 @@ from recally.models import (
     WriterGuidance,
 )
 from recally.models.base import utc_now
+from recally.near_duplicates import find_near_duplicates
 
 logger = logging.getLogger(__name__)
 
@@ -699,12 +700,20 @@ def _resolve_chapter(
     main-thread commit because the session sets `expire_on_commit=False` (`db.py`).
     """
     curator, context = _agent_context("curator", registry, settings, llm_caller, ingest_run_id)
+    # Text-level duplicates under different UUIDs are flagged, not merged: the
+    # Curator decides, and its units record what it did with each pair (#291).
+    duplicate_of = find_near_duplicates(
+        [(highlight.id, highlight.raw_text) for highlight in highlights]
+    )
     request = CuratorRequest(
         book_title=book_title,
         chapter=chapter,
         highlights=[
             HighlightInput(
-                id=highlight.id, text=highlight.raw_text, personal_note=highlight.personal_note
+                id=highlight.id,
+                text=highlight.raw_text,
+                personal_note=highlight.personal_note,
+                duplicate_of=duplicate_of.get(highlight.id),
             )
             for highlight in highlights
         ],
