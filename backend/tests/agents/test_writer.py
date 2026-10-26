@@ -441,15 +441,68 @@ def test_writer_prompt_forbids_generalizing_named_structure() -> None:
     assert '"this architecture" must not become "agent architecture"' in prompt
 
 
+# --- The #293 gate: cover every distinct card-worthy concept ---------------
+# Cycle-4 trace analysis found omissions the Critic accepted at round 1 (card
+# 93: a "Crucially, ..." highlight left uncarded; cards 115/116: the source's
+# State/Role/Status trio got State and Status cards but no Role card). The
+# writer.md told the Writer how many cards to make, never that every distinct
+# card-worthy concept gets a card or an explicit skip reason. The fix is
+# prompt guidance, so these assert on the prompt as rendered through
+# DefaultWriter. All three were confirmed red against the unedited
+# prompts/writer.md — the red output is in the PR.
+
+
+def test_writer_prompt_states_the_coverage_rule() -> None:
+    """The rendered prompt requires every distinct card-worthy concept to be
+    covered or explicitly skipped with a reason: a valuable concept left
+    uncarded is a miss, not a save."""
+    fake_llm = FakeLlm(ONE_CARD_RESPONSE)
+    DefaultWriter()(_request(), _ctx(fake_llm))
+
+    prompt = _normalised_prompt(fake_llm)
+    assert "distinct card-worthy concept" in prompt
+    assert "a card or an explicit skip reason" in prompt
+    assert "a miss, not a save" in prompt
+
+
+def test_writer_prompt_coverage_is_not_fanout() -> None:
+    """Coverage never means restating the same concept: a second concept earns
+    a card only when it is independently worth recalling, and the disqualified
+    sibling shapes from #249 survive."""
+    fake_llm = FakeLlm(ONE_CARD_RESPONSE)
+    DefaultWriter()(_request(), _ctx(fake_llm))
+
+    prompt = _normalised_prompt(fake_llm)
+    assert "coverage is not fan-out" in prompt
+    assert "never as a restatement" in prompt
+    assert "restates the first" in prompt
+    assert "another format" in prompt
+
+
+def test_writer_prompt_keeps_one_card_default() -> None:
+    """The coverage rule does not retire the one-card default: the prompt still
+    calls one card the default, and the default still governs single-idea
+    units."""
+    fake_llm = FakeLlm(ONE_CARD_RESPONSE)
+    DefaultWriter()(_request(), _ctx(fake_llm))
+
+    prompt = _normalised_prompt(fake_llm)
+    assert "distinct card-worthy concept" in prompt
+    assert "one card is the default" in prompt
+
+
 def test_writer_prompt_keeps_card_rules_and_placeholders() -> None:
-    """The one-card default, unique cloze fill, single-deletion rule and the
-    truncated-source rule survive, and every placeholder still substitutes."""
+    """The one-card default, unique cloze fill, question-context rule,
+    fidelity rule, single-deletion rule and the truncated-source rule survive,
+    and every placeholder still substitutes."""
     fake_llm = FakeLlm(ONE_CARD_RESPONSE)
     DefaultWriter()(_request(critique=CRITIQUE_TEXT), _ctx(fake_llm))
 
     prompt = _rendered_prompt(fake_llm)
     assert "one card is the default" in prompt.lower()
     assert "exactly one sensible fill" in prompt
+    assert "Carry the source's context into the question" in prompt
+    assert "asserts nothing the source does not support" in prompt
     assert "single deletion" in prompt
     assert "exactly once in the front" in prompt
     assert "never reconstruct" in prompt.lower()
@@ -458,3 +511,42 @@ def test_writer_prompt_keeps_card_rules_and_placeholders() -> None:
     assert CURATED_TEXT in prompt
     assert CRITIQUE_TEXT in prompt
     assert "$" not in prompt
+
+
+# --- The #292 gate: answer structure — summary sentence first ---------------
+# Cycle-4 traces: cards 82, 84 and 90 were all accepted by the Critic at round
+# 1, yet each packed the summary and its examples into one dense back — the
+# Writer had no answer-layout rule and neither does the Critic. The fix is
+# prompt guidance, so these assert on the prompt as rendered through
+# DefaultWriter. The first two were confirmed red against the unedited
+# prompts/writer.md — the red output is in the PR; the third is a regression
+# guard that must pass before and after.
+
+
+def test_writer_prompt_states_summary_first_answer_structure() -> None:
+    """The back opens with one short sentence stating the core claim or
+    difference, and the supporting examples and details follow it."""
+    fake_llm = FakeLlm(ONE_CARD_RESPONSE)
+    DefaultWriter()(_request(), _ctx(fake_llm))
+
+    prompt = " ".join(_rendered_prompt(fake_llm).lower().split())
+    assert (
+        "open the back with one short sentence that states the core claim or difference" in prompt
+    )
+    assert "supporting examples and details" in prompt
+    assert prompt.index("one short sentence") < prompt.index("supporting examples and details")
+
+
+def test_writer_prompt_summary_is_the_recall_target() -> None:
+    """The summary sentence is the recall target and the examples are support,
+    not additional recalls — the rule must not bend one idea per card or the
+    cloze rules."""
+    fake_llm = FakeLlm(ONE_CARD_RESPONSE)
+    DefaultWriter()(_request(), _ctx(fake_llm))
+
+    prompt = " ".join(_rendered_prompt(fake_llm).lower().split())
+    assert "the summary sentence is the recall target" in prompt
+    assert "support for that recall" in prompt
+    assert "not additional recalls" in prompt
+    assert "one idea per card" in prompt
+    assert "cloze rules" in prompt

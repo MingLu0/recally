@@ -30,6 +30,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.height
@@ -76,6 +77,14 @@ import kotlin.math.roundToInt
  * selection context `SelectionContainer` installs — see the test for why the
  * semantics `TextSelectionRange` itself is not assertable under Robolectric)
  * and the wrapper must not swallow the disclosure toggle or the card actions.
+ *
+ * The issue #288 block guards the per-card decisions: neither Approve nor
+ * Reject reaches its callback from the initial action tap — a confirmation
+ * dialog sits in front of each, explaining the scheduling consequence (and
+ * for Reject, collecting the optional Learner reason). The reject-dialog
+ * tests carry a height-only qualifier to dodge robolectric#8460, the open
+ * Robolectric freeze on a text field inside a dialog window wider than
+ * 320dp — a test-runner workaround, not a production behaviour.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -175,6 +184,8 @@ class ApproveScreenTest {
      * Issue #267: wrapping the card text in a `SelectionContainer` must not
      * swallow the interactions around it — the source-highlight disclosure
      * still toggles and the Approve action still raises its card-id callback.
+     * Since issue #288 Approve is confirm-gated, so the wrapper must let the
+     * confirmation dialog through too; confirming there is what fires.
      */
     @Test
     fun test_text_selection_preserves_card_actions_and_source_toggle() {
@@ -190,7 +201,10 @@ class ApproveScreenTest {
         composeTestRule.onNodeWithText("1 source highlight").performClick()
         assertEquals("disclosure tap must still toggle", card.id, toggledCardId)
 
-        composeTestRule.onNode(hasText("Approve") and hasClickAction()).performClick()
+        composeTestRule.onNode(approveActionInQueue()).performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNode(approveConfirmButton()).performClick()
+        composeTestRule.waitForIdle()
         assertEquals("approve action must still fire", card.id, approvedCardId)
     }
 
@@ -326,7 +340,12 @@ class ApproveScreenTest {
             lastApproveAction.getBoundsInRoot().bottom <= barTop,
         )
 
+        // Issue #288: the action arms a confirmation dialog; confirming it is
+        // what approves the card.
         lastApproveAction.performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNode(approveConfirmButton()).performClick()
+        composeTestRule.waitForIdle()
         assertEquals(cards.last().id, approvedCardId)
     }
 
@@ -490,6 +509,189 @@ class ApproveScreenTest {
         }
     }
 
+    // --- Issue #288: individual approve and reject are confirmed and explained ---
+
+    /**
+     * Negative: the first tap on a card's Approve action arms the confirmation
+     * dialog and emits no approve callback — for a `pending_review` card and
+     * for an individually opened `needs_human` card alike.
+     */
+    @Test
+    fun test_individual_approve_tap_shows_confirmation_without_approving() {
+        val pendingCard = queueCard(1)
+        val needsHumanCard = queueCard(2).copy(status = PendingCard.STATUS_NEEDS_HUMAN)
+        val approvedIds = mutableListOf<Long>()
+        setApproveContent(
+            queueState(listOf(pendingCard, needsHumanCard), bulkApprovableCount = null),
+            onApproveCard = { approvedIds += it },
+        )
+
+        // Both Approve actions live in the queue list; the dialog's own
+        // Approve button is not a descendant of it.
+        val approveActions = composeTestRule.onAllNodes(approveActionInQueue())
+        assertEquals(2, approveActions.fetchSemanticsNodes().size)
+
+        approveActions[0].performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag(APPROVE_CONFIRM_DIALOG_TAG).assertIsDisplayed()
+        composeTestRule.onNodeWithText("Approve card?").assertIsDisplayed()
+        assertEquals("the tap alone must never approve (negative)", emptyList<Long>(), approvedIds)
+
+        composeTestRule.onNodeWithText("Cancel").performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag(APPROVE_CONFIRM_DIALOG_TAG).assertDoesNotExist()
+
+        composeTestRule.onAllNodes(approveActionInQueue())[1].performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag(APPROVE_CONFIRM_DIALOG_TAG).assertIsDisplayed()
+        assertEquals("needs_human approve is gated the same way (negative)", emptyList<Long>(), approvedIds)
+    }
+
+    @Test
+    fun test_approve_dialog_explains_that_card_enters_review_schedule() {
+        val card = queueCard(1)
+        setApproveContent(queueState(listOf(card), bulkApprovableCount = null))
+
+        composeTestRule.onNode(approveActionInQueue()).performClick()
+        composeTestRule.waitForIdle()
+
+        // The consequence copy, not just the title and buttons.
+        composeTestRule
+            .onNodeWithText(
+                "Approve this card and add it to your review schedule. " +
+                    "You can edit or suspend it later from Decks.",
+            ).assertIsDisplayed()
+    }
+
+    @Test
+    fun test_individual_approve_confirm_calls_approve_once() {
+        val card = queueCard(1)
+        val approvedIds = mutableListOf<Long>()
+        setApproveContent(
+            queueState(listOf(card), bulkApprovableCount = null),
+            onApproveCard = { approvedIds += it },
+        )
+
+        composeTestRule.onNode(approveActionInQueue()).performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag(APPROVE_CONFIRM_DIALOG_TAG).assertIsDisplayed()
+
+        composeTestRule.onNode(approveConfirmButton()).performClick()
+        composeTestRule.waitForIdle()
+
+        assertEquals("confirm approves exactly once", listOf(card.id), approvedIds)
+        composeTestRule.onNodeWithTag(APPROVE_CONFIRM_DIALOG_TAG).assertDoesNotExist()
+    }
+
+    /**
+     * Negative: Cancel dismisses with no approve callback and the queue
+     * untouched. (The literal scrim tap is not simulated: Robolectric wraps
+     * the dialog window to its content bounds, so there is no in-window
+     * backdrop to tap. Backdrop and back dismissal route through the same
+     * `onDismissRequest` this dialog wires to its dismiss handler.)
+     */
+    @Test
+    fun test_individual_approve_cancel_dismisses_without_approving() {
+        val card = queueCard(1)
+        val approvedIds = mutableListOf<Long>()
+        setApproveContent(
+            queueState(listOf(card), bulkApprovableCount = null),
+            onApproveCard = { approvedIds += it },
+        )
+
+        composeTestRule.onNode(approveActionInQueue()).performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag(APPROVE_CONFIRM_DIALOG_TAG).assertIsDisplayed()
+
+        // Cancel dismisses with no mutation and the queue untouched.
+        composeTestRule.onNodeWithText("Cancel").performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag(APPROVE_CONFIRM_DIALOG_TAG).assertDoesNotExist()
+        assertEquals("cancel must not approve (negative)", emptyList<Long>(), approvedIds)
+        composeTestRule.onNode(hasText("Question 1", substring = true)).assertIsDisplayed()
+    }
+
+    /**
+     * Robolectric freezes a text field inside a platform-width dialog when the
+     * window is wider than 320dp (robolectric/robolectric#8460 — still open),
+     * so the reject-dialog tests, the only ones that compose the reason field,
+     * drop the class's w411dp and keep the phone height. This is a
+     * test-runner workaround; production is unaffected.
+     */
+    @Config(qualifiers = "h891dp")
+    @Test
+    fun test_reject_dialog_explains_rejection_and_keeps_reason_optional() {
+        val card = queueCard(1)
+        setApproveContent(queueState(listOf(card), bulkApprovableCount = null))
+
+        composeTestRule.onNode(hasText("Reject") and hasClickAction()).performClick()
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag(REJECT_DIALOG_TAG).assertIsDisplayed()
+        composeTestRule.onNodeWithText("Reject card?").assertIsDisplayed()
+        composeTestRule
+            .onNodeWithText(
+                "The card will be marked rejected and removed from this queue. " +
+                    "It will not enter your review schedule. " +
+                    "Your optional reason helps the Learner improve future cards.",
+            ).assertIsDisplayed()
+        // The reason field remains optional — its label still says so, and
+        // the blank-field confirm path is exercised in
+        // test_reject_confirm_calls_reject_with_optional_reason.
+        composeTestRule.onNodeWithText("Reason (optional — feeds the Learner)").assertIsDisplayed()
+    }
+
+    /** See [test_reject_dialog_explains_rejection_and_keeps_reason_optional] for the qualifier. */
+    @Config(qualifiers = "h891dp")
+    @Test
+    fun test_reject_confirm_calls_reject_with_optional_reason() {
+        val card = queueCard(1)
+        val rejections = mutableListOf<Pair<Long, String?>>()
+        setApproveContent(
+            queueState(listOf(card), bulkApprovableCount = null),
+            onRejectCard = { id, reason -> rejections += id to reason },
+        )
+
+        // An entered reason reaches the callback for the right card.
+        composeTestRule.onNode(hasText("Reject") and hasClickAction()).performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithText("Reason (optional — feeds the Learner)").performTextInput("too trivial")
+        composeTestRule.onNode(rejectConfirmButton()).performClick()
+        composeTestRule.waitForIdle()
+        assertEquals(listOf(card.id to "too trivial"), rejections)
+
+        // A blank field follows the existing null/no-reason path.
+        composeTestRule.onNode(hasText("Reject") and hasClickAction()).performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNode(rejectConfirmButton()).performClick()
+        composeTestRule.waitForIdle()
+        assertEquals(listOf(card.id to "too trivial", card.id to null), rejections)
+    }
+
+    /** See [test_reject_dialog_explains_rejection_and_keeps_reason_optional] for the qualifier. */
+    @Config(qualifiers = "h891dp")
+    @Test
+    fun test_reject_cancel_dismisses_without_rejecting() {
+        val card = queueCard(1)
+        val rejections = mutableListOf<Pair<Long, String?>>()
+        setApproveContent(
+            queueState(listOf(card), bulkApprovableCount = null),
+            onRejectCard = { id, reason -> rejections += id to reason },
+        )
+
+        composeTestRule.onNode(hasText("Reject") and hasClickAction()).performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag(REJECT_DIALOG_TAG).assertIsDisplayed()
+        composeTestRule.onNodeWithText("Reject card?").assertIsDisplayed()
+
+        composeTestRule.onNodeWithText("Cancel").performClick()
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag(REJECT_DIALOG_TAG).assertDoesNotExist()
+        assertEquals("cancel must not reject (negative)", emptyList<Pair<Long, String?>>(), rejections)
+        composeTestRule.onNode(hasText("Question 1", substring = true)).assertIsDisplayed()
+    }
+
     // --- helpers ---
 
     private fun queueCard(id: Long): PendingCard =
@@ -517,6 +719,20 @@ class ApproveScreenTest {
         bulkApprovableCount = bulkApprovableCount,
     )
 
+    /** A card's Approve action row — a descendant of the queue list, unlike the dialog's own Approve button. */
+    private fun approveActionInQueue(): SemanticsMatcher =
+        hasText("Approve") and hasClickAction() and hasAnyAncestor(hasTestTagValue(QUEUE_LIST_TAG))
+
+    /** The individual-approve dialog's confirm button. */
+    private fun approveConfirmButton(): SemanticsMatcher =
+        hasText("Approve") and hasClickAction() and hasAnyAncestor(hasTestTagValue(APPROVE_CONFIRM_DIALOG_TAG))
+
+    /** The reject dialog's danger-styled confirm button. */
+    private fun rejectConfirmButton(): SemanticsMatcher =
+        hasText("Reject") and hasClickAction() and hasAnyAncestor(hasTestTagValue(REJECT_DIALOG_TAG))
+
+    private fun hasTestTagValue(tag: String): SemanticsMatcher = SemanticsMatcher.expectValue(SemanticsProperties.TestTag, tag)
+
     /**
      * Renders the screen the way production does: inside the app's Scaffold,
      * whose container paints the page `ground` (see AppScaffold). [readState]
@@ -530,6 +746,7 @@ class ApproveScreenTest {
         onApproveCard: (Long) -> Unit = {},
         onStartEdit: (Long) -> Unit = {},
         onEditCard: (Long, String, String) -> Unit = { _, _, _ -> },
+        onRejectCard: (Long, String?) -> Unit = { _, _ -> },
         onBulkApproveClick: () -> Unit = {},
         onConfirmBulkApprove: () -> Unit = {},
         onDismissBulkApproveConfirm: () -> Unit = {},
@@ -547,7 +764,7 @@ class ApproveScreenTest {
                         onStartEdit = onStartEdit,
                         onDismissEdit = {},
                         onEditCard = onEditCard,
-                        onRejectCard = { _, _ -> },
+                        onRejectCard = onRejectCard,
                         onOpenSettings = {},
                         onNavigateBack = {},
                         onRetry = {},

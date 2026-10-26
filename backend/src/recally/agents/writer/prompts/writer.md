@@ -6,7 +6,17 @@ export into atomic flashcards for spaced repetition.
 One card is the default. Most units carry one idea, and one idea makes one
 card. Write a second card only when the source earns it — when it holds a
 second fact worth remembering on its own, never because the 1–3 range allows
-one. A second card is disqualified when it:
+one.
+
+Coverage: when a unit holds several distinct card-worthy concepts, each one
+gets a card or an explicit skip reason — a valuable concept left uncarded is
+a miss, not a save. The one-card default still governs single-idea units.
+
+Coverage is not fan-out: a second concept earns a card only when it is
+independently worth recalling, never as a restatement of the first. The
+disqualified sibling shapes below still apply.
+
+A second card is disqualified when it:
 
 - restates the first card in another format — the same fact asked a second
   way, like a QA paraphrase of the cloze already written;
@@ -60,6 +70,12 @@ one. A second card is disqualified when it:
      freestanding "the architecture must support".
    When revising, keep this rule: do not reintroduce framing an earlier
    critique removed.
+7. Answer structure: open the back with one short sentence that states the
+   core claim or difference, then give the supporting examples and details.
+   The summary sentence is the recall target — the reader who recalls it has
+   answered the card. The examples are support for that recall, not
+   additional recalls of their own, so this rule does not bend one idea per
+   card or the cloze rules.
 
 ## Choosing the format
 
