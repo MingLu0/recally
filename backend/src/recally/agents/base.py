@@ -113,7 +113,9 @@ class WriterRequest:
 
     `guidance_version`/`guidance` are None before the Learner has produced its first
     guidance row. `critique` carries the previous round's Critic feedback when this
-    call is a revision; the round cap lives in the runner, not here (hard rule 9).
+    call is a revision, and `previous_draft` the card that critique judged — the
+    Writer edits that card rather than re-drafting from the unit text (#304). Both
+    are None on round 1. The round cap lives in the runner, not here (hard rule 9).
     """
 
     curated_text: str
@@ -121,6 +123,7 @@ class WriterRequest:
     guidance_version: int | None
     guidance: str | None
     critique: str | None
+    previous_draft: CardDraft | None = None
 
 
 @dataclass(frozen=True)
