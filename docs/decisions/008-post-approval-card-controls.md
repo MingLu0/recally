@@ -1,6 +1,6 @@
 # ADR-008: Post-approval card edits keep FSRS state; suspend and bury are separate
 
-**Status**: accepted
+**Status**: accepted, amended by [018](018-pre-approval-edits-are-saved-without-approval.md)
 **Date**: 2026-09-06
 
 ## Context

@@ -2,6 +2,7 @@ package dev.recally.data.repository
 
 import dev.recally.data.remote.ApproveBatchRequest
 import dev.recally.data.remote.ApproveCardRequest
+import dev.recally.data.remote.EditCardRequest
 import dev.recally.data.remote.RecallyApi
 import dev.recally.data.remote.RejectCardRequest
 import dev.recally.data.remote.apiCall
@@ -30,13 +31,20 @@ class ApprovalRepositoryImpl
                 apiCall { api.pendingCards().toDomain() }
             }
 
-        override suspend fun approveCard(
+        override suspend fun approveCard(cardId: Long): Result<Unit> =
+            withContext(ioDispatcher) {
+                // The Retrofit boundary keeps the server's optional
+                // approve-with-edits payload; the app sends it empty.
+                apiCall { api.approveCard(cardId, ApproveCardRequest()) }.toUnit()
+            }
+
+        override suspend fun saveCard(
             cardId: Long,
-            front: String?,
-            back: String?,
+            front: String,
+            back: String,
         ): Result<Unit> =
             withContext(ioDispatcher) {
-                apiCall { api.approveCard(cardId, ApproveCardRequest(front = front, back = back)) }.toUnit()
+                apiCall { api.editCard(cardId, EditCardRequest(front = front, back = back)) }.toUnit()
             }
 
         override suspend fun approveBatch(cardIds: List<Long>): Result<List<ApproveBatchResult>> =

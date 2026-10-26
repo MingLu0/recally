@@ -64,7 +64,7 @@ PK (`unit_id`, `highlight_id`). Gives every card full provenance back to each so
 | id | PK | |
 | unit_id | FK curated_units | provenance; source highlights via `curated_unit_highlights` |
 | type | text | `qa` / `cloze` |
-| front | text | current text (may be human-edited at approval) |
+| front | text | current text (may be human-edited in the queue via `PATCH`, or at approval) |
 | back | text | |
 | original_front | text | Writer output as accepted by the Critic; never changed |
 | original_back | text | |
@@ -73,7 +73,7 @@ PK (`unit_id`, `highlight_id`). Gives every card full provenance back to each so
 | status_reason | text, nullable | critic critique, human rejection reason, or `superseded by <id>` (feeds the Learner) |
 | supersedes_card_id | int, nullable FK cards | set only on a Learner-driven leech rewrite: the approved card it replaces. Approving the rewrite sets that card `rejected` with `status_reason="superseded by <id>"`; a column rather than the string alone because approve receives only the rewrite's id and needs the lookup. NULL for every ordinary card (docs/agents.md §7) |
 | approved_at | datetime, nullable | when the human approved; `card_state` is created at the same time |
-| edited_at | datetime, nullable | last post-approval `PATCH` of `front`/`back`/`tags`. FSRS state is untouched by an edit; the timestamp lets the Learner segment hand-fixed cards so they do not flatter the `guidance_version` that wrote the flawed original (ADR-008) |
+| edited_at | datetime, nullable | last **post-approval** `PATCH` of `front`/`back`/`tags`. FSRS state is untouched by an edit; the timestamp lets the Learner segment hand-fixed cards so they do not flatter the `guidance_version` that wrote the flawed original (ADR-008). A pre-approval save of a queued card does not set it — pre-approval edits are read through `original_front`/`original_back` vs `front`/`back` (ADR-018) |
 | suspended_until | datetime, nullable | NULL = in rotation. Bury sets the next day boundary in `RECALLY_TIMEZONE`; suspend sets a far-future sentinel. `GET /reviews/due` excludes any card whose value is in the future; FSRS state is never recomputed (ADR-008) |
 | generation_rounds | int | Writer⇄Critic rounds used for this card (per card, not per unit) |
 | draft_index | int, nullable | which draft of the unit's round-1 Writer call (0, 1, 2) this card resolved from; its Critic and revision-Writer calls carry the same `llm_calls.draft_index`, so `(unit_id, draft_index)` joins a card to its own loop. Null for a leech rewrite (its calls carry the leech's `card_id`) and for cards written before the column existed |

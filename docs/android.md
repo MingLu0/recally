@@ -165,7 +165,7 @@ Bottom navigation with four items: **Today, Decks, Stats, Settings**. Review and
 ### 3. Approval queue
 - Pending cards grouped by chapter, with front/back, critic critique, and all source highlights shown for context (a grouped card has several). Expanded source highlights are labelled Source 1, Source 2, and so on, per card — the numbering restarts for every card and follows the server's export-position order.
 - Read-only card text — badges, front/back or rendered cloze, critique, and the source-highlight disclosure — supports long-press text selection and copying, so exact wording can be lifted into an edit or a note about a bad generation. The Reject / Edit / Approve row, reject dialog, and inline editor sit outside the selection context; collapsed highlights stay collapsed until expanded (issue #267).
-- Approve / edit inline / reject (with optional reason).
+- Approve / edit inline / reject (with optional reason). **Save is distinct from Approve** (issue #287, ADR-018): the inline editor's Save calls `PATCH /cards/{id}`, updates the wording and keeps the card queued; only Approve decides the card and enters it into FSRS.
 - `needs_human` cards get their own **"needs you" filter chip** rather than being folded indistinguishably into the single queue — they are the cards the Writer ⇄ Critic loop could not clear, so they are opened individually and excluded from any bulk approve (hard rule 1).
 
 ### 4. Decks
@@ -189,7 +189,7 @@ Every screen and the endpoints behind it. Kept here so a gap between this doc an
 |---|---|
 | Today | `GET /reviews/due` (counts), `GET /stats` (streak), `GET /cards/pending` (collection-wide queue `counts` for the approval tiles; silent when unreachable), `GET /decks` (the "Your books" rail; silent when unreachable) |
 | Review session | `GET /reviews/due`, `POST /reviews/{id}/rate`, `POST /reviews/rate-batch` (outbox flush), `PATCH /cards/{id}` (edit), `POST /cards/{id}/bury` |
-| Approval queue | `GET /cards/pending`, `POST /cards/{id}/approve`, `POST /cards/{id}/reject` |
+| Approval queue | `GET /cards/pending`, `PATCH /cards/{id}` (save inline edits), `POST /cards/{id}/approve`, `POST /cards/{id}/reject` |
 | Decks | `GET /decks`, `GET /decks/{book_id}/cards`, `PATCH /cards/{id}`, `POST /cards/{id}/suspend`, `POST /cards/{id}/unsuspend`, `POST /ingest` (import tile) |
 | Stats | `GET /stats` |
 | Settings | `GET /health/auth` (connection test); `POST /devices` on token refresh |

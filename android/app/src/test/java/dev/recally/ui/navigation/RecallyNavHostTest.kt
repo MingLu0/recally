@@ -337,11 +337,13 @@ class RecallyNavHostTest {
     private class FakeApprovalRepository : ApprovalRepository {
         override suspend fun pendingCards(): Result<PendingQueue> = Result.NetworkError(IOException("no route to host"))
 
-        override suspend fun approveCard(
+        override suspend fun approveCard(cardId: Long): Result<Unit> = throw UnsupportedOperationException("Today never approves cards")
+
+        override suspend fun saveCard(
             cardId: Long,
-            front: String?,
-            back: String?,
-        ): Result<Unit> = throw UnsupportedOperationException("Today never approves cards")
+            front: String,
+            back: String,
+        ): Result<Unit> = throw UnsupportedOperationException("Today never saves card edits")
 
         override suspend fun rejectCard(
             cardId: Long,

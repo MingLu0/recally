@@ -756,7 +756,7 @@ private fun ActionCell(
     }
 }
 
-/** Edit inline, then approve with the edits (docs/api-spec.md, `POST /cards/{id}/approve`). */
+/** Edit inline and save without approving — Save keeps the card queued (issue #287, `PATCH /cards/{id}`). */
 @Composable
 private fun InlineEditor(
     card: PendingCard,
@@ -789,7 +789,7 @@ private fun InlineEditor(
                 onClick = { onSave(editedFront, editedBack) },
                 enabled = enabled && editedFront.isNotBlank(),
             ) {
-                Text("Save & approve", color = MaterialTheme.recallyColors.primary)
+                Text("Save", color = MaterialTheme.recallyColors.primary)
             }
         }
     }

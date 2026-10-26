@@ -96,6 +96,8 @@ Items are validated individually, not by the request schema, so one malformed it
 
 ### POST /cards/{id}/approve
 Optional edits: `{ "front": "...", "back": "..." }` → status `approved`, `approved_at` set, `card_state` row created (enters FSRS). Edits overwrite `front`/`back`; `original_front`/`original_back` keep the Writer's text for the Learner.
+
+The optional edits payload is a compatibility path for existing callers; the app's approval queue does not use it. Its inline editor saves wording through `PATCH /cards/{id}` and approves the saved text with a bodyless call (issue #287, ADR-018) — Save and Approve are separate intents, and only Approve decides the card.
 **Response**: the updated card (same shape as `PATCH /cards/{id}` below), so the client can update its cache.
 
 ### POST /cards/approve-batch
@@ -122,16 +124,30 @@ There is deliberately no bulk reject: a rejection carries a reason that feeds th
 `{ "reason": "..." }` → status `rejected`. Reasons feed the Learner.
 **Response**: the updated card (same shape as `PATCH /cards/{id}` below).
 
-## Approved-card controls
+## Card edits
 
-These act on cards already past the approval gate. They are deterministic, involve no LLM call, and never change `cards.status` — an edited, buried or suspended card is still `approved`. See ADR-008.
+`PATCH /cards/{id}` saves a wording edit. It is deterministic, involves no LLM
+call, and never changes `cards.status` — on a queued card it is a save, not a
+decision (issue #287, ADR-018). See ADR-008 for the approved-card semantics.
 
 ### PATCH /cards/{id}
-Fix the wording of an approved card. Body carries any of `front`, `back`, `tags`; omitted fields are left alone.
+Body carries any of `front`, `back`, `tags`; omitted fields are left alone.
 ```json
 { "front": "Why evaluate traces rather than individual steps?" }
 ```
-FSRS state is **untouched** — stability, difficulty, `due` and `step` all survive, because an edit is a correction to the same retrieval task, not a new card. Sets `edited_at`. `original_front`/`original_back` still hold the Writer's text and are not affected. 409 if the card is not `approved`: edits before approval belong to `POST /cards/{id}/approve`, which is the hard-rule-1 gate.
+On a queued card (`pending_review`/`needs_human`) the supplied fields are
+updated and everything else is preserved: `status`, `approved_at`,
+`status_reason`, `original_front`/`original_back` (the Writer's text, kept for
+the Learner) and `edited_at` (the post-approval edit signal — a pre-approval
+save does not set it). No `card_state` row is created and the card stays absent
+from `GET /reviews/due` until approved; the collection-wide `counts` on
+`GET /cards/pending` are unchanged. 404 for an unknown card; 409 for a decided
+card other than `approved` (for example `rejected`).
+
+On an `approved` card (ADR-008) the same body fixes the wording of a card in
+rotation: FSRS state is **untouched** — stability, difficulty, `due` and `step`
+all survive, because an edit is a correction to the same retrieval task, not a
+new card — and `edited_at` is set so the Learner can segment hand-fixed cards.
 **Response**: the updated card.
 ```json
 {
@@ -144,6 +160,10 @@ FSRS state is **untouched** — stability, difficulty, `due` and `step` all surv
   "approved_at": "2026-09-05T19:22:00Z"
 }
 ```
+
+## Approved-card controls
+
+These act on cards already past the approval gate. They are deterministic, involve no LLM call, and never change `cards.status` — a buried or suspended card is still `approved`. See ADR-008.
 
 ### POST /cards/{id}/bury
 Hide the card for the rest of the day. Sets `suspended_until` to the next day boundary in `RECALLY_TIMEZONE`, so it clears itself with no action from the user. Use for "not right now" instead of a dishonest rating, which would corrupt `review_logs`.

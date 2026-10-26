@@ -127,14 +127,44 @@ class ApproveViewModel
         fun approveCard(cardId: Long) = actOnCard(cardId) { approvalRepository.approveCard(cardId) }
 
         /**
-         * Edit inline, then approve with the edits — edits before approval
-         * belong to the approve endpoint, not `PATCH` (docs/api-spec.md).
+         * Save inline edits without deciding the card (issue #287, ADR-018):
+         * `PATCH /cards/{id}` updates the wording and the card stays queued —
+         * status, counts and FSRS state are untouched. A successful Save
+         * rewrites the card's text in place and closes the editor; a failed
+         * Save leaves the editor open with the input intact and surfaces the
+         * error. Only [approveCard] and [rejectCard] remove the card.
          */
         fun editCard(
             cardId: Long,
             front: String,
             back: String,
-        ) = actOnCard(cardId) { approvalRepository.approveCard(cardId, front, back) }
+        ) {
+            val snapshot = mutableUiState.value
+            if (snapshot.isOffline || snapshot.busyCardId != null) return
+            viewModelScope.launch(exceptionHandler) {
+                mutableUiState.update { it.copy(busyCardId = cardId, errorMessage = null) }
+                val result =
+                    withContext(ioDispatcher) { approvalRepository.saveCard(cardId, front, back) }
+                mutableUiState.update {
+                    when (result) {
+                        is Result.Success ->
+                            it.copy(
+                                groups = updateCardText(it.groups, cardId, front, back),
+                                busyCardId = null,
+                                editingCardId = null,
+                            )
+                        Result.Unauthorized ->
+                            it.copy(busyCardId = null, isUnauthorized = true)
+                        is Result.NetworkError ->
+                            it.copy(busyCardId = null, isOffline = true)
+                        is Result.HttpError ->
+                            it.copy(busyCardId = null, errorMessage = result.detail ?: MESSAGE_GENERIC)
+                        is Result.UnexpectedError ->
+                            it.copy(busyCardId = null, errorMessage = result.displayMessage())
+                    }
+                }
+            }
+        }
 
         /** Reject one card; the reason is optional (docs/android.md). */
         fun rejectCard(
@@ -273,6 +303,22 @@ class ApproveViewModel
 
         private companion object {
             const val MESSAGE_GENERIC = "Something went wrong — try again."
+
+            /** Rewrites the card's text in place; the card stays queued. */
+            fun updateCardText(
+                groups: List<ChapterGroup>,
+                cardId: Long,
+                front: String,
+                back: String,
+            ): List<ChapterGroup> =
+                groups.map { group ->
+                    group.copy(
+                        cards =
+                            group.cards.map { card ->
+                                if (card.id == cardId) card.copy(front = front, back = back) else card
+                            },
+                    )
+                }
 
             /** Drops the card and any group it leaves empty. */
             fun removeCard(
