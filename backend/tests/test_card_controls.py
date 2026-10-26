@@ -1,15 +1,17 @@
 """The step 3d gate: ADR-008 approved-card controls.
 
-`PATCH /cards/{id}` edits an approved card without touching its FSRS state (an edit
-is a correction to the same retrieval task, not a new card); bury/suspend/unsuspend
-move `cards.suspended_until` and nothing else. None of the four endpoints changes
-`cards.status` or makes an LLM call.
+`PATCH /cards/{id}` edits a card without touching its FSRS state (an edit
+is a correction to the same retrieval task, not a new card); bury/suspend/
+unsuspend move `cards.suspended_until` and nothing else. None of the four
+endpoints changes `cards.status` or makes an LLM call.
 
-`/reviews/due` is 3b's endpoint (#77) and does not exist yet, so the "absent from
-due" halves assert through `GET /decks`' due count, which applies the same ADR-008
-predicate (`services/decks.py`), and through the service's `now` parameter for the
-post-boundary cases. 3b's endpoint reuses that predicate; the substitution is named
-in the PR per the ticket's substitution rule.
+Since issue #287 (ADR-018) `PATCH` also saves the wording of a queued card
+(`pending_review`/`needs_human`) without approving it: status, `approved_at`,
+`status_reason`, the Writer's originals and `edited_at` all survive, and no
+`card_state` row is created. The pre-approval tests below assert absence
+from `/reviews/due` directly; the older ADR-008 tests keep asserting through
+`GET /decks`' due count (the same predicate) and through the service's `now`
+parameter for the post-boundary cases.
 """
 
 from collections.abc import Iterator
@@ -220,31 +222,160 @@ def test_patch_leaves_every_card_state_column_identical(
         assert before[column] == after[column], f"card_state.{column} changed across an edit"
 
 
-def test_patch_on_pending_review_card_returns_409(client: TestClient, container: Container) -> None:
-    """Hard rule 1's boundary: edits before approval belong to POST /cards/{id}/approve."""
+def test_patch_saves_pending_review_edits_without_approving(
+    client: TestClient, container: Container
+) -> None:
+    """Save ≠ approve (issue #287, ADR-018): the queued card's wording changes,
+    its status does not. Replaces `test_patch_on_pending_review_card_returns_409`,
+    whose 409 assertion this ticket deliberately reverses."""
     with container.session() as session:
         book = _add_book(session)
         card = _add_card(session, book.id, status="pending_review")
         session.commit()
         card_id = card.id
 
-    response = client.patch(f"/cards/{card_id}", json={"front": "Edited"}, headers=AUTH)
+    response = client.patch(
+        f"/cards/{card_id}", json={"front": "Edited front", "back": "Edited back"}, headers=AUTH
+    )
 
-    assert response.status_code == 409
-    assert response.json()["status"] == 409
+    assert response.status_code == 200
+    body = response.json()
+    assert body["front"] == "Edited front"
+    assert body["back"] == "Edited back"
+    assert body["status"] == "pending_review"
+    assert body["approved_at"] is None
+    with container.session() as session:
+        persisted = session.get(Card, card_id)
+        assert persisted is not None
+        assert persisted.status == "pending_review"
+        assert persisted.approved_at is None
 
 
-def test_patch_on_needs_human_card_returns_409(client: TestClient, container: Container) -> None:
+def test_patch_saves_needs_human_edits_without_approving(
+    client: TestClient, container: Container
+) -> None:
+    """The same contract for `needs_human`, including its `status_reason`
+    (the Critic critique stays for the next review). Replaces
+    `test_patch_on_needs_human_card_returns_409`."""
+    critique = "Critic: potentially ambiguous term; Writer 3 rounds unresolved."
     with container.session() as session:
         book = _add_book(session)
         card = _add_card(session, book.id, status="needs_human")
+        card.status_reason = critique
         session.commit()
         card_id = card.id
 
-    response = client.patch(f"/cards/{card_id}", json={"front": "Edited"}, headers=AUTH)
+    response = client.patch(f"/cards/{card_id}", json={"front": "Edited front"}, headers=AUTH)
 
-    assert response.status_code == 409
-    assert response.json()["status"] == 409
+    assert response.status_code == 200
+    body = response.json()
+    assert body["front"] == "Edited front"
+    assert body["status"] == "needs_human"
+    assert body["status_reason"] == critique
+    assert body["approved_at"] is None
+    with container.session() as session:
+        persisted = session.get(Card, card_id)
+        assert persisted is not None
+        assert persisted.status == "needs_human"
+        assert persisted.status_reason == critique
+        assert persisted.approved_at is None
+
+
+def test_preapproval_patch_never_creates_card_state(
+    client: TestClient, container: Container
+) -> None:
+    """Negative: hard rule 1 is untouched — Save alone never enters FSRS, so
+    no `card_state` row exists and the card is absent from `/reviews/due`."""
+    with container.session() as session:
+        book = _add_book(session)
+        card = _add_card(session, book.id, status="pending_review")
+        session.commit()
+        card_id = card.id
+
+    response = client.patch(f"/cards/{card_id}", json={"front": "Edited front"}, headers=AUTH)
+
+    assert response.status_code == 200
+    with container.session() as session:
+        assert session.get(CardState, card_id) is None, "Save alone must not create FSRS state"
+    due = client.get("/reviews/due", headers=AUTH).json()
+    assert card_id not in [due_card["id"] for due_card in due["cards"]]
+    assert due["due_count"] == 0
+
+
+def test_preapproval_patch_preserves_original_text_and_leaves_edited_at_null(
+    client: TestClient, container: Container
+) -> None:
+    """The Writer's text survives for the Learner, and `edited_at` stays the
+    distinct post-approval edit signal — a pre-approval save must not set it."""
+    with container.session() as session:
+        book = _add_book(session)
+        card = _add_card(session, book.id, status="pending_review")
+        session.commit()
+        card_id = card.id
+
+    response = client.patch(
+        f"/cards/{card_id}", json={"front": "Edited front", "back": "Edited back"}, headers=AUTH
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["original_front"] == FRONT
+    assert body["original_back"] == BACK
+    assert body["edited_at"] is None
+    with container.session() as session:
+        persisted = session.get(Card, card_id)
+        assert persisted is not None
+        assert persisted.original_front == FRONT
+        assert persisted.original_back == BACK
+        assert persisted.edited_at is None
+
+
+def test_saved_edits_appear_in_pending_queue(client: TestClient, container: Container) -> None:
+    """A pre-approval save is visible on the next queue fetch, and the
+    collection-wide counts are unchanged — Save is not a decision."""
+    with container.session() as session:
+        book = _add_book(session)
+        card = _add_card(session, book.id, status="pending_review")
+        session.commit()
+        card_id = card.id
+
+    before = client.get("/cards/pending", headers=AUTH).json()
+    response = client.patch(f"/cards/{card_id}", json={"front": "Edited front"}, headers=AUTH)
+    assert response.status_code == 200
+
+    after = client.get("/cards/pending", headers=AUTH).json()
+    saved = next(card for card in after["cards"] if card["id"] == card_id)
+    assert saved["front"] == "Edited front"
+    assert after["counts"] == before["counts"]
+
+
+def test_approve_after_saved_edits_uses_saved_text_and_enters_fsrs(
+    client: TestClient, container: Container
+) -> None:
+    """The saved text is what approval enters into FSRS: a later bodyless
+    Approve keeps it, stamps `approved_at` and creates exactly one
+    learning/step-0 `card_state` row."""
+    with container.session() as session:
+        book = _add_book(session)
+        card = _add_card(session, book.id, status="pending_review")
+        session.commit()
+        card_id = card.id
+
+    saved = client.patch(
+        f"/cards/{card_id}", json={"front": "Edited front", "back": "Edited back"}, headers=AUTH
+    )
+    assert saved.status_code == 200
+
+    approved = client.post(f"/cards/{card_id}/approve", headers=AUTH)
+
+    assert approved.status_code == 200
+    assert approved.json()["front"] == "Edited front"
+    assert approved.json()["approved_at"] is not None
+    with container.session() as session:
+        state = session.get(CardState, card_id)
+        assert state is not None
+        assert state.state == "learning"
+        assert state.step == 0
 
 
 def test_patch_does_not_touch_original_front_back(client: TestClient, container: Container) -> None:

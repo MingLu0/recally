@@ -40,6 +40,7 @@ import dev.recally.ui.theme.DarkRecallyColorTokens
 import dev.recally.ui.theme.LightRecallyColorTokens
 import dev.recally.ui.theme.RecallyTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -191,6 +192,57 @@ class ApproveScreenTest {
 
         composeTestRule.onNode(hasText("Approve") and hasClickAction()).performClick()
         assertEquals("approve action must still fire", card.id, approvedCardId)
+    }
+
+    @Test
+    fun test_inline_editor_shows_save_not_save_and_approve() {
+        // Issue #287: saving and deciding are separate intents. The inline
+        // editor's action is "Save" — it keeps the card queued — and the old
+        // combined save-and-approve label is gone. The forbidden label is
+        // assembled so the tree-wide grep for it (the ticket's Done-when
+        // check) matches only a real regression, not this test.
+        val combinedLabel = listOf("Save", "& approve").joinToString(" ")
+        val card = queueCard(1)
+        var state by mutableStateOf(queueState(listOf(card), bulkApprovableCount = null))
+        setApproveContent(
+            state,
+            onStartEdit = { state = state.copy(editingCardId = it) },
+            readState = { state },
+        )
+
+        composeTestRule.onNode(hasText("Edit") and hasClickAction()).performClick()
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithText(combinedLabel).assertDoesNotExist()
+        composeTestRule.onNode(hasText("Save") and hasClickAction()).assertIsDisplayed()
+    }
+
+    @Test
+    fun test_save_callback_does_not_invoke_approve_callback() {
+        // Negative: tapping Save in the inline editor emits only the save
+        // callback — the approve callback never fires (issue #287).
+        val card = queueCard(1)
+        var state by mutableStateOf(queueState(listOf(card), bulkApprovableCount = null))
+        val edits = mutableListOf<Triple<Long, String, String>>()
+        var approvedCardId: Long? = null
+        setApproveContent(
+            state,
+            onStartEdit = { state = state.copy(editingCardId = it) },
+            onEditCard = { id, front, back ->
+                edits += Triple(id, front, back)
+                state = state.copy(editingCardId = null)
+            },
+            onApproveCard = { approvedCardId = it },
+            readState = { state },
+        )
+
+        composeTestRule.onNode(hasText("Edit") and hasClickAction()).performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNode(hasText("Save") and hasClickAction()).performClick()
+        composeTestRule.waitForIdle()
+
+        assertEquals("save fired once with the card id and its text", listOf(Triple(card.id, card.front, card.back)), edits)
+        assertNull("tapping Save must never invoke the approve callback (negative)", approvedCardId)
     }
 
     @Test
@@ -476,6 +528,8 @@ class ApproveScreenTest {
         darkTheme: Boolean = false,
         onToggleHighlights: (Long) -> Unit = {},
         onApproveCard: (Long) -> Unit = {},
+        onStartEdit: (Long) -> Unit = {},
+        onEditCard: (Long, String, String) -> Unit = { _, _, _ -> },
         onBulkApproveClick: () -> Unit = {},
         onConfirmBulkApprove: () -> Unit = {},
         onDismissBulkApproveConfirm: () -> Unit = {},
@@ -490,9 +544,9 @@ class ApproveScreenTest {
                         onFilterChange = {},
                         onToggleHighlights = onToggleHighlights,
                         onApproveCard = onApproveCard,
-                        onStartEdit = {},
+                        onStartEdit = onStartEdit,
                         onDismissEdit = {},
-                        onEditCard = { _, _, _ -> },
+                        onEditCard = onEditCard,
                         onRejectCard = { _, _ -> },
                         onOpenSettings = {},
                         onNavigateBack = {},

@@ -52,7 +52,16 @@ class ApproveViewModelTest {
     ) : ApprovalRepository {
         var pendingCalls = 0
         val approveCalls = mutableListOf<Long>()
-        val editCalls = mutableListOf<Long>()
+        var approveResult: Result<Unit> = Result.Success(Unit)
+
+        data class SaveCall(
+            val cardId: Long,
+            val front: String,
+            val back: String,
+        )
+
+        val saveCalls = mutableListOf<SaveCall>()
+        var saveResult: Result<Unit> = Result.Success(Unit)
 
         data class RejectCall(
             val cardId: Long,
@@ -66,17 +75,18 @@ class ApproveViewModelTest {
             return pendingResult
         }
 
-        override suspend fun approveCard(
+        override suspend fun approveCard(cardId: Long): Result<Unit> {
+            approveCalls += cardId
+            return approveResult
+        }
+
+        override suspend fun saveCard(
             cardId: Long,
-            front: String?,
-            back: String?,
+            front: String,
+            back: String,
         ): Result<Unit> {
-            if (front != null || back != null) {
-                editCalls += cardId
-            } else {
-                approveCalls += cardId
-            }
-            return Result.Success(Unit)
+            saveCalls += SaveCall(cardId, front, back)
+            return saveResult
         }
 
         override suspend fun rejectCard(
@@ -457,8 +467,168 @@ class ApproveViewModelTest {
             advanceUntilIdle()
 
             assertTrue("approve must not fire offline", repository.approveCalls.isEmpty())
-            assertTrue("edit must not fire offline", repository.editCalls.isEmpty())
+            assertTrue("save must not fire offline", repository.saveCalls.isEmpty())
             assertTrue("reject must not fire offline", repository.rejectCalls.isEmpty())
+            assertEquals("no refetch either", 1, repository.pendingCalls)
+            assertTrue(viewModel.uiState.value.isOffline)
+        }
+
+    @Test
+    fun test_save_edit_keeps_card_in_queue_and_closes_editor() =
+        runTest {
+            // Issue #287: Save ≠ approve. A successful Save updates the card's
+            // text, closes the inline editor and leaves the card queued.
+            val (viewModel, repository) = loadedViewModel(listOf(pendingCard(id = 1)))
+            advanceUntilIdle()
+            viewModel.onStartEdit(1L)
+            advanceUntilIdle()
+            assertEquals(1L, viewModel.uiState.value.editingCardId)
+
+            viewModel.editCard(1L, "edited front", "edited back")
+            advanceUntilIdle()
+
+            assertEquals(
+                listOf(FakeApprovalRepository.SaveCall(1L, "edited front", "edited back")),
+                repository.saveCalls,
+            )
+            val remaining =
+                viewModel.uiState.value.groups
+                    .flatMap { it.cards }
+                    .map { it.id }
+            assertEquals("Save keeps the card queued", listOf(1L), remaining)
+            assertNull("Save closes the editor", viewModel.uiState.value.editingCardId)
+            assertNull("no error on success", viewModel.uiState.value.errorMessage)
+        }
+
+    @Test
+    fun test_save_edit_updates_text_without_changing_pending_counts() =
+        runTest {
+            // The saved front/back reach UiState in place; the collection-wide
+            // counts (both buckets) are part of the decision-free contract.
+            val (viewModel, _) =
+                loadedViewModel(
+                    listOf(pendingCard(id = 1)),
+                    counts = PendingCounts(pendingReview = 5, needsHuman = 3),
+                )
+            advanceUntilIdle()
+
+            viewModel.editCard(1L, "edited front", "edited back")
+            advanceUntilIdle()
+
+            val card =
+                viewModel.uiState.value.groups
+                    .flatMap { it.cards }
+                    .single()
+            assertEquals("edited front", card.front)
+            assertEquals("edited back", card.back)
+            assertEquals("the whole-queue count is unchanged", 8, viewModel.uiState.value.pendingCount)
+            assertEquals(
+                "the bulk-approvable count is unchanged",
+                5,
+                viewModel.uiState.value.bulkApprovableCount,
+            )
+        }
+
+    @Test
+    fun test_save_edit_never_calls_approve() =
+        runTest {
+            // Negative: the Save path calls PATCH/save only — never single or
+            // bulk approve. A Save that approved would drop the card from the
+            // queue, so the card's presence is asserted too.
+            val (viewModel, repository) = loadedViewModel(listOf(pendingCard(id = 1)))
+            advanceUntilIdle()
+
+            viewModel.editCard(1L, "edited front", "edited back")
+            advanceUntilIdle()
+
+            assertTrue("the save went through the save path", repository.saveCalls.isNotEmpty())
+            assertTrue(
+                "Save must never call single approve (negative)",
+                repository.approveCalls.isEmpty(),
+            )
+            assertTrue(
+                "Save must never call bulk approve (negative)",
+                repository.batchCalls.isEmpty(),
+            )
+            assertEquals(
+                "the card is still queued",
+                listOf(1L),
+                viewModel.uiState.value.groups
+                    .flatMap { it.cards }
+                    .map { it.id },
+            )
+        }
+
+    @Test
+    fun test_save_failure_keeps_editor_open_and_card_unchanged() =
+        runTest {
+            // A failed Save does not discard input state or optimistically
+            // rewrite the card: the editor stays open and the text is the
+            // server's last truth.
+            val (viewModel, repository) = loadedViewModel(listOf(pendingCard(id = 1)))
+            advanceUntilIdle()
+            repository.saveResult = Result.HttpError(status = 409, detail = "Card 1 is not editable.")
+            viewModel.onStartEdit(1L)
+            advanceUntilIdle()
+
+            viewModel.editCard(1L, "edited front", "edited back")
+            advanceUntilIdle()
+
+            assertEquals("the editor stays open", 1L, viewModel.uiState.value.editingCardId)
+            val card =
+                viewModel.uiState.value.groups
+                    .flatMap { it.cards }
+                    .single()
+            assertEquals("the card text is not rewritten", "Front of card 1", card.front)
+            assertEquals("Back of card 1", card.back)
+            assertTrue("the failure surfaces", viewModel.uiState.value.errorMessage != null)
+        }
+
+    @Test
+    fun test_approve_after_saved_edit_sends_no_edit_payload() =
+        runTest {
+            // The later Approve is a bodyless decision over the saved text:
+            // the repository's approve carries no front/back at all (the
+            // server's optional approve-with-edits payload stays a server-side
+            // compatibility contract, not a UI action — issue #287).
+            val (viewModel, repository) = loadedViewModel(listOf(pendingCard(id = 1)))
+            advanceUntilIdle()
+
+            viewModel.editCard(1L, "edited front", "edited back")
+            advanceUntilIdle()
+            viewModel.approveCard(1L)
+            advanceUntilIdle()
+
+            assertEquals("exactly one save, then one bodyless approve", 1, repository.saveCalls.size)
+            assertEquals(listOf(1L), repository.approveCalls)
+            assertTrue(
+                "approve drops the card after the saved edit",
+                viewModel.uiState.value.groups
+                    .flatMap { it.cards }
+                    .isEmpty(),
+            )
+        }
+
+    @Test
+    fun test_offline_save_is_not_queued() =
+        runTest {
+            // The approval queue requires connectivity (docs/android.md,
+            // "Offline-first sync"): offline, Save performs no repository
+            // write. The ratings outbox is untouched structurally — this
+            // ViewModel has no outbox dependency at all; ratings are the only
+            // queued write.
+            val repository =
+                FakeApprovalRepository(Result.NetworkError(IOException("no route to host")))
+            val viewModel = viewModelWith(repository)
+            advanceUntilIdle()
+            assertTrue(viewModel.uiState.value.isOffline)
+
+            viewModel.editCard(1L, "edited front", "edited back")
+            advanceUntilIdle()
+
+            assertTrue("offline Save performs no repository write", repository.saveCalls.isEmpty())
+            assertTrue(repository.approveCalls.isEmpty())
+            assertTrue(repository.batchCalls.isEmpty())
             assertEquals("no refetch either", 1, repository.pendingCalls)
             assertTrue(viewModel.uiState.value.isOffline)
         }

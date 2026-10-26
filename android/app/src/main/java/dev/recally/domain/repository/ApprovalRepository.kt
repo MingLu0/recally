@@ -23,13 +23,23 @@ interface ApprovalRepository {
     suspend fun pendingCards(): Result<PendingQueue>
 
     /**
-     * Approve one card, optionally with inline edits — edits before approval
-     * belong to `POST /cards/{id}/approve`, not `PATCH` (docs/api-spec.md).
+     * Approve one card as written. The server's optional approve-with-edits
+     * payload stays available for other callers (docs/api-spec.md), but the
+     * app's approval queue saves edits through [saveCard] first and approves
+     * the saved text with this bodyless call (issue #287).
      */
-    suspend fun approveCard(
+    suspend fun approveCard(cardId: Long): Result<Unit>
+
+    /**
+     * Save inline wording edits without deciding the card (issue #287):
+     * `PATCH /cards/{id}` updates `front`/`back` and leaves a queued card
+     * queued — status, counts and FSRS state are untouched until an explicit
+     * [approveCard].
+     */
+    suspend fun saveCard(
         cardId: Long,
-        front: String? = null,
-        back: String? = null,
+        front: String,
+        back: String,
     ): Result<Unit>
 
     /**
