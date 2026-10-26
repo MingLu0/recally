@@ -315,3 +315,37 @@ def test_prompt_is_loaded_from_file() -> None:
 
     module_source = Path(default_module.__file__).read_text(encoding="utf-8")  # type: ignore[arg-type]
     assert PROMPT_SENTINEL not in module_source
+
+
+# --- the #307 prompt gate ---------------------------------------------------------
+#
+# Section previews and chapter transitions reached the Writer because "navigation"
+# in the value bullet reads as UI navigation (#307). Sentinels are matched inside
+# the value bullet, so a mention under cardability or grouping does not count.
+
+VALUE_BULLET_START = "**Value.**"
+CARDABILITY_BULLET_START = "**Cardability.**"
+
+
+def _value_bullet(prompt: str) -> str:
+    return _section(prompt, VALUE_BULLET_START, CARDABILITY_BULLET_START)
+
+
+def test_curator_prompt_names_section_previews_and_transitions_as_drops() -> None:
+    """The value bullet names prose that only announces or links sections as
+    junk to drop (#307)."""
+    value_bullet = _value_bullet(_prompt())
+    assert "section previews" in value_bullet
+    assert "chapter transitions" in value_bullet
+    assert "In this section, we explore" in value_bullet
+    assert "carries no fact" in value_bullet
+
+
+def test_curator_prompt_keeps_default_to_keep() -> None:
+    """Naming the new drop case leaves default-to-keep and the cardability rule
+    intact (#307 preservation)."""
+    filter_section = _filter_section(_prompt())
+    assert "Default to `keep`: junk is a small minority of real exports." in filter_section
+    assert "Drop only clear junk" in filter_section
+    assert "no self-contained card" in filter_section
+    assert "however valuable the words look" in filter_section
