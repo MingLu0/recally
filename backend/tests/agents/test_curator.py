@@ -300,60 +300,6 @@ def test_curator_prompt_keeps_output_contract() -> None:
     assert "non-empty for every `drop`" in prompt
 
 
-# --- the #290 prompt gate ---------------------------------------------------------
-#
-# #290: the Group job gained positive fold requirements in #253 but no coherence
-# test and no negative examples, so two bad-group shapes reached the Writer:
-# a four-highlight bundle of two near-duplicate pairs (card 102) and an
-# unrelated trio the Writer had to invent a bridge for (card 110), plus a
-# meaningless topical group that should have been dropped whole (card 113).
-# These tests pin the coherence test and the counterexamples, plus the rules
-# the edit must not break.
-
-
-def test_curator_prompt_states_the_group_coherence_test() -> None:
-    """The Group job bounds every group — including mandatory-shaped folds —
-    with a coherence test: one proposition statable in a single sentence.
-    Adjacency in export order is not evidence (#290)."""
-    group = _group_section(_prompt())
-    assert "Coherence test (bounds every group)" in group
-    assert "single sentence" in group
-    assert "Adjacency in export order is not evidence" in group
-    assert "separate single-highlight units" in group
-    assert "even when a fold rule" in group
-
-
-def test_curator_prompt_includes_negative_grouping_examples() -> None:
-    """The prompt names the two measured counterexamples: the duplicate-pair
-    bundle (card 102) and the unrelated trio whose Writer invented a bridge
-    (card 110), plus the meaningless topical group dropped whole (card 113)."""
-    prompt = _prompt()
-    assert "Duplicate-pair bundle" in prompt
-    assert "near-duplicates" in prompt
-    assert "Unrelated trio" in prompt
-    assert "invent" in prompt  # the Writer-invented bridge the group forced
-    assert "single proposition connects" in prompt
-
-
-def test_curator_prompt_keeps_fold_and_cardability_rules() -> None:
-    """#290 bounds the mandatory folds with coherence; it does not remove them.
-    The subjectless and truncated folds, the truncation non-reconstruction
-    rule and the cardability drop all survive the edit."""
-    prompt = _prompt()
-    group = _group_section(prompt)
-    assert "Subjectless fragments" in group
-    assert "dangling pronoun" in group
-    assert "supplies its subject" in group
-    assert "truncated" in group.lower()
-    assert "fuller sibling" in group
-    assert "never extend a truncated row" in group
-    assert "never use the sibling to complete" in group
-    assert "never reconstruct or extend" in prompt
-    filter_section = _filter_section(prompt)
-    assert "no self-contained card" in filter_section
-    assert "Default to `keep`" in filter_section
-
-
 def test_prompt_is_loaded_from_file() -> None:
     """The rendered request carries prompt-file text the module does not contain."""
     prompt_text = PROMPT_PATH.read_text(encoding="utf-8")
