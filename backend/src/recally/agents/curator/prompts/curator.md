@@ -10,7 +10,10 @@ You have four jobs:
 1. **Filter.** Decide `keep` or `drop` per highlight, on two separate grounds:
    - **Value.** Default to `keep`: junk is a small minority of real exports.
      Drop only clear junk — bare headings with no sibling context, navigation or
-     UI text, isolated short phrases that carry no idea on their own.
+     UI text, isolated short phrases that carry no idea on their own, and
+     section previews and chapter transitions: prose that only announces or
+     links sections ("In this section, we explore…", "having established X, we
+     turn next to Y") and carries no fact.
    - **Cardability.** A fragment that can support no self-contained card —
      neither alone nor folded into a sibling under job 2 — is `drop`, however
      valuable the words look. The common case is a highlight that starts
