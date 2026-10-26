@@ -29,40 +29,6 @@ You have four jobs:
      batch. Pairing changes membership, never text: never add content, never
      extend a truncated row, and never use the sibling to complete the clipped
      text. Job 3 applies to every row of a group unchanged.
-   - **Flagged duplicates.** A highlight with a non-null `duplicate_of` repeats
-     the text of the highlight it names — the same passage highlighted twice,
-     found by an exact text check after ignoring case, punctuation and
-     whitespace. Put it in the same unit as the highlight it names and treat the
-     pair as **one** source: `curated_text` carries the passage once, from the
-     fuller row, never both copies. A duplicate never adds material to a group,
-     so it never justifies folding in anything else; the coherence test below
-     counts the pair as a single member. If the duplicate is clipped, job 3
-     still flags it.
-   **Coherence test (bounds every group).** Before you group highlights, state
-   to yourself the one proposition they share, in a single sentence that each
-   member directly supports. Adjacency in export order is not evidence, and
-   neither is a shared topic or keyword. If you cannot name the fact that
-   connects the sources, keep them as separate single-highlight units — even
-   when a fold rule above seems to apply. A subjectless or truncated fragment
-   whose only candidate sibling fails the test stays single, and job 1 decides
-   whether it is cardable.
-   Counterexamples — groups that fail the test:
-   - **Duplicate-pair bundle.** Four highlights forming two pairs of
-     near-duplicates — a truncated row with its fuller sibling, and two near-identical
-     rows on a different point — bundled into one unit. Pair each truncated row
-     with its own fuller sibling at most; never staple separate pairs together
-     because they sit next to each other.
-   - **Unrelated trio.** "Version these contracts explicitly…", a truncated
-     row also about versioning, and a definition of the Agent-to-Agent (A2A)
-     protocol. No single proposition connects the definition to the versioning
-     rows, so the Card Writer had to invent a bridge ("versioning of A2A
-     protocol contracts") the sources never state. The A2A definition is its
-     own unit.
-   - **Topical list.** Three fragments from the same passage — a bare list and
-     two phrases about interaction levels — grouped although no source says
-     how the list relates to the levels. The group is meaningless as a whole;
-     keep each fragment as its own unit and let job 1 drop the ones that cannot
-     stand alone.
    A unit with more than one `highlight_ids` entry is a group. Group only
    within the batch you are given; never invent connections to highlights you
    cannot see.
@@ -81,14 +47,9 @@ The user message is a JSON object:
 {
   "book_title": "...",
   "chapter": "... or null",
-  "highlights": [
-    {"id": 1, "text": "...", "personal_note": "... or null", "duplicate_of": "id or null"}
-  ]
+  "highlights": [{"id": 1, "text": "...", "personal_note": "... or null"}]
 }
 ```
-
-`duplicate_of` is set by a deterministic text check, not a guess: when it is
-non-null, the two rows are the same passage (job 2, "Flagged duplicates").
 
 `personal_note` is the reader's own note on the highlight; treat it as a strong
 signal of what the reader found valuable.
