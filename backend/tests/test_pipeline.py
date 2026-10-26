@@ -741,6 +741,40 @@ def test_accept_on_round_two_stops_the_loop(
     assert cards[0].generation_rounds == 2
 
 
+def test_round_two_critic_call_receives_round_one_critique(
+    container: Container, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """From round 2 the Critic request carries the previous round's critique, so the
+    Critic can keep its advice consistent with what it told the Writer (#306)."""
+    run_id, highlights = ingest_fixture(container)
+    ScriptedLlm(
+        monkeypatch,
+        [
+            curator_response(keep_unit([highlights[0].id])),
+            writer_response("Draft round 1?"),
+            critic_response(REVISE),
+            writer_response("Draft round 2?"),
+            critic_response(ACCEPT),
+        ],
+    )
+    critic_requests: list[CriticRequest] = []
+    real_critic_call = DefaultCritic.__call__
+
+    def recording_critic_call(
+        self: DefaultCritic, request: CriticRequest, ctx: AgentContext
+    ) -> CriticResult:
+        critic_requests.append(request)
+        return real_critic_call(self, request, ctx)
+
+    monkeypatch.setattr(DefaultCritic, "__call__", recording_critic_call)
+
+    container.run_pipeline(run_id)
+
+    assert len(critic_requests) == 2
+    assert critic_requests[0].previous_critique is None
+    assert critic_requests[1].previous_critique == REVISE[1]
+
+
 def test_auto_approve_flag_on_approves_only_round_one_accepts(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

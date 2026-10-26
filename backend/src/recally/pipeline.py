@@ -831,6 +831,7 @@ def _resolve_card(
     """
     round_number = 1
     current = draft
+    previous_critique: str | None = None
     while True:
         critic, critic_context = _agent_context(
             "critic",
@@ -848,6 +849,7 @@ def _resolve_card(
                 cards=[current],
                 source_text=unit.curated_text,
                 source_truncated=source_truncated,
+                previous_critique=previous_critique,
             ),
             critic_context,
         ).verdicts[0]
@@ -914,6 +916,7 @@ def _resolve_card(
         # A revision rewrites the one card under review, so its first card is the
         # rewrite; any further cards in the response are discarded.
         current = revised.cards[0]
+        previous_critique = verdict.critique
 
 
 def _write_card(

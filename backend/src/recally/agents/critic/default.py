@@ -11,7 +11,9 @@ Writer works from it, so an empty one is useless.
 The Critic returns verdicts, never card statuses (hard rule 1); the runner maps
 them (#35). When the source highlight is clipped (`source_truncated`), the prompt
 marks it so fidelity is judged against the partial text and no card is penalised
-for text the export lost (hard rule 7).
+for text the export lost (hard rule 7). From round 2 the prompt also shows the
+Critic its previous critique (`previous_critique`), so it does not fault wording it
+suggested itself (#306).
 """
 
 import json
@@ -24,6 +26,8 @@ from recally.agents.base import AgentContext, CardVerdict, CriticRequest, Critic
 PROMPT_PATH = Path(__file__).parent / "prompts" / "critic.md"
 TRUNCATION_BEGIN = "[[TRUNCATION_NOTE]]"
 TRUNCATION_END = "[[/TRUNCATION_NOTE]]"
+PREVIOUS_CRITIQUE_BEGIN = "[[PREVIOUS_CRITIQUE]]"
+PREVIOUS_CRITIQUE_END = "[[/PREVIOUS_CRITIQUE]]"
 VALID_VERDICTS = ("accept", "revise", "reject")
 
 
@@ -43,18 +47,34 @@ class DefaultCritic:
 
 def _render_prompt(request: CriticRequest) -> str:
     template = PROMPT_PATH.read_text(encoding="utf-8")
-    if request.source_truncated:
-        prompt = template.replace(TRUNCATION_BEGIN, "").replace(TRUNCATION_END, "")
-    else:
-        block_start = template.index(TRUNCATION_BEGIN)
-        block_end = template.index(TRUNCATION_END) + len(TRUNCATION_END)
-        prompt = template[:block_start] + template[block_end:]
+    prompt = _keep_or_strip_block(
+        template, TRUNCATION_BEGIN, TRUNCATION_END, keep=request.source_truncated
+    )
+    prompt = _keep_or_strip_block(
+        prompt,
+        PREVIOUS_CRITIQUE_BEGIN,
+        PREVIOUS_CRITIQUE_END,
+        keep=request.previous_critique is not None,
+    )
     cards_block = "\n".join(
         f"{number}. [{card.type}] Front: {card.front} | Back: {card.back} "
         f"| Rationale: {card.rationale}"
         for number, card in enumerate(request.cards, start=1)
     )
-    return Template(prompt).substitute(source_text=request.source_text, cards=cards_block)
+    return Template(prompt).substitute(
+        source_text=request.source_text,
+        cards=cards_block,
+        previous_critique=request.previous_critique or "",
+    )
+
+
+def _keep_or_strip_block(template: str, begin_marker: str, end_marker: str, *, keep: bool) -> str:
+    """Drop just the markers of a conditional block when `keep`, else the whole block."""
+    if keep:
+        return template.replace(begin_marker, "").replace(end_marker, "")
+    block_start = template.index(begin_marker)
+    block_end = template.index(end_marker) + len(end_marker)
+    return template[:block_start] + template[block_end:]
 
 
 def _parse_verdicts(response_text: str, *, expected: int) -> list[CardVerdict]:

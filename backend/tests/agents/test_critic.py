@@ -410,3 +410,56 @@ def test_critic_prompt_keeps_five_criteria_and_verdict_rules() -> None:
     assert "could be rewritten" in lowered
     for heading in ("## The five checks", "## Verdicts"):
         assert heading in prompt
+
+
+# --- The #306 gate: the Critic sees its previous critique ---------------------
+# In the cycle-4 traces the Critic flagged wording it had suggested itself in 7
+# of 7 multi-critique chains: each round judged the revised card with no memory
+# of the critique that produced it. From round 2 the request carries that
+# critique, and the prompt tells the Critic to keep its advice consistent.
+
+PREVIOUS_CRITIQUE = (
+    "Not self-contained: replace 'it' with 'spaced repetition' and ask about the "
+    "timing of the review."
+)
+
+
+def _rendered_revision_round_prompt() -> str:
+    request = CriticRequest(
+        cards=[CARD_ONE], source_text=SOURCE_TEXT, previous_critique=PREVIOUS_CRITIQUE
+    )
+    return _render_prompt(request)
+
+
+def test_previous_critique_reaches_the_prompt_on_a_revision_round(
+    recording_llm: RecordingLlm, ctx: AgentContext
+) -> None:
+    """With `previous_critique` set, the prompt the model receives contains it."""
+    recording_llm.respond([{"verdict": "accept", "critique": ""}])
+    request = CriticRequest(
+        cards=[CARD_ONE], source_text=SOURCE_TEXT, previous_critique=PREVIOUS_CRITIQUE
+    )
+
+    DefaultCritic()(request, ctx)
+
+    assert PREVIOUS_CRITIQUE in recording_llm.last_prompt()
+
+
+def test_critic_prompt_forbids_faulting_its_own_advice() -> None:
+    """The revision-round prompt says not to fault wording the Critic itself
+    suggested unless the source contradicts it, and to own a wrong earlier
+    suggestion rather than raise it as a new defect."""
+    prompt = " ".join(_rendered_revision_round_prompt().lower().split())
+    assert "do not fault wording you suggested" in prompt
+    assert "unless the source contradicts it" in prompt
+    assert "say so explicitly" in prompt
+
+
+def test_round_one_prompt_has_no_previous_critique_block() -> None:
+    """With `previous_critique=None` the block is stripped: no previous-critique
+    text, no leftover markers and no unsubstituted `$` (preservation)."""
+    prompt = _rendered_gate_prompt()
+    assert "PREVIOUS_CRITIQUE" not in prompt
+    assert "previous critique" not in prompt.lower()
+    assert "do not fault wording you suggested" not in prompt.lower()
+    assert "$" not in prompt

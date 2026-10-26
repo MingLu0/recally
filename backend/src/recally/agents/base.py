@@ -149,11 +149,17 @@ class CriticRequest:
     A clipped source must be marked as such in the prompt: fidelity is judged against
     the partial text, and the Critic must not penalise a card for text the export
     lost nor accept one that invents the missing part (hard rule 7).
+
+    `previous_critique` is the Critic's own critique from the round before, set by
+    the runner from round 2 on and `None` on round 1. Without it each round judged
+    the revised card with no memory of the advice that produced it, and the Critic
+    faulted wording it had suggested itself (#306).
     """
 
     cards: list[CardDraft]
     source_text: str
     source_truncated: bool = False
+    previous_critique: str | None = None
 
 
 @dataclass(frozen=True)

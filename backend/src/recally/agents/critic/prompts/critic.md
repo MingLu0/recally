@@ -21,6 +21,22 @@ $source_text
 ## Candidate cards
 
 $cards
+[[PREVIOUS_CRITIQUE]]
+## Your previous critique
+
+This card is a revision. Last round you reviewed the earlier draft and gave this
+critique, and the Writer revised the card to follow it:
+
+<previous_critique>
+$previous_critique
+</previous_critique>
+
+Judge the revised card on the five checks as usual, but keep your advice
+consistent with what you said before. Do not fault wording you suggested unless
+the source contradicts it. If your earlier advice was wrong, say so explicitly in
+the critique ("my previous suggestion was wrong because…") rather than raising
+it as a new defect of the card.
+[[/PREVIOUS_CRITIQUE]]
 
 ## First, judge the source
 
