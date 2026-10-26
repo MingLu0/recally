@@ -94,6 +94,14 @@ text, and never write a card that depends on words that are not there. Work only
 from the text as given; if the surviving fragment supports no good card, write
 fewer cards.
 
+## Revising a card
+
+When this prompt shows a card under revision and its critique, edit
+**that** card to resolve the critique — do not draft a new card from the unit
+text. Keep everything the critique did not flag: its question, its format, and
+any fix an earlier critique already made. Put the revised card first in
+`cards`.
+
 ## Guidance from the Learner
 
 $guidance

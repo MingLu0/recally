@@ -171,6 +171,36 @@ def test_critique_is_included_on_a_revision_request() -> None:
     assert "Critic feedback" not in prompt
 
 
+def test_revision_prompt_includes_the_previous_draft() -> None:
+    """A revision request renders the card under review — its front and back — so
+    the Writer edits that card instead of re-drafting from the unit text (#304)."""
+    previous_draft = CardDraft(
+        type="qa",
+        front="What does SQLite do before applying a change in WAL mode?",
+        back="It writes the change to a WAL frame first.",
+        rationale="r",
+        guidance_version=GUIDANCE_VERSION,
+    )
+    fake_llm = FakeLlm(ONE_CARD_RESPONSE)
+    DefaultWriter()(_request(critique=CRITIQUE_TEXT, previous_draft=previous_draft), _ctx(fake_llm))
+
+    prompt = _rendered_prompt(fake_llm)
+    assert previous_draft.front in prompt
+    assert previous_draft.back in prompt
+    assert CRITIQUE_TEXT in prompt
+
+
+def test_round_one_prompt_has_no_previous_draft_section() -> None:
+    """A round-1 request (`previous_draft=None`) renders no draft section and leaves
+    no unsubstituted `$` placeholder behind."""
+    fake_llm = FakeLlm(ONE_CARD_RESPONSE)
+    DefaultWriter()(_request(critique=None, previous_draft=None), _ctx(fake_llm))
+
+    prompt = _rendered_prompt(fake_llm)
+    assert "## The card under revision" not in prompt
+    assert "$" not in prompt
+
+
 def test_writer_does_not_count_rounds() -> None:
     """The result carries no round number and no status; the agent passes no round
     to the LLM call and keeps no state between calls (hard rule 9 is structural)."""

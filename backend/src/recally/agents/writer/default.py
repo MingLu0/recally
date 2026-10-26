@@ -2,8 +2,8 @@
 
 One LLM call per curated unit: renders `prompts/writer.md` (loaded from disk,
 ADR-003) with the unit text, the current `writer_guidance` and — on a revision
-round — the Critic's critique, then parses the JSON response into `CardDraft`s
-stamped with the request's `guidance_version`.
+round — the card under revision and the Critic's critique of it, then parses
+the JSON response into `CardDraft`s stamped with the request's `guidance_version`.
 
 Round counting and the 3-round cap live in `pipeline.py` (hard rule 9 is
 structural): this agent sees one request and returns one result, holding no state
@@ -42,7 +42,7 @@ class DefaultWriter:
             guidance=request.guidance or "No Learner guidance yet; follow the card rules above.",
             tags=", ".join(request.tags) if request.tags else "(none)",
             curated_text=request.curated_text,
-            critique_section=_critique_section(request.critique),
+            critique_section=_critique_section(request.critique, request.previous_draft),
         )
         raw = ctx.llm(
             [{"role": "user", "content": prompt}],
@@ -53,13 +53,27 @@ class DefaultWriter:
         return WriterResult(cards=_parse_cards(raw, request.guidance_version))
 
 
-def _critique_section(critique: str | None) -> str:
+def _critique_section(critique: str | None, previous_draft: CardDraft | None) -> str:
+    """The revision block: the card under revision, then the critique of it.
+
+    Without the draft the Writer re-drafts from the unit text and drifts onto a
+    sibling's answer or restores framing the Critic removed (#304).
+    """
     if critique is None:
         return ""
+    draft_block = ""
+    if previous_draft is not None:
+        draft_block = (
+            "## The card under revision\n\n"
+            f"Type: {previous_draft.type}\n"
+            f"Front: {previous_draft.front}\n"
+            f"Back: {previous_draft.back}\n\n"
+        )
     return (
+        f"{draft_block}"
         "## Critic feedback from the previous round\n\n"
         f"{critique}\n\n"
-        "Rewrite the card to resolve this feedback while keeping every rule above.\n"
+        "Revise the card to resolve this feedback while keeping every rule above.\n"
     )
 
 

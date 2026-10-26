@@ -909,6 +909,7 @@ def _resolve_card(
                 guidance_version=guidance_version,
                 guidance=guidance,
                 critique=verdict.critique,
+                previous_draft=current,
             ),
             writer_context,
         )

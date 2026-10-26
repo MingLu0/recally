@@ -29,8 +29,15 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
-from recally.agents.base import AgentContext, CriticRequest, CriticResult
+from recally.agents.base import (
+    AgentContext,
+    CriticRequest,
+    CriticResult,
+    WriterRequest,
+    WriterResult,
+)
 from recally.agents.critic.default import DefaultCritic
+from recally.agents.writer.default import DefaultWriter
 from recally.api.deps import container_dependency
 from recally.config import Settings, get_settings
 from recally.container import Container
@@ -629,6 +636,54 @@ def test_revise_affects_only_the_named_card(
         call for call in all_llm_calls(container, run_id) if call.agent == "writer/default"
     ]
     assert [call.round for call in writer_calls] == [1, 2]
+
+
+def test_revision_writer_call_receives_the_draft_under_review(
+    container: Container, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """After a `revise`, the next Writer request carries the card the Critic just
+    judged as `previous_draft`; round 1 carries none (#304)."""
+    writer_requests: list[WriterRequest] = []
+    critic_requests: list[CriticRequest] = []
+    original_writer_call = DefaultWriter.__call__
+    original_critic_call = DefaultCritic.__call__
+
+    def recording_writer_call(
+        self: DefaultWriter, request: WriterRequest, ctx: AgentContext
+    ) -> WriterResult:
+        writer_requests.append(request)
+        return original_writer_call(self, request, ctx)
+
+    def recording_critic_call(
+        self: DefaultCritic, request: CriticRequest, ctx: AgentContext
+    ) -> CriticResult:
+        critic_requests.append(request)
+        return original_critic_call(self, request, ctx)
+
+    monkeypatch.setattr(DefaultWriter, "__call__", recording_writer_call)
+    monkeypatch.setattr(DefaultCritic, "__call__", recording_critic_call)
+    run_id, highlights = ingest_fixture(container)
+    ScriptedLlm(
+        monkeypatch,
+        [
+            curator_response(keep_unit([highlights[0].id])),
+            writer_response("Draft round 1?"),
+            critic_response(REVISE),
+            writer_response("Draft round 2?"),
+            critic_response(ACCEPT),
+        ],
+    )
+
+    container.run_pipeline(run_id)
+
+    assert len(writer_requests) == 2
+    assert len(critic_requests) == 2
+    round_one_request, revision_request = writer_requests
+    assert round_one_request.previous_draft is None
+    judged_card = critic_requests[0].cards[0]
+    assert judged_card.front == "Draft round 1?"
+    assert revision_request.previous_draft == judged_card
+    assert revision_request.critique == REVISE[1]
 
 
 def test_generation_rounds_is_per_card(
