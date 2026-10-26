@@ -99,8 +99,10 @@ fewer cards.
 When this prompt shows a card under revision and its critique, edit
 **that** card to resolve the critique — do not draft a new card from the unit
 text. Keep everything the critique did not flag: its question, its format, and
-any fix an earlier critique already made. Put the revised card first in
-`cards`.
+any fix an earlier critique already made. Always put the revised card under
+review first in `cards`. Return a second card only when the critique asks you
+to split the card or to write a separate card; it then holds the part split
+off. Otherwise return exactly one card.
 
 ## Guidance from the Learner
 

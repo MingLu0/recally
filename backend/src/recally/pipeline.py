@@ -58,6 +58,7 @@ and the failed unit's highlights retryable.
 """
 
 import logging
+from collections import deque
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from typing import Any, Literal, overload
@@ -92,6 +93,10 @@ from recally.models import (
 from recally.models.base import utc_now
 
 logger = logging.getLogger(__name__)
+
+# docs/agents.md §3: a unit yields 1–3 cards, and a revision's split-off drafts
+# count against the same cap (#305).
+MAX_CARDS_PER_UNIT = 3
 
 
 class _CorrelatedLlm(LlmCaller):
@@ -154,6 +159,9 @@ class _CardOutcome:
     callers — the eval harness counts rework calls from it (#243) — never have to
     re-derive it from the status string. `draft_index` is the draft's position in
     the round-1 Writer result, already stamped on every call of its loop (#262).
+    `split_drafts` are the extra cards the loop's revisions returned past the
+    rewrite itself — usually a split the Critic asked for — which the caller turns
+    into new drafts of the unit (#305).
     """
 
     draft: CardDraft
@@ -162,6 +170,7 @@ class _CardOutcome:
     generation_rounds: int
     terminal: Literal["accept", "reject", "exhausted"]
     draft_index: int | None = None
+    split_drafts: tuple[CardDraft, ...] = ()
 
 
 @dataclass
@@ -334,7 +343,8 @@ def rewrite_leech_card(
             writer_context,
         )
         # One leech, one rewrite: the first draft is the rewrite; any further
-        # drafts are discarded, exactly as a revision keeps only its first card.
+        # drafts are discarded, and so are a revision's split-off drafts — the
+        # split-to-new-draft path is initial generation's only (#305).
         outcome = _resolve_card(
             registry,
             settings,
@@ -771,6 +781,12 @@ def _resolve_unit_cards(
     Each draft gets its `draft_index` before its loop starts, so its Critic and
     revision calls are told apart from a sibling's by key, not by id order (#262).
     This round-1 call drafts every card at once and so carries none.
+
+    A revision that returns extra cards — a split the Critic asked for — yields new
+    drafts, each with the next unused `draft_index` and its own loop from round 1
+    (#305). They resolve here, on the same worker as the unit, after the drafts
+    already queued. The unit never exceeds `MAX_CARDS_PER_UNIT`: a split-off over
+    the cap is logged and dropped, never persisted.
     """
     source_truncated = any(highlight.truncated for highlight in highlights)
     writer, writer_context = _agent_context(
@@ -786,8 +802,15 @@ def _resolve_unit_cards(
         ),
         writer_context,
     )
-    return [
-        _resolve_card(
+    # (draft_index, draft, born_in_revision) for every draft still to resolve.
+    queued_drafts: deque[tuple[int, CardDraft, bool]] = deque(
+        (draft_index, draft, False) for draft_index, draft in enumerate(result.cards)
+    )
+    next_draft_index = len(result.cards)
+    outcomes: list[_CardOutcome] = []
+    while queued_drafts:
+        draft_index, draft, born_in_revision = queued_drafts.popleft()
+        outcome = _resolve_card(
             registry,
             settings,
             llm_caller,
@@ -798,9 +821,21 @@ def _resolve_unit_cards(
             guidance_version=guidance_version,
             guidance=guidance,
             draft_index=draft_index,
+            born_in_revision=born_in_revision,
         )
-        for draft_index, draft in enumerate(result.cards)
-    ]
+        outcomes.append(outcome)
+        for split_draft in outcome.split_drafts:
+            if next_draft_index >= MAX_CARDS_PER_UNIT:
+                logger.warning(
+                    "unit %s: dropped a split-off draft over the %d-card cap: %r",
+                    unit.id,
+                    MAX_CARDS_PER_UNIT,
+                    split_draft.front,
+                )
+                continue
+            queued_drafts.append((next_draft_index, split_draft, True))
+            next_draft_index += 1
+    return outcomes
 
 
 def _resolve_card(
@@ -816,12 +851,18 @@ def _resolve_card(
     guidance: str | None,
     card_id: int | None = None,
     draft_index: int | None = None,
+    born_in_revision: bool = False,
 ) -> _CardOutcome:
     """One card's Critic ⇄ Writer rounds, bounded by LLM_MAX_ROUNDS (hard rule 9).
 
     The round count lives here, not in the agents: the Writer and the Critic each
     see one request and return one result. A `revise` re-enters the Writer for this
     card only — siblings already accepted keep their status and are never re-sent.
+    A revision's first card is the rewrite; any further cards are collected on the
+    outcome's `split_drafts` for the caller to resolve as new drafts (#305).
+
+    `born_in_revision` marks a split-off draft: its round 1 is not the unit's
+    round 1, so `AUTO_APPROVE_ROUND1_ACCEPT` never approves it (hard rule 1).
 
     Session-free by construction (ADR-015): this returns a `_CardOutcome` and the
     caller writes it. That is what lets a whole unit resolve on a worker thread —
@@ -832,6 +873,7 @@ def _resolve_card(
     round_number = 1
     current = draft
     previous_critique: str | None = None
+    split_drafts: list[CardDraft] = []
     while True:
         critic, critic_context = _agent_context(
             "critic",
@@ -857,7 +899,9 @@ def _resolve_card(
         if verdict.verdict == "accept":
             status = (
                 "approved"
-                if settings.auto_approve_round1_accept and round_number == 1
+                if settings.auto_approve_round1_accept
+                and round_number == 1
+                and not born_in_revision
                 else "pending_review"
             )
             return _CardOutcome(
@@ -867,6 +911,7 @@ def _resolve_card(
                 generation_rounds=round_number,
                 terminal="accept",
                 draft_index=draft_index,
+                split_drafts=tuple(split_drafts),
             )
         if verdict.verdict == "reject":
             return _CardOutcome(
@@ -876,6 +921,7 @@ def _resolve_card(
                 generation_rounds=round_number,
                 terminal="reject",
                 draft_index=draft_index,
+                split_drafts=tuple(split_drafts),
             )
         if round_number >= settings.llm_max_rounds:
             return _CardOutcome(
@@ -888,6 +934,7 @@ def _resolve_card(
                 generation_rounds=round_number,
                 terminal="exhausted",
                 draft_index=draft_index,
+                split_drafts=tuple(split_drafts),
             )
 
         round_number += 1
@@ -914,8 +961,9 @@ def _resolve_card(
             writer_context,
         )
         # A revision rewrites the one card under review, so its first card is the
-        # rewrite; any further cards in the response are discarded.
+        # rewrite; any further cards are split-offs that become new drafts (#305).
         current = revised.cards[0]
+        split_drafts.extend(revised.cards[1:])
         previous_critique = verdict.critique
 
 

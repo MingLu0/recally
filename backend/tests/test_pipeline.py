@@ -686,6 +686,135 @@ def test_revision_writer_call_receives_the_draft_under_review(
     assert revision_request.critique == REVISE[1]
 
 
+def test_split_card_from_a_revision_becomes_a_new_draft(
+    container: Container, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A revision that answers "split this" with two cards persists both: the first
+    is the rewrite of the card under review, the second a new draft with the next
+    unused `draft_index` in the unit (#305)."""
+    run_id, highlights = ingest_fixture(container)
+    ScriptedLlm(
+        monkeypatch,
+        [
+            curator_response(keep_unit([highlights[0].id])),
+            writer_response("Bundled card?"),
+            critic_response(REVISE),  # the bundled card, round 1: split it
+            writer_response("Revised first half?", "Split-off second half?"),
+            critic_response(ACCEPT),  # the revised card, round 2
+            critic_response(ACCEPT),  # the split-off draft, its own round 1
+        ],
+    )
+
+    container.run_pipeline(run_id)
+
+    cards = all_cards(container)
+    assert [card.front for card in cards] == ["Revised first half?", "Split-off second half?"]
+    revised, split_off = cards
+    assert (revised.draft_index, split_off.draft_index) == (0, 1)
+    assert revised.unit_id == split_off.unit_id
+    assert split_off.status == "pending_review"
+    assert fetch_run(container, run_id).cards_generated == 2
+
+
+def test_split_draft_gets_its_own_critic_loop_and_round_cap(
+    container: Container, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The split-off draft is resolved from round 1 through its own Critic ⇄ Writer
+    loop: its own Critic calls, its own `generation_rounds`, and `needs_human` after
+    `LLM_MAX_ROUNDS` revises (hard rule 9)."""
+    run_id, highlights = ingest_fixture(container)
+    ScriptedLlm(
+        monkeypatch,
+        [
+            curator_response(keep_unit([highlights[0].id])),
+            writer_response("Bundled card?"),
+            critic_response(REVISE),  # card 0, round 1
+            writer_response("Revised first half?", "Split-off?"),
+            critic_response(ACCEPT),  # card 0, round 2
+            critic_response(REVISE),  # split-off, round 1
+            writer_response("Split-off, round 2?"),
+            critic_response(REVISE),  # split-off, round 2
+            writer_response("Split-off, round 3?"),
+            critic_response(REVISE),  # split-off, round 3: cap reached
+        ],
+    )
+
+    container.run_pipeline(run_id)
+
+    revised, split_off = all_cards(container)
+    assert revised.generation_rounds == 2
+    assert revised.status == "pending_review"
+    assert split_off.generation_rounds == 3
+    assert split_off.status == "needs_human"
+    assert split_off.front == "Split-off, round 3?"
+    split_off_critic_calls = [
+        call
+        for call in all_llm_calls(container, run_id)
+        if call.agent == "critic/default" and call.draft_index == split_off.draft_index
+    ]
+    assert [call.round for call in split_off_critic_calls] == [1, 2, 3]
+
+
+def test_split_draft_is_never_auto_approved(monkeypatch: pytest.MonkeyPatch) -> None:
+    """With AUTO_APPROVE_ROUND1_ACCEPT on, a split-off draft accepted on its own
+    first Critic call still lands in `pending_review`: it was born in a revision, so
+    the round-1 exception to hard rule 1 does not cover it."""
+    flag_container, engine = make_container(AUTO_APPROVE_ROUND1_ACCEPT=True, LLM_CONCURRENCY=1)
+    try:
+        run_id, highlights = ingest_fixture(flag_container)
+        ScriptedLlm(
+            monkeypatch,
+            [
+                curator_response(keep_unit([highlights[0].id])),
+                writer_response("Bundled card?"),
+                critic_response(REVISE),  # card 0, round 1
+                writer_response("Revised first half?", "Split-off?"),
+                critic_response(ACCEPT),  # card 0, round 2
+                critic_response(ACCEPT),  # split-off, its own round 1
+            ],
+        )
+
+        flag_container.run_pipeline(run_id)
+
+        cards = all_cards(flag_container)
+        assert len(cards) == 2
+        split_off = cards[1]
+        assert split_off.front == "Split-off?"
+        assert split_off.generation_rounds == 1
+        assert split_off.status == "pending_review"
+        assert all(card.status != "approved" for card in cards)
+    finally:
+        engine.dispose()
+
+
+def test_split_drafts_never_push_a_unit_past_three_cards(
+    container: Container, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A unit already at three cards drops a revision's split-off card, logged and
+    never persisted (docs/agents.md §3: 1–3 cards per unit)."""
+    run_id, highlights = ingest_fixture(container)
+    ScriptedLlm(
+        monkeypatch,
+        [
+            curator_response(keep_unit([highlights[0].id])),
+            writer_response("Card A?", "Card B?", "Card C?"),
+            critic_response(REVISE),  # card A, round 1: split it
+            writer_response("Revised card A?", "Split-off over the cap?"),
+            critic_response(ACCEPT),  # card A, round 2
+            critic_response(ACCEPT),  # card B
+            critic_response(ACCEPT),  # card C
+        ],
+    )
+
+    with caplog.at_level(logging.WARNING, logger="recally.pipeline"):
+        container.run_pipeline(run_id)
+
+    cards = all_cards(container)
+    assert [card.front for card in cards] == ["Revised card A?", "Card B?", "Card C?"]
+    assert [card.draft_index for card in cards] == [0, 1, 2]
+    assert "Split-off over the cap?" in caplog.text
+
+
 def test_generation_rounds_is_per_card(
     container: Container, monkeypatch: pytest.MonkeyPatch
 ) -> None:
