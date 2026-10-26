@@ -81,21 +81,11 @@ class DefaultCurator:
 
 
 def _render_user_message(book_title: str, chapter: str | None, batch: list[HighlightInput]) -> str:
-    # A duplicate link into another batch is dropped: grouping cannot span a batch,
-    # and the prompt forbids connections to highlights the Curator cannot see.
-    batch_ids = {highlight.id for highlight in batch}
     payload = {
         "book_title": book_title,
         "chapter": chapter,
         "highlights": [
-            {
-                "id": highlight.id,
-                "text": highlight.text,
-                "personal_note": highlight.personal_note,
-                "duplicate_of": (
-                    highlight.duplicate_of if highlight.duplicate_of in batch_ids else None
-                ),
-            }
+            {"id": highlight.id, "text": highlight.text, "personal_note": highlight.personal_note}
             for highlight in batch
         ],
     }

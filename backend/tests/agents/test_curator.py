@@ -210,33 +210,6 @@ def test_batch_is_split_at_curator_max_batch() -> None:
         )
 
 
-def test_duplicate_link_into_another_batch_is_not_rendered() -> None:
-    """`duplicate_of` reaches the payload only when its target is in the same batch:
-    the Curator must never be pointed at a highlight it cannot see (#291)."""
-    highlights = [
-        HighlightInput(id=1, text="same passage", personal_note=None),
-        HighlightInput(id=2, text="same passage", personal_note=None, duplicate_of=1),
-        HighlightInput(id=3, text="same passage", personal_note=None, duplicate_of=1),
-    ]
-    fake_llm = FakeLlm(
-        [
-            _units_payload([_keep_unit([1, 2], "same passage")]),
-            _units_payload([_keep_unit([3], "same passage")]),
-        ]
-    )
-
-    DefaultCurator()(_request(highlights), _ctx(fake_llm, curator_max_batch=2))
-
-    rendered_links = [
-        {
-            payload_highlight["id"]: payload_highlight["duplicate_of"]
-            for payload_highlight in json.loads(call["messages"][1]["content"])["highlights"]
-        }
-        for call in fake_llm.calls
-    ]
-    assert rendered_links == [{1: None, 2: 1}, {3: None}]
-
-
 def test_agent_writes_nothing_to_the_database() -> None:
     """The agent runs with no session anywhere in reach and returns normally."""
     fake_llm = FakeLlm([_units_payload([_keep_unit([1], "text")])])
