@@ -525,6 +525,7 @@ private fun ApproveCard(
     onReject: (String?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var approveDialogOpen by remember(card.id) { mutableStateOf(false) }
     var rejectDialogOpen by remember(card.id) { mutableStateOf(false) }
 
     Column(
@@ -583,11 +584,25 @@ private fun ApproveCard(
         } else {
             ActionRow(
                 actionsEnabled = actionsEnabled,
-                onApprove = onApprove,
+                onApprove = { approveDialogOpen = true },
                 onStartEdit = onStartEdit,
                 onReject = { rejectDialogOpen = true },
             )
         }
+    }
+
+    // Issue #288: both decisions are confirmed, not immediate. The tap arms
+    // the dialog; only its confirm button runs the existing single-card
+    // approve/reject callback. Dialog state is local, like the reject dialog
+    // always was — the ViewModel owns only the repository mutations.
+    if (approveDialogOpen) {
+        ApproveConfirmDialog(
+            onConfirm = {
+                approveDialogOpen = false
+                onApprove()
+            },
+            onDismiss = { approveDialogOpen = false },
+        )
     }
 
     if (rejectDialogOpen) {
@@ -795,7 +810,44 @@ private fun InlineEditor(
     }
 }
 
-/** Reject with an optional reason (docs/android.md, "Screens → 3"). */
+/**
+ * The confirmation gate in front of the per-card Approve (issue #288): the
+ * tap on the card's Approve action arms this dialog instead of approving —
+ * the card enters FSRS only on confirm. Cancel, the backdrop or any other
+ * dismissal performs no mutation and leaves the queue unchanged.
+ */
+@Composable
+private fun ApproveConfirmDialog(
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Approve card?") },
+        text = {
+            Text(
+                "Approve this card and add it to your review schedule. " +
+                    "You can edit or suspend it later from Decks.",
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text("Approve", color = MaterialTheme.recallyColors.primary)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        },
+        modifier = Modifier.testTag(APPROVE_CONFIRM_DIALOG_TAG),
+    )
+}
+
+/**
+ * Reject with an optional reason (docs/android.md, "Screens → 3"). The
+ * dialog explains the consequence before the user confirms (issue #288):
+ * the card is marked rejected, leaves this queue and never enters the
+ * review schedule, and the optional reason feeds the Learner.
+ */
 @Composable
 private fun RejectDialog(
     onConfirm: (String?) -> Unit,
@@ -804,14 +856,21 @@ private fun RejectDialog(
     var reason by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Reject card") },
+        title = { Text("Reject card?") },
         text = {
-            OutlinedTextField(
-                value = reason,
-                onValueChange = { reason = it },
-                label = { Text("Reason (optional — feeds the Learner)") },
-                modifier = Modifier.fillMaxWidth(),
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(RecallySpacing.sm)) {
+                Text(
+                    "The card will be marked rejected and removed from this queue. " +
+                        "It will not enter your review schedule. " +
+                        "Your optional reason helps the Learner improve future cards.",
+                )
+                OutlinedTextField(
+                    value = reason,
+                    onValueChange = { reason = it },
+                    label = { Text("Reason (optional — feeds the Learner)") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
         },
         confirmButton = {
             TextButton(onClick = { onConfirm(reason.ifBlank { null }) }) {
@@ -821,6 +880,7 @@ private fun RejectDialog(
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("Cancel") }
         },
+        modifier = Modifier.testTag(REJECT_DIALOG_TAG),
     )
 }
 
@@ -843,6 +903,8 @@ internal const val QUEUE_LIST_TAG = "approveQueueList"
 internal const val BULK_APPROVE_BAR_TAG = "bulkApproveBar"
 internal const val BULK_APPROVE_PILL_TAG = "bulkApprovePill"
 internal const val BULK_APPROVE_CONFIRM_DIALOG_TAG = "bulkApproveConfirmDialog"
+internal const val APPROVE_CONFIRM_DIALOG_TAG = "approveConfirmDialog"
+internal const val REJECT_DIALOG_TAG = "rejectDialog"
 
 // --- Previews (docs/android.md, "Every previewable composable has a preview") ---
 
@@ -981,4 +1043,24 @@ private fun ApproveScreenBulkConfirmPreview() {
                 showBulkApproveConfirm = true,
             ),
     )
+}
+
+// Issue #288: both individual decisions are confirmed and explained. Dialog
+// visibility is local Compose state (like the reject dialog always was), so
+// the previews render the dialogs directly rather than through screen state.
+
+@CombinedPreviews
+@Composable
+private fun ApproveConfirmDialogPreview() {
+    RecallyTheme {
+        ApproveConfirmDialog(onConfirm = {}, onDismiss = {})
+    }
+}
+
+@CombinedPreviews
+@Composable
+private fun RejectDialogPreview() {
+    RecallyTheme {
+        RejectDialog(onConfirm = {}, onDismiss = {})
+    }
 }
