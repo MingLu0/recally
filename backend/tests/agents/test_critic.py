@@ -447,12 +447,21 @@ def test_previous_critique_reaches_the_prompt_on_a_revision_round(
 
 def test_critic_prompt_forbids_faulting_its_own_advice() -> None:
     """The revision-round prompt says not to fault wording the Critic itself
-    suggested unless the source contradicts it, and to own a wrong earlier
+    suggested unless the source does not support it, and to own a wrong earlier
     suggestion rather than raise it as a new defect."""
     prompt = " ".join(_rendered_revision_round_prompt().lower().split())
     assert "do not fault wording you suggested" in prompt
-    assert "unless the source contradicts it" in prompt
+    assert "unless the source does not support it" in prompt
     assert "say so explicitly" in prompt
+
+
+def test_critic_prompt_faults_own_advice_the_source_does_not_support() -> None:
+    """Earlier wording that the source merely fails to state is still faulted
+    (card 128): the exception is no support, not outright contradiction, so the
+    revision round matches the "stay inside the source" rule for advice."""
+    prompt = " ".join(_rendered_revision_round_prompt().lower().split())
+    assert "unless the source does not support it" in prompt
+    assert "unless the source contradicts it" not in prompt
 
 
 def test_round_one_prompt_has_no_previous_critique_block() -> None:
