@@ -571,3 +571,34 @@ def test_writer_prompt_keeps_the_dangling_pronoun_ban() -> None:
 
     prompt = _normalised_prompt(fake_llm)
     assert 'never resolve a dangling "it", "this" or "they" by guessing' in prompt
+
+
+# --- The #323 gate: "why" is earned by a reason the source states ---
+# Cards 126 and 119 (cycle 6) answered a "why" their sources gave no reason for,
+# pushed there by rule 5 and the "what"-versus-"why" sibling rule. Both tests
+# were confirmed red against the unedited prompts/writer.md — the red output is
+# in the PR.
+
+
+def test_writer_prompt_asks_why_only_when_the_source_states_a_reason() -> None:
+    """Rule 5 prefers "why" and "how" only for a source that states a reason or
+    mechanism; a source that states none gets a card asking what it says."""
+    fake_llm = FakeLlm(ONE_CARD_RESPONSE)
+    DefaultWriter()(_request(), _ctx(fake_llm))
+
+    prompt = _normalised_prompt(fake_llm)
+    assert (
+        'prefer "why" and "how" questions over trivia only when the source '
+        "states a reason or mechanism" in prompt
+    )
+    assert "when the source states neither, ask what the source says" in prompt
+
+
+def test_what_versus_why_rule_applies_only_when_a_reason_is_stated() -> None:
+    """The sibling rule disqualifies a "what" card only when the source states
+    the reason or mechanism that makes "why" available."""
+    fake_llm = FakeLlm(ONE_CARD_RESPONSE)
+    DefaultWriter()(_request(), _ctx(fake_llm))
+
+    prompt = _normalised_prompt(fake_llm)
+    assert '"why" is available only when the source states a reason or mechanism' in prompt
