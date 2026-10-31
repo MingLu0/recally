@@ -6,6 +6,7 @@ The fake completion returns a `SimpleNamespace` shaped like the bits of LiteLLM'
 `litellm.completion_cost` is patched per test so costs are deterministic.
 """
 
+import json
 from collections.abc import Iterator
 from types import SimpleNamespace
 from typing import Any
@@ -211,3 +212,32 @@ def test_provider_error_propagates_and_still_logs(
     assert row.output_tokens == 0
     assert row.cost_microusd == 0
     assert row.latency_ms is not None and row.latency_ms >= 0
+
+
+def test_logged_response_keeps_keys_the_parser_ignores(
+    session_factory: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A Writer reply's `skipped` list survives in `llm_calls.response` (#327).
+
+    No agent parses it and no column holds it, so this row is its only home.
+    """
+    skipped_concepts = [{"concept": "Mapping goals", "reason": "Named only in passing."}]
+    reply_text = json.dumps({"cards": [], "skipped": skipped_concepts})
+
+    def fake(*, model: str, messages: list[dict[str, Any]], **kwargs: Any) -> Any:
+        return SimpleNamespace(
+            model=model,
+            choices=[
+                SimpleNamespace(message=SimpleNamespace(role="assistant", content=reply_text))
+            ],
+            usage=SimpleNamespace(prompt_tokens=11, completion_tokens=7),
+        )
+
+    monkeypatch.setattr("recally.llm.litellm.completion", fake)
+    monkeypatch.setattr("recally.llm.litellm.completion_cost", lambda **kwargs: 0.0)
+
+    LlmCaller(session_factory, log_payloads=True)(MESSAGES, model=MODEL, agent=AGENT)
+
+    logged_response = _only_row(session_factory).response
+    assert logged_response is not None
+    assert json.loads(logged_response)["skipped"] == skipped_concepts

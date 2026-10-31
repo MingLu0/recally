@@ -10,7 +10,8 @@ one.
 
 Coverage: when a unit holds several distinct card-worthy concepts, each one
 gets a card or an explicit skip reason — a valuable concept left uncarded is
-a miss, not a save. The one-card default still governs single-idea units.
+a miss, not a save. The one-card default still governs single-idea units. A
+skip reason goes in `skipped` in the reply, never in a card's `rationale`.
 
 Coverage is not fan-out: a second concept earns a card only when it is
 independently worth recalling, never as a restatement of the first. The
@@ -123,10 +124,12 @@ $critique_section
 
 Respond with JSON only — no prose, no code fences — in exactly this shape:
 
-{"cards": [{"type": "qa", "front": "...", "back": "...", "rationale": "..."}]}
+{"cards": [{"type": "qa", "front": "...", "back": "...", "rationale": "..."}], "skipped": [{"concept": "...", "reason": "..."}]}
 
 - `type` is `qa` or `cloze`.
 - 1 to 3 cards.
 - `front` and `back` are non-empty.
 - A `cloze` card's `front` contains exactly one `{{c1::...}}` deletion marker.
 - `rationale` is one sentence saying which card rule the card serves.
+- `skipped` names each distinct card-worthy concept that got no card, with one
+  sentence saying why. `skipped` is an empty list when nothing is skipped.

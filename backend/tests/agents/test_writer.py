@@ -612,3 +612,38 @@ def test_what_versus_why_rule_applies_only_when_a_reason_is_stated() -> None:
 
     prompt = _normalised_prompt(fake_llm)
     assert '"why" is available only when the source states a reason or mechanism' in prompt
+
+
+# --- Skipped concepts have somewhere to go in the reply (#327) ---
+#
+# The coverage rule asks for "a card or an explicit skip reason", but the reply
+# format only held `cards`. The prompt test was red against the unedited
+# prompts/writer.md (red output in the PR). The parse test passes without a code
+# change by design: `_parse_cards` reads only `cards`, and this pins that.
+
+
+SKIPPED_CONCEPTS = [
+    {"concept": "Mapping goals into sub-goals", "reason": "The source only names it in passing."}
+]
+
+
+def test_writer_prompt_reply_format_has_a_skipped_list() -> None:
+    """The reply format carries `skipped`, with its item shape and the empty-list case."""
+    fake_llm = FakeLlm(ONE_CARD_RESPONSE)
+    DefaultWriter()(_request(), _ctx(fake_llm))
+    prompt = _rendered_prompt(fake_llm)
+
+    reply_format = prompt[prompt.index("## Output") :]
+    assert '"skipped": [{"concept": "...", "reason": "..."}]' in reply_format
+    assert "`skipped` is an empty list when" in reply_format
+
+
+def test_writer_reply_with_a_skipped_list_parses_to_the_same_cards() -> None:
+    """A non-empty `skipped` list changes nothing about the parsed drafts, and does not raise."""
+    reply_with_skips = json.dumps({"cards": [QA_CARD, CLOZE_CARD], "skipped": SKIPPED_CONCEPTS})
+
+    result_with_skips = DefaultWriter()(_request(), _ctx(FakeLlm(reply_with_skips)))
+    result_without_skips = DefaultWriter()(_request(), _ctx(FakeLlm(TWO_CARD_RESPONSE)))
+
+    assert len(result_with_skips.cards) == 2
+    assert result_with_skips.cards == result_without_skips.cards
