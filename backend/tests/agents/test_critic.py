@@ -324,9 +324,9 @@ def test_critic_prompt_routes_specific_fragments_to_revise_not_reject() -> None:
     assert "reject" in prompt[max(0, empty_idx - 200) : empty_idx + 600]
 
 
-def test_critic_prompt_keeps_all_five_criteria() -> None:
-    """Atomicity, unambiguity, self-containedness, non-triviality and factual
-    fidelity all survive the edit (regression guard)."""
+def test_critic_prompt_keeps_all_six_criteria() -> None:
+    """Atomicity, unambiguity, self-containedness, non-triviality, factual
+    fidelity and sibling overlap all survive the edit (regression guard)."""
     prompt = _rendered_gate_prompt().lower()
     for criterion in (
         "atomicity",
@@ -334,6 +334,7 @@ def test_critic_prompt_keeps_all_five_criteria() -> None:
         "self-containedness",
         "non-triviality",
         "factual fidelity",
+        "sibling overlap",
     ):
         assert criterion in prompt
 
@@ -400,8 +401,8 @@ def test_critic_prompt_advice_preserves_atomicity_and_context() -> None:
     assert "the source does not support" in advice_section
 
 
-def test_critic_prompt_keeps_five_criteria_and_verdict_rules() -> None:
-    """The five checks and the unsalvageable-vs-rewrite distinction survive the
+def test_critic_prompt_keeps_six_criteria_and_verdict_rules() -> None:
+    """The six checks and the unsalvageable-vs-rewrite distinction survive the
     advice rule, which sits alongside them rather than replacing them (#280)."""
     prompt = _rendered_gate_prompt()
     lowered = prompt.lower()
@@ -411,12 +412,69 @@ def test_critic_prompt_keeps_five_criteria_and_verdict_rules() -> None:
         "self-containedness",
         "non-triviality",
         "factual fidelity",
+        "sibling overlap",
     ):
         assert criterion in lowered
     assert "unsalvageable" in lowered
     assert "could be rewritten" in lowered
-    for heading in ("## The five checks", "## Verdicts"):
+    for heading in ("## The six checks", "## Verdicts"):
         assert heading in prompt
+    assert "five checks" not in lowered
+
+
+# --- The #317 gate: a unit's drafts must not overlap each other ---------------
+# In cycle 6, card 113 clozed "performance, alignment, and user trust" and card
+# 114's question contained that same list. Each was judged alone and accepted;
+# #316 put a unit's first drafts in one call, and this check uses that view.
+
+
+def _collapsed_prompt_section(prompt: str, heading: str) -> str:
+    """One `## ` section of the prompt, lowercased with whitespace collapsed."""
+    lowered = prompt.lower()
+    marker = f"## {heading.lower()}"
+    assert marker in lowered, f"the rendered prompt has no `{marker}` section"
+    section_start = lowered.index(marker) + len(marker)
+    next_heading = lowered.find("\n## ", section_start)
+    section = lowered[section_start:] if next_heading == -1 else lowered[section_start:next_heading]
+    return " ".join(section.split())
+
+
+def _sibling_overlap_check() -> str:
+    """The sixth check alone, so a phrase elsewhere in the prompt cannot satisfy
+    an assertion about it. It is the last item in the checks section."""
+    checks_section = _collapsed_prompt_section(_rendered_gate_prompt(), "The six checks")
+    marker = "6. **sibling overlap**"
+    assert marker in checks_section, "the checks section has no sixth check"
+    return checks_section[checks_section.index(marker) :]
+
+
+def test_critic_prompt_has_the_sibling_overlap_check() -> None:
+    """The check names the three overlap shapes and applies only to a request
+    holding more than one card."""
+    overlap_check = _sibling_overlap_check()
+    assert "only when this request holds more than one card" in overlap_check
+    assert "restates a sibling card in another format" in overlap_check
+    assert "a cloze whose deletion covers the clause a sibling card asks about" in overlap_check
+    assert "carries a sibling card's answer in its question" in overlap_check
+
+
+def test_overlap_check_revises_the_later_card_toward_an_uncovered_concept() -> None:
+    """The verdict lands on the later card, whose critique names a concept the
+    source states and no sibling covers; the earlier card is judged on its own."""
+    overlap_check = _sibling_overlap_check()
+    assert "the verdict goes on the later card" in overlap_check
+    assert "`revise`" in overlap_check
+    assert "a concept the source states that no sibling card covers" in overlap_check
+    assert "the earlier card is judged on its own merits" in overlap_check
+
+
+def test_overlap_check_rejects_only_when_nothing_is_left() -> None:
+    """`reject` is reserved for a source with no uncovered concept, and the
+    Verdicts section admits that case rather than contradicting it."""
+    overlap_check = _sibling_overlap_check()
+    assert "`reject` only when the source states no concept left uncovered" in overlap_check
+    verdicts_section = _collapsed_prompt_section(_rendered_gate_prompt(), "Verdicts")
+    assert "no uncovered concept" in verdicts_section
 
 
 # --- The #306 gate: the Critic sees its previous critique ---------------------
