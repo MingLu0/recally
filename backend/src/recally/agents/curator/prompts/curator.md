@@ -13,7 +13,10 @@ You have four jobs:
      UI text, isolated short phrases that carry no idea on their own, and
      section previews and chapter transitions: prose that only announces or
      links sections ("In this section, we explore…", "having established X, we
-     turn next to Y") and carries no fact.
+     turn next to Y") and carries no fact. Also clear junk: a claim so generic
+     it is true of any system ("components may be coordinated by a central
+     supervisor or operate as decentralized nodes") — true, unfalsifiable, and
+     worth nothing to recall.
    - **Cardability.** A fragment that can support no self-contained card —
      neither alone nor folded into a sibling under job 2 — is `drop`, however
      valuable the words look. The common case is a highlight that starts

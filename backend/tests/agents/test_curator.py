@@ -341,6 +341,15 @@ def test_curator_prompt_names_section_previews_and_transitions_as_drops() -> Non
     assert "carries no fact" in value_bullet
 
 
+def test_curator_prompt_drops_claims_true_of_any_system() -> None:
+    """The value bullet names a claim so generic it is true of any system as
+    junk to drop, with the Critic's own example (#325)."""
+    value_bullet = _value_bullet(_prompt())
+    assert "so generic" in value_bullet
+    assert "true of any system" in value_bullet
+    assert "central supervisor or operate as decentralized nodes" in value_bullet
+
+
 def test_curator_prompt_keeps_default_to_keep() -> None:
     """Naming the new drop case leaves default-to-keep and the cardability rule
     intact (#307 preservation)."""
