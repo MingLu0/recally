@@ -18,7 +18,8 @@ Handoffs:
   lost work.
 - **Critic → human is DB state.** The verdict becomes `cards.status`: `accept` →
   `pending_review` (`approved` only when `AUTO_APPROVE_ROUND1_ACCEPT` is on and it is
-  round 1 — the hard-rule-1 exception), `revise` re-enters the Writer for that card
+  round 1 — the hard-rule-1 exception) once its quotes check out, else `needs_human`
+  (#324), `revise` re-enters the Writer for that card
   only, `reject` → `needs_human` with the critique in `status_reason`, and
   `LLM_MAX_ROUNDS` without an `accept` → `needs_human` (hard rule 9). The pipeline
   never writes `rejected`.
@@ -60,7 +61,7 @@ and the failed unit's highlights retryable.
 import logging
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Literal, overload
 
 from sqlalchemy import func, select
@@ -161,7 +162,8 @@ class _CardOutcome:
     the round-1 Writer result, already stamped on every call of its loop (#262).
     `split_drafts` are the extra cards the loop's revisions returned past the
     rewrite itself — usually a split the Critic asked for — which the caller turns
-    into new drafts of the unit (#305).
+    into new drafts of the unit (#305). `quotes` are the accepting verdict's, for
+    `_check_accept_quotes`; every other ending leaves them empty (#324).
     """
 
     draft: CardDraft
@@ -171,6 +173,7 @@ class _CardOutcome:
     terminal: Literal["accept", "reject", "exhausted"]
     draft_index: int | None = None
     split_drafts: tuple[CardDraft, ...] = ()
+    quotes: tuple[str, ...] = ()
 
 
 @dataclass
@@ -345,17 +348,20 @@ def rewrite_leech_card(
         # One leech, one rewrite: the first draft is the rewrite; any further
         # drafts are discarded, and so are a revision's split-off drafts — the
         # split-to-new-draft path is initial generation's only (#305).
-        outcome = _resolve_card(
-            registry,
-            settings,
-            llm_caller,
-            None,
-            unit,
-            result.cards[0],
-            source_truncated=source_truncated,
-            guidance_version=guidance_version,
-            guidance=guidance,
-            card_id=leech.id,
+        outcome = _check_accept_quotes(
+            _resolve_card(
+                registry,
+                settings,
+                llm_caller,
+                None,
+                unit,
+                result.cards[0],
+                source_truncated=source_truncated,
+                guidance_version=guidance_version,
+                guidance=guidance,
+                card_id=leech.id,
+            ),
+            unit.curated_text,
         )
         rewrite = _write_card(session, unit, outcome, settings)
         rewrite.supersedes_card_id = leech.id
@@ -810,18 +816,21 @@ def _resolve_unit_cards(
     outcomes: list[_CardOutcome] = []
     while queued_drafts:
         draft_index, draft, born_in_revision = queued_drafts.popleft()
-        outcome = _resolve_card(
-            registry,
-            settings,
-            llm_caller,
-            ingest_run_id,
-            unit,
-            draft,
-            source_truncated=source_truncated,
-            guidance_version=guidance_version,
-            guidance=guidance,
-            draft_index=draft_index,
-            born_in_revision=born_in_revision,
+        outcome = _check_accept_quotes(
+            _resolve_card(
+                registry,
+                settings,
+                llm_caller,
+                ingest_run_id,
+                unit,
+                draft,
+                source_truncated=source_truncated,
+                guidance_version=guidance_version,
+                guidance=guidance,
+                draft_index=draft_index,
+                born_in_revision=born_in_revision,
+            ),
+            unit.curated_text,
         )
         outcomes.append(outcome)
         for split_draft in outcome.split_drafts:
@@ -912,6 +921,7 @@ def _resolve_card(
                 terminal="accept",
                 draft_index=draft_index,
                 split_drafts=tuple(split_drafts),
+                quotes=verdict.quotes,
             )
         if verdict.verdict == "reject":
             return _CardOutcome(
@@ -965,6 +975,40 @@ def _resolve_card(
         current = revised.cards[0]
         split_drafts.extend(revised.cards[1:])
         previous_critique = verdict.critique
+
+
+def _check_accept_quotes(outcome: _CardOutcome, source_text: str) -> _CardOutcome:
+    """Send an accept whose quotes do not hold up to `needs_human` (#324).
+
+    The Critic's accept is otherwise unverifiable: cards 82, 126 and 119 stated things
+    no input contains and were accepted with empty critiques. A failing accept loses
+    any status `_resolve_card` gave it, `approved` included, so a card with a bad quote
+    is never auto-approved (hard rule 1). This wraps `_resolve_card` on the production
+    paths rather than living inside it, which leaves the eval harness's outcomes as
+    they were. `terminal` stays `accept`: it records how the loop ended.
+    """
+    if outcome.terminal != "accept":
+        return outcome
+    problem = _quote_problem(outcome.quotes, source_text)
+    if problem is None:
+        return outcome
+    return replace(outcome, status="needs_human", status_reason=problem)
+
+
+def _quote_problem(quotes: tuple[str, ...], source_text: str) -> str | None:
+    if not quotes:
+        return "Critic accepted without quotes from the source."
+    normalized_source = _normalize_for_quote_match(source_text)
+    for quote in quotes:
+        normalized_quote = _normalize_for_quote_match(quote)
+        # A blank quote is a substring of every source, so it proves nothing.
+        if not normalized_quote or normalized_quote not in normalized_source:
+            return f'Critic quote not in source: "{quote}"'
+    return None
+
+
+def _normalize_for_quote_match(text: str) -> str:
+    return " ".join(text.split()).casefold()
 
 
 def _write_card(

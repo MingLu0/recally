@@ -14,6 +14,9 @@ marks it so fidelity is judged against the partial text and no card is penalised
 for text the export lost (hard rule 7). From round 2 the prompt also shows the
 Critic its previous critique (`previous_critique`), so it does not fault wording it
 suggested itself (#306).
+
+An `accept` carries `quotes`, the source words it rests on. The agent only parses
+them: a missing list is an empty tuple, and the runner decides what that means (#324).
 """
 
 import json
@@ -101,8 +104,19 @@ def _parse_verdict(entry: object, position: int) -> CardVerdict:
     if verdict in ("revise", "reject") and not critique:
         raise ValueError(f"verdict {position}: {verdict} requires a non-empty critique")
     return CardVerdict(
-        verdict=cast(Literal["accept", "revise", "reject"], verdict), critique=critique
+        verdict=cast(Literal["accept", "revise", "reject"], verdict),
+        critique=critique,
+        quotes=_parse_quotes(entry, position) if verdict == "accept" else (),
     )
+
+
+def _parse_quotes(entry: dict[str, object], position: int) -> tuple[str, ...]:
+    quotes = entry.get("quotes", [])
+    if not isinstance(quotes, list) or not all(isinstance(quote, str) for quote in quotes):
+        raise ValueError(
+            f"verdict {position}: quotes must be a list of strings, got {quotes!r:.200}"
+        )
+    return tuple(quotes)
 
 
 def _extract_json(response_text: str) -> object:

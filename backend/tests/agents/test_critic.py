@@ -463,3 +463,48 @@ def test_round_one_prompt_has_no_previous_critique_block() -> None:
     assert "previous critique" not in prompt.lower()
     assert "do not fault wording you suggested" not in prompt.lower()
     assert "$" not in prompt
+
+
+# --- Quotes on accept (#324) -----------------------------------------------------
+
+
+def test_critic_prompt_asks_accept_to_quote_the_source_for_each_claim() -> None:
+    """An `accept` must list, per claim, the exact source words supporting it, as
+    contiguous verbatim spans; cards 82, 126 and 119 were accepted with no trace."""
+    prompt = _render_prompt(_request())
+
+    assert '"quotes": [' in prompt
+    assert "for each claim" in prompt
+    assert "contiguous" in prompt
+    assert "verbatim" in prompt
+
+
+def test_accept_verdict_parses_its_quotes(recording_llm: RecordingLlm, ctx: AgentContext) -> None:
+    """The quotes of an `accept` reach the `CardVerdict` unchanged, in order."""
+    quotes = ["scheduled just before", "reconsolidated at peak"]
+    recording_llm.respond(
+        [
+            {"verdict": "accept", "critique": "", "quotes": quotes},
+            {"verdict": "revise", "critique": "Cloze front gives away the answer."},
+        ]
+    )
+
+    result = DefaultCritic()(_request(), ctx)
+
+    assert result.verdicts[0].quotes == tuple(quotes)
+    assert result.verdicts[1].quotes == ()
+
+
+def test_accept_with_non_string_quotes_raises(
+    recording_llm: RecordingLlm, ctx: AgentContext
+) -> None:
+    """A bare string would otherwise be iterated into one-character quotes."""
+    recording_llm.respond(
+        [
+            {"verdict": "accept", "critique": "", "quotes": "scheduled just before"},
+            {"verdict": "accept", "critique": "", "quotes": ["reconsolidated"]},
+        ]
+    )
+
+    with pytest.raises(ValueError, match="quotes"):
+        DefaultCritic()(_request(), ctx)

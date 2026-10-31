@@ -149,8 +149,14 @@ def writer_response(*fronts: str) -> str:
 
 
 def critic_response(*verdicts: tuple[str, str]) -> str:
+    # Every entry of UNIT_TEXTS contains "unit", so an `accept` passes the quote check (#324).
     return json.dumps(
-        [{"verdict": verdict, "critique": critique} for verdict, critique in verdicts]
+        [
+            {"verdict": verdict, "critique": critique, "quotes": ["unit"]}
+            if verdict == "accept"
+            else {"verdict": verdict, "critique": critique}
+            for verdict, critique in verdicts
+        ]
     )
 
 

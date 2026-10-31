@@ -174,10 +174,24 @@ def writer_response(*fronts: str) -> str:
     )
 
 
+# Every curated text these tests script contains this word, so a scripted `accept`
+# passes the runner's quote check (#324) unless a test is about that check.
+SOURCE_QUOTE = "unit"
+
+
 def critic_response(*verdicts: tuple[str, str]) -> str:
     return json.dumps(
-        [{"verdict": verdict, "critique": critique} for verdict, critique in verdicts]
+        [
+            {"verdict": verdict, "critique": critique, "quotes": [SOURCE_QUOTE]}
+            if verdict == "accept"
+            else {"verdict": verdict, "critique": critique}
+            for verdict, critique in verdicts
+        ]
     )
+
+
+def critic_accept_quoting(*quotes: str) -> str:
+    return json.dumps([{"verdict": "accept", "critique": "", "quotes": list(quotes)}])
 
 
 ACCEPT = ("accept", "")
@@ -931,6 +945,102 @@ def test_auto_approve_flag_on_approves_only_round_one_accepts(
         by_rounds = {card.generation_rounds: card for card in cards}
         assert by_rounds[1].status == "approved"
         assert by_rounds[2].status == "pending_review"
+    finally:
+        engine.dispose()
+
+
+# --- The runner checks an accept's quotes (#324) ------------------------------------
+
+
+def run_single_accept(
+    container: Container, monkeypatch: pytest.MonkeyPatch, critic_reply: str
+) -> Card:
+    """One unit, one draft, one scripted Critic reply; returns the resulting card."""
+    run_id, highlights = ingest_fixture(container)
+    ScriptedLlm(
+        monkeypatch,
+        [
+            curator_response(
+                keep_unit([highlights[0].id], "Leases expire after  thirty\nseconds.")
+            ),
+            writer_response("When do leases expire?"),
+            critic_reply,
+        ],
+    )
+
+    container.run_pipeline(run_id)
+
+    cards = all_cards(container)
+    assert len(cards) == 1
+    return cards[0]
+
+
+def test_accept_with_a_quote_not_in_the_source_goes_to_needs_human(
+    container: Container, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """One quote the source lacks is enough, and the reason names that quote."""
+    card = run_single_accept(
+        container, monkeypatch, critic_accept_quoting("Leases expire", "after ninety seconds")
+    )
+
+    assert card.status == "needs_human"
+    assert card.status_reason == 'Critic quote not in source: "after ninety seconds"'
+
+
+def test_accept_without_quotes_goes_to_needs_human(
+    container: Container, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A reply with no quote list at all is an accept nothing supports."""
+    card = run_single_accept(
+        container, monkeypatch, json.dumps([{"verdict": "accept", "critique": ""}])
+    )
+
+    assert card.status == "needs_human"
+    assert card.status_reason is not None
+    assert "quotes" in card.status_reason
+
+
+def test_accept_with_a_blank_quote_goes_to_needs_human(
+    container: Container, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A blank quote is a substring of everything, so it must not count as found."""
+    card = run_single_accept(container, monkeypatch, critic_accept_quoting("Leases expire", "  "))
+
+    assert card.status == "needs_human"
+
+
+def test_accept_with_every_quote_in_the_source_stays_pending_review(
+    container: Container, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    card = run_single_accept(
+        container, monkeypatch, critic_accept_quoting("Leases expire", "seconds.")
+    )
+
+    assert card.status == "pending_review"
+    assert card.status_reason is None
+
+
+def test_quote_match_ignores_case_and_whitespace(
+    container: Container, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The source has a double space and a newline; the quote has neither, and
+    differs in case."""
+    card = run_single_accept(
+        container, monkeypatch, critic_accept_quoting("LEASES EXPIRE AFTER THIRTY SECONDS")
+    )
+
+    assert card.status == "pending_review"
+
+
+def test_quote_failure_is_never_auto_approved(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Hard rule 1: the check runs before AUTO_APPROVE_ROUND1_ACCEPT applies."""
+    flag_container, engine = make_container(AUTO_APPROVE_ROUND1_ACCEPT=True, LLM_CONCURRENCY=1)
+    try:
+        card = run_single_accept(
+            flag_container, monkeypatch, critic_accept_quoting("after ninety seconds")
+        )
+
+        assert card.status == "needs_human"
     finally:
         engine.dispose()
 
