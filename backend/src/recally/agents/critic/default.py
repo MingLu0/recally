@@ -6,7 +6,8 @@ the source highlights as numbered blocks and the numbered candidate cards, and t
 validated at the agent boundary (docs/backend.md, "The agent contract"): exactly
 one verdict per request card, `accept|revise|reject` only, and a non-empty
 critique on `revise`/`reject` — the runner writes it to `status_reason` and the
-Writer works from it, so an empty one is useless.
+Writer works from it, so an empty one is useless. An `accept` carries its source
+quotes, which the runner checks (#324).
 
 The Critic returns verdicts, never card statuses (hard rule 1); the runner maps
 them (#35). When a source highlight is clipped, the prompt marks that highlight so
@@ -119,8 +120,20 @@ def _parse_verdict(entry: object, position: int) -> CardVerdict:
     if verdict in ("revise", "reject") and not critique:
         raise ValueError(f"verdict {position}: {verdict} requires a non-empty critique")
     return CardVerdict(
-        verdict=cast(Literal["accept", "revise", "reject"], verdict), critique=critique
+        verdict=cast(Literal["accept", "revise", "reject"], verdict),
+        critique=critique,
+        quotes=_parse_quotes(entry, position) if verdict == "accept" else (),
     )
+
+
+def _parse_quotes(entry: dict[str, object], position: int) -> tuple[str, ...]:
+    """An accept's quotes. A missing list is `()`: the runner decides what that means."""
+    quotes = entry.get("quotes", [])
+    if not isinstance(quotes, list) or not all(isinstance(quote, str) for quote in quotes):
+        raise ValueError(
+            f"verdict {position}: quotes must be a list of strings, got {quotes!r:.200}"
+        )
+    return tuple(quotes)
 
 
 def _extract_json(response_text: str) -> object:

@@ -104,7 +104,9 @@ Judge each card on all five:
    card text against the source, not the rationale. When the source lists several
    highlights, a claim about one highlight's subject must be supported by that
    highlight, not by a sibling's words: a sibling may set up the question, but its
-   words are no evidence for what another highlight's subject does.
+   words are no evidence for what another highlight's subject does. To `accept`,
+   you must be able to quote the source for each claim the card makes; a claim
+   you cannot quote is not supported.
 
 ## Verdicts
 
@@ -142,8 +144,13 @@ new violation while fixing the one you found:
 Respond with JSON only — no prose, no code fences — a list with exactly one object
 per candidate card, in the same order as above:
 
-[{"verdict": "accept", "critique": ""}, {"verdict": "revise", "critique": "..."}]
+[{"verdict": "accept", "critique": "", "quotes": ["...", "..."]}, {"verdict": "revise", "critique": "..."}]
 
 - `verdict` is exactly one of "accept", "revise", "reject".
 - `critique` is an empty string for `accept`. For `revise` and `reject` it must be
   a concrete, non-empty explanation.
+- `quotes` is required on `accept` and absent on `revise` and `reject`. It lists,
+  for each claim the card makes, the exact source words that support it. Each quote
+  is one contiguous span copied verbatim from a single highlight: no ellipses, no
+  paraphrase, no joining of separate passages. The quotes are checked against the
+  source, and an accept with a quote that is not there goes to a human.

@@ -16,6 +16,7 @@ loop, so asserting them on the Curator row would assert the opposite of the sche
 
 import json
 import logging
+import re
 from collections import deque
 from collections.abc import Iterator
 from datetime import date
@@ -95,6 +96,17 @@ def container() -> Iterator[Container]:
         engine.dispose()
 
 
+def _fill_source_quote(scripted: str, messages: list[dict[str, Any]]) -> str:
+    """Swap `SOURCE_QUOTE` for the first highlight of the prompt being answered."""
+    if SOURCE_QUOTE not in scripted:
+        return scripted
+    prompt = messages[0]["content"]
+    first_highlight = re.search(r"^Highlight 1.*\n(.+)$", prompt, flags=re.MULTILINE)
+    if first_highlight is None:  # a direct `_resolve_card` call; nothing checks its quotes
+        return scripted
+    return scripted.replace(SOURCE_QUOTE, json.dumps(first_highlight.group(1))[1:-1])
+
+
 class ScriptedLlm:
     """Monkeypatched over `litellm.completion`; replays recorded responses in order.
 
@@ -117,6 +129,7 @@ class ScriptedLlm:
             scripted = self._responses.popleft()
             if isinstance(scripted, Exception):
                 raise scripted
+            scripted = _fill_source_quote(scripted, messages)
             return SimpleNamespace(
                 model=model,
                 choices=[
@@ -177,11 +190,23 @@ def writer_response(*fronts: str) -> str:
 
 
 def critic_response(*verdicts: tuple[str, str]) -> str:
+    """An `accept` quotes its source (#324); `ScriptedLlm` fills in the words."""
     return json.dumps(
-        [{"verdict": verdict, "critique": critique} for verdict, critique in verdicts]
+        [
+            {"verdict": verdict, "critique": critique, "quotes": [SOURCE_QUOTE]}
+            if verdict == "accept"
+            else {"verdict": verdict, "critique": critique}
+            for verdict, critique in verdicts
+        ]
     )
 
 
+def accept_quoting(*quotes: str) -> str:
+    """One `accept` that quotes exactly these words."""
+    return json.dumps([{"verdict": "accept", "critique": "", "quotes": list(quotes)}])
+
+
+SOURCE_QUOTE = "<the first highlight of the prompt>"
 ACCEPT = ("accept", "")
 REVISE = ("revise", "Not atomic; split the two ideas.")
 REJECT = ("reject", "Source is a bare heading; unsalvageable.")
@@ -992,6 +1017,104 @@ def test_auto_approve_flag_on_approves_only_round_one_accepts(
         assert by_rounds[2].status == "pending_review"
     finally:
         engine.dispose()
+
+
+# --- An accept quotes the source, and the runner checks the quotes (#324) --------
+
+
+def run_one_accepted_card(
+    container: Container, monkeypatch: pytest.MonkeyPatch, critic_reply: str
+) -> Card:
+    """One keep unit over the first fixture highlight, one draft, this Critic reply."""
+    run_id, highlights = ingest_fixture(container)
+    ScriptedLlm(
+        monkeypatch,
+        [
+            curator_response(keep_unit([highlights[0].id])),
+            writer_response("What flows into the sensing layer?"),
+            critic_reply,
+        ],
+    )
+    container.run_pipeline(run_id)
+    assert fetch_run(container, run_id).error is None
+    cards = all_cards(container)
+    assert len(cards) == 1
+    return cards[0]
+
+
+def test_accept_with_a_quote_not_in_the_source_goes_to_needs_human(
+    container: Container, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    card = run_one_accepted_card(
+        container,
+        monkeypatch,
+        accept_quoting("observable outcomes", "words no highlight contains"),
+    )
+
+    assert card.status == "needs_human"
+    assert card.status_reason is not None
+    assert "words no highlight contains" in card.status_reason
+    assert "observable outcomes" not in card.status_reason
+
+
+def test_accept_without_quotes_goes_to_needs_human(
+    container: Container, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    card = run_one_accepted_card(
+        container, monkeypatch, json.dumps([{"verdict": "accept", "critique": ""}])
+    )
+
+    assert card.status == "needs_human"
+    assert card.status_reason is not None
+    assert "quote" in card.status_reason.lower()
+
+
+def test_accept_with_every_quote_in_the_source_stays_pending_review(
+    container: Container, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    card = run_one_accepted_card(
+        container,
+        monkeypatch,
+        accept_quoting("This execution produces", "flow into the sensing layer"),
+    )
+
+    assert card.status == "pending_review"
+    assert card.status_reason is None
+
+
+def test_blank_quote_goes_to_needs_human(
+    container: Container, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An empty string is a substring of everything, so it must not count as found."""
+    card = run_one_accepted_card(container, monkeypatch, accept_quoting("  "))
+
+    assert card.status == "needs_human"
+
+
+def test_quote_match_ignores_case_and_whitespace(
+    container: Container, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    card = run_one_accepted_card(
+        container, monkeypatch, accept_quoting("THIS   execution\n  PRODUCES")
+    )
+
+    assert card.status == "pending_review"
+    assert card.status_reason is None
+
+
+def test_quote_failure_is_never_auto_approved(monkeypatch: pytest.MonkeyPatch) -> None:
+    flag_container, engine = make_container(AUTO_APPROVE_ROUND1_ACCEPT=True)
+    try:
+        card = run_one_accepted_card(
+            flag_container, monkeypatch, accept_quoting("words no highlight contains")
+        )
+    finally:
+        engine.dispose()
+
+    assert card.generation_rounds == 1
+    assert card.status == "needs_human"
+    assert card.status_reason is not None
+    assert "words no highlight contains" in card.status_reason
 
 
 # --- Round 1 judges a unit's first drafts in one Critic call (#316) --------------

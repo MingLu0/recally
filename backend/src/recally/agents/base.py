@@ -191,10 +191,16 @@ class CriticRequest:
 
 @dataclass(frozen=True)
 class CardVerdict:
-    """Per-card verdict. The runner maps verdicts to statuses; the Critic never names one."""
+    """Per-card verdict. The runner maps verdicts to statuses; the Critic never names one.
+
+    `quotes` holds, on an `accept`, the exact source words behind each claim of the
+    card. The runner checks them against the source before the accept becomes a
+    status (#324); `revise` and `reject` carry none.
+    """
 
     verdict: Literal["accept", "revise", "reject"]
     critique: str
+    quotes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

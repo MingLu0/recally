@@ -127,7 +127,9 @@ def test_next_writer_call_request_contains_the_v2_text(
                     ]
                 }
             ),
-            json.dumps([{"verdict": "accept", "critique": ""}]),
+            json.dumps(
+                [{"verdict": "accept", "critique": "", "quotes": ["This execution produces"]}]
+            ),
         ],
     )
 
