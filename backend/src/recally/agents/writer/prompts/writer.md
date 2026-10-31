@@ -117,8 +117,6 @@ $guidance
 
 ## The curated unit
 
-Tags: $tags
-
 $curated_text
 $critique_section
 ## Output

@@ -40,7 +40,6 @@ class DefaultWriter:
     def __call__(self, request: WriterRequest, ctx: AgentContext) -> WriterResult:
         prompt = _PROMPT_TEMPLATE.substitute(
             guidance=request.guidance or "No Learner guidance yet; follow the card rules above.",
-            tags=", ".join(request.tags) if request.tags else "(none)",
             curated_text=request.curated_text,
             critique_section=_critique_section(request.critique, request.previous_draft),
         )

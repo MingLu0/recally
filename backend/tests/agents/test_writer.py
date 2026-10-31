@@ -328,17 +328,28 @@ def test_writer_prompt_keeps_the_existing_card_rules() -> None:
 
 
 def test_writer_prompt_renders_all_placeholders() -> None:
-    """`$guidance`, `$tags`, `$curated_text` and `$critique_section` all substitute
-    and no stray `$` survives rendering."""
+    """`$guidance`, `$curated_text` and `$critique_section` all substitute and no
+    stray `$` survives rendering."""
     fake_llm = FakeLlm(ONE_CARD_RESPONSE)
     DefaultWriter()(_request(critique=CRITIQUE_TEXT), _ctx(fake_llm))
 
     prompt = _rendered_prompt(fake_llm)
     assert GUIDANCE_TEXT in prompt
-    assert "sqlite, durability" in prompt
     assert CURATED_TEXT in prompt
     assert CRITIQUE_TEXT in prompt
     assert "$" not in prompt
+
+
+def test_writer_prompt_carries_no_tags() -> None:
+    """Tag words leaked into cycle-6 cards from the `Tags:` line, where the Critic
+    could not see them (#322). The request still has tags; the prompt must not."""
+    fake_llm = FakeLlm(ONE_CARD_RESPONSE)
+    DefaultWriter()(_request(tags=["sqlite", "durability"]), _ctx(fake_llm))
+
+    prompt = _rendered_prompt(fake_llm)
+    assert "sqlite" not in prompt.lower()
+    assert "durability" not in prompt.lower()
+    assert "Tags:" not in prompt
 
 
 # --- The #239 gate: the Writer is told the fidelity rule the Critic grades ---
@@ -534,7 +545,6 @@ def test_writer_prompt_keeps_card_rules_and_placeholders() -> None:
     assert "exactly once in the front" in prompt
     assert "never reconstruct" in prompt.lower()
     assert GUIDANCE_TEXT in prompt
-    assert "sqlite, durability" in prompt
     assert CURATED_TEXT in prompt
     assert CRITIQUE_TEXT in prompt
     assert "$" not in prompt
