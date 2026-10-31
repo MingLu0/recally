@@ -46,6 +46,8 @@ backend/
         default.py
         prompts/learner.md
     pipeline.py                   # the runner; resolves agents via registry, owns all DB transitions
+    near_duplicates.py            # lexical same-passage check over a chapter; the runner flags
+                                  #   `duplicate_of` in the Curator payload, never merges (#291)
     evals/
       extract.py                  # builds the committed writer eval set from deliberate
                                   #   human judgments; opens the database read-only (#242)
