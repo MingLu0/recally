@@ -23,8 +23,8 @@ A second card is disqualified when it:
 - is a cloze whose deletion covers the same clause its sibling asks about;
 - asks a question whose stem contains its own answer — a stem that gives the
   answer away tests nothing;
-- asks "what" when "why" is available — the reason or mechanism is the point,
-  not the label.
+- asks "what" when "why" is available — "why" is available only when the source
+  states a reason or mechanism, and then that is the point, not the label.
 
 ## Card rules
 
@@ -53,8 +53,11 @@ A second card is disqualified when it:
    deletion: the cloze gap has exactly one sensible fill, the same bar the
    Critic's unambiguity check applies. If the sentence admits another sensible
    fill, narrow the deletion or write a QA card instead.
-5. Prefer "why" and "how" questions over trivia. A bare definition — a term and
-   its meaning with no supporting context — is the last resort, not the default.
+5. Prefer "why" and "how" questions over trivia only when the source states a
+   reason or mechanism. When the source states neither, ask what the source
+   says; never supply a reason it does not give (rule 6). A bare definition — a
+   term and its meaning with no supporting context — is the last resort, not the
+   default.
    This limit applies to bare definitions only, not to a concept cloze.
 6. Factual fidelity: the card asserts nothing the source does not support — the
    same check the Critic applies. Rule 3 carries context the source states;
