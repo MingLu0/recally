@@ -575,8 +575,9 @@ def test_revise_stays_within_its_card(tmp_path: Path, monkeypatch: pytest.Monkey
 
     The unit drafts two cards; the first is accepted on round 1 and the second is
     revised once then accepted. The accepted sibling's text must appear in exactly
-    one Critic prompt — a second would mean the revision dragged it back through the
-    loop, which is the cross-card leak concurrency could plausibly introduce.
+    one Critic prompt, the unit's round-1 call — a second would mean the revision
+    dragged it back through the loop, which is the cross-card leak concurrency could
+    plausibly introduce.
     """
     container = make_file_backed_container(tmp_path, LLM_CONCURRENCY=4)
     try:
@@ -599,10 +600,8 @@ def test_revise_stays_within_its_card(tmp_path: Path, monkeypatch: pytest.Monkey
                 with lock:
                     critic_calls.append(prompt)
                 if accepted_front in prompt:
-                    return critic_response(ACCEPT)
-                if revised_front in prompt:
-                    return critic_response(ACCEPT)
-                return critic_response(REVISE)
+                    return critic_response(ACCEPT, REVISE)
+                return critic_response(ACCEPT)
             # Writer: round 1 drafts both cards; a revision returns only the rewrite.
             if "Not atomic" in prompt:
                 return writer_response(revised_front)

@@ -31,6 +31,7 @@ from sqlalchemy.pool import StaticPool
 
 from recally.agents.base import (
     AgentContext,
+    CardDraft,
     CriticRequest,
     CriticResult,
     WriterRequest,
@@ -54,6 +55,7 @@ from recally.models import (
     IngestRun,
     LlmCall,
 )
+from recally.pipeline import _resolve_card
 
 TEST_API_KEY = "test-key-not-a-real-secret"
 FIXTURE_A = Path(__file__).parent / "fixtures" / "oreilly-annotations-a.csv"
@@ -435,8 +437,7 @@ def test_every_call_writes_an_llm_calls_row(
         [
             curator_response(keep_unit([highlights[0].id])),
             writer_response("Card A?", "Card B?"),
-            critic_response(ACCEPT),  # card A, round 1
-            critic_response(REVISE),  # card B, round 1
+            critic_response(ACCEPT, REVISE),  # both drafts, round 1
             writer_response("Card B revised?"),
             critic_response(ACCEPT),  # card B, round 2
         ],
@@ -446,8 +447,8 @@ def test_every_call_writes_an_llm_calls_row(
 
     unit = all_units(container)[0]
     calls = all_llm_calls(container, run_id)
-    # 1 Curator + 2 Writer + 3 Critic; a missed row or an extra call both fail here.
-    assert len(calls) == 6
+    # 1 Curator + 2 Writer + 2 Critic; a missed row or an extra call both fail here.
+    assert len(calls) == 5
     for call in calls:
         assert call.agent in {"curator/default", "writer/default", "critic/default"}
         assert call.ingest_run_id == run_id
@@ -458,7 +459,7 @@ def test_every_call_writes_an_llm_calls_row(
             assert call.unit_id == unit.id
             assert call.round is not None and call.round >= 1
     assert [call.round for call in calls if call.agent == "writer/default"] == [1, 2]
-    assert [call.round for call in calls if call.agent == "critic/default"] == [1, 1, 2]
+    assert [call.round for call in calls if call.agent == "critic/default"] == [1, 2]
 
 
 # --- Trace links (#262) ------------------------------------------------------------
@@ -553,16 +554,16 @@ def test_split_chapter_units_link_to_their_own_batch_call(
 def test_critic_and_revision_calls_carry_the_cards_draft_index(
     container: Container, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Gap 2: every Critic and round-≥2 Writer call carries the `draft_index` of the
-    card it produced, so `(unit_id, draft_index)` joins a card to exactly its loop."""
+    """Gap 2: every round-≥2 Critic and Writer call carries the `draft_index` of the
+    card it produced, so `(unit_id, draft_index)` joins a card to exactly its loop. The
+    round-1 Critic call judges every first draft at once and carries none (#316)."""
     run_id, highlights = ingest_fixture(container)
     ScriptedLlm(
         monkeypatch,
         [
             curator_response(keep_unit([highlights[0].id])),
             writer_response("Card A?", "Card B?"),
-            critic_response(ACCEPT),  # card A, round 1
-            critic_response(REVISE),  # card B, round 1
+            critic_response(ACCEPT, REVISE),  # both drafts, round 1
             writer_response("Card B revised?"),
             critic_response(ACCEPT),  # card B, round 2
         ],
@@ -576,10 +577,16 @@ def test_critic_and_revision_calls_carry_the_cards_draft_index(
     loop_calls = [
         call
         for call in calls
-        if call.agent.startswith("critic/")
-        or (call.agent.startswith("writer/") and call.round is not None and call.round >= 2)
+        if call.agent.startswith(("critic/", "writer/"))
+        and call.round is not None
+        and call.round >= 2
     ]
+    assert loop_calls
     assert all(call.draft_index is not None for call in loop_calls)
+    round_one_critic_calls = [
+        call for call in calls if call.agent.startswith("critic/") and call.round == 1
+    ]
+    assert [call.draft_index for call in round_one_critic_calls] == [None]
 
     def trace(card: Card) -> list[LlmCall]:
         return [
@@ -589,13 +596,11 @@ def test_critic_and_revision_calls_carry_the_cards_draft_index(
         ]
 
     card_a_calls, card_b_calls = trace(card_a), trace(card_b)
-    assert [(call.agent, call.round) for call in card_a_calls] == [("critic/default", 1)]
+    assert card_a_calls == []
     assert [(call.agent, call.round) for call in card_b_calls] == [
-        ("critic/default", 1),
         ("writer/default", 2),
         ("critic/default", 2),
     ]
-    assert not {call.id for call in card_a_calls} & {call.id for call in card_b_calls}
 
 
 def test_round_one_writer_call_has_no_draft_index(
@@ -609,8 +614,7 @@ def test_round_one_writer_call_has_no_draft_index(
         [
             curator_response(keep_unit([highlights[0].id])),
             writer_response("Card A?", "Card B?"),
-            critic_response(ACCEPT),
-            critic_response(ACCEPT),
+            critic_response(ACCEPT, ACCEPT),
         ],
     )
 
@@ -639,8 +643,7 @@ def test_revise_affects_only_the_named_card(
         [
             curator_response(keep_unit([highlights[0].id])),
             writer_response("Accepted sibling?", "Revised card draft?"),
-            critic_response(ACCEPT),  # sibling, round 1
-            critic_response(REVISE),  # the named card, round 1
+            critic_response(ACCEPT, REVISE),  # sibling and the named card, round 1
             writer_response("Revised card, round 2?"),
             critic_response(ACCEPT),  # the named card, round 2
         ],
@@ -824,11 +827,9 @@ def test_split_drafts_never_push_a_unit_past_three_cards(
         [
             curator_response(keep_unit([highlights[0].id])),
             writer_response("Card A?", "Card B?", "Card C?"),
-            critic_response(REVISE),  # card A, round 1: split it
+            critic_response(REVISE, ACCEPT, ACCEPT),  # all three, round 1: split card A
             writer_response("Revised card A?", "Split-off over the cap?"),
             critic_response(ACCEPT),  # card A, round 2
-            critic_response(ACCEPT),  # card B
-            critic_response(ACCEPT),  # card C
         ],
     )
 
@@ -852,8 +853,7 @@ def test_generation_rounds_is_per_card(
         [
             curator_response(keep_unit([highlights[0].id])),
             writer_response("Easy card?", "Hard card round 1?"),
-            critic_response(ACCEPT),  # easy card, round 1
-            critic_response(REVISE),  # hard card, round 1
+            critic_response(ACCEPT, REVISE),  # easy and hard card, round 1
             writer_response("Hard card round 2?"),
             critic_response(REVISE),  # hard card, round 2
             writer_response("Hard card round 3?"),
@@ -943,8 +943,7 @@ def test_auto_approve_flag_on_approves_only_round_one_accepts(
             [
                 curator_response(keep_unit([highlights[0].id])),
                 writer_response("Round 1 accept?", "Round 2 accept draft?"),
-                critic_response(ACCEPT),  # round 1: auto-approved
-                critic_response(REVISE),  # round 1: revise
+                critic_response(ACCEPT, REVISE),  # round 1: auto-approved, revise
                 writer_response("Round 2 accept revised?"),
                 critic_response(ACCEPT),  # round 2: stays in the queue
             ],
@@ -959,6 +958,276 @@ def test_auto_approve_flag_on_approves_only_round_one_accepts(
         assert by_rounds[2].status == "pending_review"
     finally:
         engine.dispose()
+
+
+# --- Round 1 judges a unit's first drafts in one Critic call (#316) --------------
+
+
+def record_agent_requests(
+    monkeypatch: pytest.MonkeyPatch,
+) -> tuple[list[WriterRequest], list[CriticRequest]]:
+    """Record every Writer and Critic request while the real agents still run."""
+    writer_requests: list[WriterRequest] = []
+    critic_requests: list[CriticRequest] = []
+    real_writer_call = DefaultWriter.__call__
+    real_critic_call = DefaultCritic.__call__
+
+    def recording_writer_call(
+        self: DefaultWriter, request: WriterRequest, ctx: AgentContext
+    ) -> WriterResult:
+        writer_requests.append(request)
+        return real_writer_call(self, request, ctx)
+
+    def recording_critic_call(
+        self: DefaultCritic, request: CriticRequest, ctx: AgentContext
+    ) -> CriticResult:
+        critic_requests.append(request)
+        return real_critic_call(self, request, ctx)
+
+    monkeypatch.setattr(DefaultWriter, "__call__", recording_writer_call)
+    monkeypatch.setattr(DefaultCritic, "__call__", recording_critic_call)
+    return writer_requests, critic_requests
+
+
+def test_round_one_judges_all_first_drafts_in_one_critic_call(
+    container: Container, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Three first drafts cost one round-1 Critic call, its request holding all three
+    in draft order: cards 94 and 95 got opposite verdicts because each was judged
+    without the other (cycle 6)."""
+    _, critic_requests = record_agent_requests(monkeypatch)
+    run_id, highlights = ingest_fixture(container)
+    ScriptedLlm(
+        monkeypatch,
+        [
+            curator_response(keep_unit([highlights[0].id])),
+            writer_response("Card A?", "Card B?", "Card C?"),
+            critic_response(ACCEPT, ACCEPT, ACCEPT),
+        ],
+    )
+
+    container.run_pipeline(run_id)
+
+    assert fetch_run(container, run_id).error is None
+    assert len(critic_requests) == 1
+    assert [card.front for card in critic_requests[0].cards] == ["Card A?", "Card B?", "Card C?"]
+    critic_calls = [
+        call for call in all_llm_calls(container, run_id) if call.agent == "critic/default"
+    ]
+    assert [call.round for call in critic_calls] == [1]
+
+
+def test_round_one_verdicts_apply_to_drafts_in_order(
+    container: Container, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Verdict i lands on draft i, including the reject's critique as `status_reason`."""
+    run_id, highlights = ingest_fixture(container)
+    ScriptedLlm(
+        monkeypatch,
+        [
+            curator_response(keep_unit([highlights[0].id])),
+            writer_response("Card A?", "Card B?", "Card C?"),
+            critic_response(ACCEPT, REJECT, ACCEPT),
+        ],
+    )
+
+    container.run_pipeline(run_id)
+
+    cards = all_cards(container)
+    assert [(card.front, card.draft_index, card.status) for card in cards] == [
+        ("Card A?", 0, "pending_review"),
+        ("Card B?", 1, "needs_human"),
+        ("Card C?", 2, "pending_review"),
+    ]
+    assert cards[1].status_reason == REJECT[1]
+    assert cards[0].status_reason is None
+    assert cards[2].status_reason is None
+
+
+def test_revised_draft_continues_alone_from_round_two(
+    container: Container, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A `revise` from the unit call sends only that draft to the Writer, and round 2
+    judges only its rewrite, with the round-1 critique."""
+    writer_requests, critic_requests = record_agent_requests(monkeypatch)
+    run_id, highlights = ingest_fixture(container)
+    ScriptedLlm(
+        monkeypatch,
+        [
+            curator_response(keep_unit([highlights[0].id])),
+            writer_response("Card A?", "Card B?"),
+            critic_response(ACCEPT, REVISE),
+            writer_response("Card B revised?"),
+            critic_response(ACCEPT),
+        ],
+    )
+
+    container.run_pipeline(run_id)
+
+    assert len(writer_requests) == 2
+    revision_request = writer_requests[1]
+    assert revision_request.previous_draft is not None
+    assert revision_request.previous_draft.front == "Card B?"
+    assert revision_request.critique == REVISE[1]
+    assert len(critic_requests) == 2
+    round_two_request = critic_requests[1]
+    assert [card.front for card in round_two_request.cards] == ["Card B revised?"]
+    assert round_two_request.previous_critique == REVISE[1]
+
+
+def test_round_cap_counts_the_unit_call_as_round_one(
+    container: Container, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`revise` in the unit call and in rounds 2 and 3 exhausts the draft at
+    `generation_rounds=3`: the unit call is its round 1 (hard rule 9)."""
+    run_id, highlights = ingest_fixture(container)
+    ScriptedLlm(
+        monkeypatch,
+        [
+            curator_response(keep_unit([highlights[0].id])),
+            writer_response("Card A?", "Card B?"),
+            critic_response(ACCEPT, REVISE),
+            writer_response("Card B, round 2?"),
+            critic_response(REVISE),
+            writer_response("Card B, round 3?"),
+            critic_response(REVISE),
+        ],
+    )
+
+    container.run_pipeline(run_id)
+
+    accepted, exhausted = all_cards(container)
+    assert accepted.generation_rounds == 1
+    assert exhausted.front == "Card B, round 3?"
+    assert exhausted.status == "needs_human"
+    assert exhausted.generation_rounds == 3
+    critic_rounds = [
+        call.round for call in all_llm_calls(container, run_id) if call.agent == "critic/default"
+    ]
+    assert critic_rounds == [1, 2, 3]
+
+
+@pytest.mark.parametrize(
+    ("flag_on", "expected_status"), [(True, "approved"), (False, "pending_review")]
+)
+def test_auto_approve_flag_covers_round_one_accepts_from_the_unit_call(
+    monkeypatch: pytest.MonkeyPatch, flag_on: bool, expected_status: str
+) -> None:
+    """An accept from the unit call is a round-1 accept for every draft it covers."""
+    flag_container, engine = make_container(AUTO_APPROVE_ROUND1_ACCEPT=flag_on, LLM_CONCURRENCY=1)
+    try:
+        run_id, highlights = ingest_fixture(flag_container)
+        ScriptedLlm(
+            monkeypatch,
+            [
+                curator_response(keep_unit([highlights[0].id])),
+                writer_response("Card A?", "Card B?"),
+                critic_response(ACCEPT, ACCEPT),
+            ],
+        )
+
+        flag_container.run_pipeline(run_id)
+
+        cards = all_cards(flag_container)
+        assert [card.status for card in cards] == [expected_status, expected_status]
+    finally:
+        engine.dispose()
+
+
+def test_split_off_draft_still_starts_its_own_loop(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A split-off from a round-2 revision gets its own round-1 Critic call, and that
+    accept is never auto-approved even though the unit call's accept is (#305)."""
+    flag_container, engine = make_container(AUTO_APPROVE_ROUND1_ACCEPT=True, LLM_CONCURRENCY=1)
+    try:
+        _, critic_requests = record_agent_requests(monkeypatch)
+        run_id, highlights = ingest_fixture(flag_container)
+        ScriptedLlm(
+            monkeypatch,
+            [
+                curator_response(keep_unit([highlights[0].id])),
+                writer_response("Card A?", "Bundled card?"),
+                critic_response(ACCEPT, REVISE),
+                writer_response("Rewrite?", "Split-off?"),
+                critic_response(ACCEPT),  # the rewrite, round 2
+                critic_response(ACCEPT),  # the split-off, its own round 1
+            ],
+        )
+
+        flag_container.run_pipeline(run_id)
+
+        by_front = {card.front: card for card in all_cards(flag_container)}
+        assert by_front["Card A?"].status == "approved"
+        assert by_front["Rewrite?"].status == "pending_review"
+        split_off = by_front["Split-off?"]
+        assert split_off.status == "pending_review"
+        assert split_off.generation_rounds == 1
+        assert split_off.draft_index == 2
+        assert [card.front for card in critic_requests[-1].cards] == ["Split-off?"]
+        assert critic_requests[-1].previous_critique is None
+        assert [
+            (call.round, call.draft_index)
+            for call in all_llm_calls(flag_container, run_id)
+            if call.agent == "critic/default"
+        ] == [(1, None), (2, 1), (1, 2)]
+    finally:
+        engine.dispose()
+
+
+def test_unit_critic_call_is_logged_with_round_one_and_no_draft_index(
+    container: Container, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The unit call serves every draft, so it has no `draft_index`, like the round-1
+    Writer call; round-2+ Critic calls keep their card's."""
+    run_id, highlights = ingest_fixture(container)
+    ScriptedLlm(
+        monkeypatch,
+        [
+            curator_response(keep_unit([highlights[0].id])),
+            writer_response("Card A?", "Card B?"),
+            critic_response(ACCEPT, REVISE),
+            writer_response("Card B revised?"),
+            critic_response(ACCEPT),
+        ],
+    )
+
+    container.run_pipeline(run_id)
+
+    assert [
+        (call.round, call.draft_index)
+        for call in all_llm_calls(container, run_id)
+        if call.agent == "critic/default"
+    ] == [(1, None), (2, 1)]
+
+
+def test_resolve_card_alone_still_runs_its_own_round_one(
+    container: Container, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The eval harness calls `_resolve_card` per draft with these arguments
+    (`evals/harness.py`), so without a unit verdict it makes its own round-1 call."""
+    _, critic_requests = record_agent_requests(monkeypatch)
+    ScriptedLlm(monkeypatch, [critic_response(ACCEPT)])
+    unit = CuratedUnit(id=1, curated_text="The curated unit text.", tags=["agents"])
+    draft = CardDraft(
+        type="qa", front="Card A?", back="Answer.", rationale="r", guidance_version=None
+    )
+
+    outcome = _resolve_card(
+        container.agent_registry,
+        container.settings,
+        container.llm_caller,
+        None,
+        unit,
+        draft,
+        source_truncated=False,
+        guidance_version=None,
+        guidance=None,
+    )
+
+    assert outcome.status == "pending_review"
+    assert outcome.generation_rounds == 1
+    assert [request.cards for request in critic_requests] == [[draft]]
+    critic_calls = [call for call in all_llm_calls(container) if call.agent == "critic/default"]
+    assert [call.round for call in critic_calls] == [1]
 
 
 # --- Idempotency and crash recovery ----------------------------------------------

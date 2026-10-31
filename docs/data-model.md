@@ -76,7 +76,7 @@ PK (`unit_id`, `highlight_id`). Gives every card full provenance back to each so
 | edited_at | datetime, nullable | last **post-approval** `PATCH` of `front`/`back`/`tags`. FSRS state is untouched by an edit; the timestamp lets the Learner segment hand-fixed cards so they do not flatter the `guidance_version` that wrote the flawed original (ADR-008). A pre-approval save of a queued card does not set it — pre-approval edits are read through `original_front`/`original_back` vs `front`/`back` (ADR-018) |
 | suspended_until | datetime, nullable | NULL = in rotation. Bury sets the next day boundary in `RECALLY_TIMEZONE`; suspend sets a far-future sentinel. `GET /reviews/due` excludes any card whose value is in the future; FSRS state is never recomputed (ADR-008) |
 | generation_rounds | int | Writer⇄Critic rounds used for this card (per card, not per unit) |
-| draft_index | int, nullable | which draft of the unit's round-1 Writer call (0, 1, 2) this card resolved from; its Critic and revision-Writer calls carry the same `llm_calls.draft_index`, so `(unit_id, draft_index)` joins a card to its own loop. Null for a leech rewrite (its calls carry the leech's `card_id`) and for cards written before the column existed |
+| draft_index | int, nullable | which draft of the unit's round-1 Writer call (0, 1, 2) this card resolved from; its round-2+ Critic and revision-Writer calls carry the same `llm_calls.draft_index`, so `(unit_id, draft_index)` joins a card to its own loop; the unit's round-1 Critic call judges every first draft at once and carries none, and verdict order maps to `draft_index` (#316). A split-off draft's own round-1 Critic call does carry it. Null for a leech rewrite (its calls carry the leech's `card_id`) and for cards written before the column existed |
 | model | text | generating model (for quality analysis) |
 | guidance_version | int, nullable FK writer_guidance | which Learner guidance was in the Writer prompt |
 | cost_microusd | int | generation cost |
@@ -164,7 +164,7 @@ One row per call through `llm.py`. Doubles as the trace and the replay corpus: t
 | unit_id | FK curated_units, nullable | set for Writer and Critic calls; null for Curator (batch) and Learner |
 | card_id | FK cards, nullable | null during initial generation: the runner writes a `cards` row once, at its terminal verdict, so mid-loop calls have no card to point at. Set for calls that serve an existing card (e.g. Learner-driven leech rewrites, step 6) |
 | round | int, nullable | Writer ⇄ Critic round (1-based); null outside the loop |
-| draft_index | int, nullable | during initial generation, the index of the draft a Critic or revision-Writer call serves, matching `cards.draft_index`: the stand-in for `card_id`, which is still null mid-loop. Null for the round-1 Writer call (it drafts every card at once), the Curator, the Learner and leech rewrites |
+| draft_index | int, nullable | during initial generation, the index of the draft a Critic or revision-Writer call serves, matching `cards.draft_index`: the stand-in for `card_id`, which is still null mid-loop. Null for the round-1 Writer call (it drafts every card at once), the unit's round-1 Critic call (it judges every first draft at once; its verdict order maps to `draft_index`, #316), the Curator, the Learner and leech rewrites |
 | model | text | |
 | request | json, nullable | messages sent, after prompt rendering; null when `LLM_LOG_PAYLOADS=false` |
 | response | json, nullable | parsed structured output; null when `LLM_LOG_PAYLOADS=false` |

@@ -69,6 +69,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from recally.agents.base import (
     AgentContext,
     CardDraft,
+    CardVerdict,
     Critic,
     CriticRequest,
     Curator,
@@ -159,7 +160,7 @@ class _CardOutcome:
     loop ended (`accept`/`reject` from the Critic, `exhausted` at the round cap) so
     callers — the eval harness counts rework calls from it (#243) — never have to
     re-derive it from the status string. `draft_index` is the draft's position in
-    the round-1 Writer result, already stamped on every call of its loop (#262).
+    the round-1 Writer result, already stamped on every call of its own loop (#262).
     `split_drafts` are the extra cards the loop's revisions returned past the
     rewrite itself — usually a split the Critic asked for — which the caller turns
     into new drafts of the unit (#305).
@@ -789,7 +790,8 @@ def _resolve_unit_cards(
 
     Each draft gets its `draft_index` before its loop starts, so its Critic and
     revision calls are told apart from a sibling's by key, not by id order (#262).
-    This round-1 call drafts every card at once and so carries none.
+    The round-1 Writer call drafts every card at once and the round-1 Critic call
+    judges them all at once (#316), so both carry none; verdict i belongs to draft i.
 
     A revision that returns extra cards — a split the Critic asked for — yields new
     drafts, each with the next unused `draft_index` and its own loop from round 1
@@ -811,14 +813,33 @@ def _resolve_unit_cards(
         ),
         writer_context,
     )
-    # (draft_index, draft, born_in_revision) for every draft still to resolve.
-    queued_drafts: deque[tuple[int, CardDraft, bool]] = deque(
-        (draft_index, draft, False) for draft_index, draft in enumerate(result.cards)
+    round_one_verdicts: list[CardVerdict] = []
+    if result.cards:
+        critic, critic_context = _agent_context(
+            "critic", registry, settings, llm_caller, ingest_run_id, unit_id=unit.id, round=1
+        )
+        round_one_verdicts = critic(
+            CriticRequest(
+                cards=result.cards,
+                source_text=unit.curated_text,
+                source_truncated=source_truncated,
+                previous_critique=None,
+            ),
+            critic_context,
+        ).verdicts
+    # (draft_index, draft, round-1 verdict if the unit call gave one) for every draft
+    # still to resolve. A split-off has none, which is also what marks it born in a
+    # revision.
+    queued_drafts: deque[tuple[int, CardDraft, CardVerdict | None]] = deque(
+        (draft_index, draft, verdict)
+        for draft_index, (draft, verdict) in enumerate(
+            zip(result.cards, round_one_verdicts, strict=True)
+        )
     )
     next_draft_index = len(result.cards)
     outcomes: list[_CardOutcome] = []
     while queued_drafts:
-        draft_index, draft, born_in_revision = queued_drafts.popleft()
+        draft_index, draft, round_one_verdict = queued_drafts.popleft()
         outcome = _resolve_card(
             registry,
             settings,
@@ -830,7 +851,8 @@ def _resolve_unit_cards(
             guidance_version=guidance_version,
             guidance=guidance,
             draft_index=draft_index,
-            born_in_revision=born_in_revision,
+            born_in_revision=round_one_verdict is None,
+            round_one_verdict=round_one_verdict,
         )
         outcomes.append(outcome)
         for split_draft in outcome.split_drafts:
@@ -842,7 +864,7 @@ def _resolve_unit_cards(
                     split_draft.front,
                 )
                 continue
-            queued_drafts.append((next_draft_index, split_draft, True))
+            queued_drafts.append((next_draft_index, split_draft, None))
             next_draft_index += 1
     return outcomes
 
@@ -861,6 +883,7 @@ def _resolve_card(
     card_id: int | None = None,
     draft_index: int | None = None,
     born_in_revision: bool = False,
+    round_one_verdict: CardVerdict | None = None,
 ) -> _CardOutcome:
     """One card's Critic ⇄ Writer rounds, bounded by LLM_MAX_ROUNDS (hard rule 9).
 
@@ -873,6 +896,10 @@ def _resolve_card(
     `born_in_revision` marks a split-off draft: its round 1 is not the unit's
     round 1, so `AUTO_APPROVE_ROUND1_ACCEPT` never approves it (hard rule 1).
 
+    `round_one_verdict` is this draft's verdict from the unit's one round-1 Critic
+    call (#316), which counts as its round 1. Without it, as for a split-off or a
+    direct call from the eval harness, this makes its own round-1 Critic call.
+
     Session-free by construction (ADR-015): this returns a `_CardOutcome` and the
     caller writes it. That is what lets a whole unit resolve on a worker thread —
     the only state it reads off `unit` (`curated_text`, `tags`) was loaded before
@@ -884,26 +911,29 @@ def _resolve_card(
     previous_critique: str | None = None
     split_drafts: list[CardDraft] = []
     while True:
-        critic, critic_context = _agent_context(
-            "critic",
-            registry,
-            settings,
-            llm_caller,
-            ingest_run_id,
-            unit_id=unit.id,
-            card_id=card_id,
-            round=round_number,
-            draft_index=draft_index,
-        )
-        verdict = critic(
-            CriticRequest(
-                cards=[current],
-                source_text=unit.curated_text,
-                source_truncated=source_truncated,
-                previous_critique=previous_critique,
-            ),
-            critic_context,
-        ).verdicts[0]
+        if round_number == 1 and round_one_verdict is not None:
+            verdict = round_one_verdict
+        else:
+            critic, critic_context = _agent_context(
+                "critic",
+                registry,
+                settings,
+                llm_caller,
+                ingest_run_id,
+                unit_id=unit.id,
+                card_id=card_id,
+                round=round_number,
+                draft_index=draft_index,
+            )
+            verdict = critic(
+                CriticRequest(
+                    cards=[current],
+                    source_text=unit.curated_text,
+                    source_truncated=source_truncated,
+                    previous_critique=previous_critique,
+                ),
+                critic_context,
+            ).verdicts[0]
 
         if verdict.verdict == "accept":
             status = (
