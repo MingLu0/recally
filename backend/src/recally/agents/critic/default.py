@@ -2,15 +2,15 @@
 
 One LLM call per request on the cheap tier (`LLM_MODEL_CRITIC`): the prompt is
 rendered from `prompts/critic.md` (loaded from disk, never inline — ADR-003) with
-the source text and the numbered candidate cards, and the JSON response is
+the source highlights as numbered blocks and the numbered candidate cards, and the JSON response is
 validated at the agent boundary (docs/backend.md, "The agent contract"): exactly
 one verdict per request card, `accept|revise|reject` only, and a non-empty
 critique on `revise`/`reject` — the runner writes it to `status_reason` and the
 Writer works from it, so an empty one is useless.
 
 The Critic returns verdicts, never card statuses (hard rule 1); the runner maps
-them (#35). When the source highlight is clipped (`source_truncated`), the prompt
-marks it so fidelity is judged against the partial text and no card is penalised
+them (#35). When a source highlight is clipped, the prompt marks that highlight so
+fidelity is judged against the partial text and no card is penalised
 for text the export lost (hard rule 7). From round 2 the prompt also shows the
 Critic its previous critique (`previous_critique`), so it does not fault wording it
 suggested itself (#306).
@@ -21,11 +21,19 @@ from pathlib import Path
 from string import Template
 from typing import Literal, cast
 
-from recally.agents.base import AgentContext, CardVerdict, CriticRequest, CriticResult
+from recally.agents.base import (
+    AgentContext,
+    CardVerdict,
+    CriticRequest,
+    CriticResult,
+    render_source_blocks,
+)
 
 PROMPT_PATH = Path(__file__).parent / "prompts" / "critic.md"
 TRUNCATION_BEGIN = "[[TRUNCATION_NOTE]]"
 TRUNCATION_END = "[[/TRUNCATION_NOTE]]"
+CLIPPED_HIGHLIGHT_BEGIN = "[[CLIPPED_HIGHLIGHT_NOTE]]"
+CLIPPED_HIGHLIGHT_END = "[[/CLIPPED_HIGHLIGHT_NOTE]]"
 PREVIOUS_CRITIQUE_BEGIN = "[[PREVIOUS_CRITIQUE]]"
 PREVIOUS_CRITIQUE_END = "[[/PREVIOUS_CRITIQUE]]"
 VALID_VERDICTS = ("accept", "revise", "reject")
@@ -47,8 +55,18 @@ class DefaultCritic:
 
 def _render_prompt(request: CriticRequest) -> str:
     template = PROMPT_PATH.read_text(encoding="utf-8")
+    highlights = request.highlights
     prompt = _keep_or_strip_block(
-        template, TRUNCATION_BEGIN, TRUNCATION_END, keep=request.source_truncated
+        template,
+        TRUNCATION_BEGIN,
+        TRUNCATION_END,
+        keep=request.source_truncated and not highlights,
+    )
+    prompt = _keep_or_strip_block(
+        prompt,
+        CLIPPED_HIGHLIGHT_BEGIN,
+        CLIPPED_HIGHLIGHT_END,
+        keep=any(highlight.truncated for highlight in highlights or []),
     )
     prompt = _keep_or_strip_block(
         prompt,
@@ -62,7 +80,7 @@ def _render_prompt(request: CriticRequest) -> str:
         for number, card in enumerate(request.cards, start=1)
     )
     return Template(prompt).substitute(
-        source_text=request.source_text,
+        source_text=render_source_blocks(highlights) if highlights else request.source_text,
         cards=cards_block,
         previous_critique=request.previous_critique or "",
     )

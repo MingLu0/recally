@@ -15,7 +15,13 @@ from typing import Any
 
 import pytest
 
-from recally.agents.base import AgentContext, CardDraft, WriterRequest, WriterResult
+from recally.agents.base import (
+    AgentContext,
+    CardDraft,
+    SourceHighlight,
+    WriterRequest,
+    WriterResult,
+)
 from recally.agents.writer import default as writer_default
 from recally.agents.writer.default import DefaultWriter, WriterResponseError
 from recally.config import Settings
@@ -647,3 +653,55 @@ def test_writer_reply_with_a_skipped_list_parses_to_the_same_cards() -> None:
 
     assert len(result_with_skips.cards) == 2
     assert result_with_skips.cards == result_without_skips.cards
+
+
+# --- Each source highlight is its own block (#319) ------------------------------
+
+
+FIRST_HIGHLIGHT = "WAL frames record changes before they are applied."
+CLIPPED_HIGHLIGHT = "Checkpoints move frames back into the database fi"
+
+
+def test_writer_prompt_renders_each_highlight_as_its_own_block() -> None:
+    """Two highlights render as two numbered blocks, and the joined text is gone."""
+    fake_llm = FakeLlm(ONE_CARD_RESPONSE)
+    request = _request(
+        curated_text="The joined text of the unit.",
+        highlights=[SourceHighlight(FIRST_HIGHLIGHT), SourceHighlight(CLIPPED_HIGHLIGHT)],
+    )
+
+    DefaultWriter()(request, _ctx(fake_llm))
+
+    prompt = _rendered_prompt(fake_llm)
+    assert f"Highlight 1\n{FIRST_HIGHLIGHT}\n" in prompt
+    assert f"Highlight 2\n{CLIPPED_HIGHLIGHT}\n" in prompt
+    assert "The joined text of the unit." not in prompt
+
+
+def test_clipped_highlight_is_marked_in_its_own_block() -> None:
+    """Only the truncated highlight's block carries the mark; its text is unchanged."""
+    fake_llm = FakeLlm(ONE_CARD_RESPONSE)
+    request = _request(
+        highlights=[
+            SourceHighlight(FIRST_HIGHLIGHT),
+            SourceHighlight(CLIPPED_HIGHLIGHT, truncated=True),
+        ],
+    )
+
+    DefaultWriter()(request, _ctx(fake_llm))
+
+    prompt = _rendered_prompt(fake_llm)
+    assert f"Highlight 1\n{FIRST_HIGHLIGHT}\n" in prompt
+    assert f"Highlight 2 (clipped by the export)\n{CLIPPED_HIGHLIGHT}\n" in prompt
+
+
+def test_request_without_highlights_renders_curated_text_as_before() -> None:
+    """The replay harness builds requests without `highlights`: `curated_text` renders
+    alone under the unit heading, with no block numbering."""
+    fake_llm = FakeLlm(ONE_CARD_RESPONSE)
+
+    DefaultWriter()(_request(), _ctx(fake_llm))
+
+    prompt = _rendered_prompt(fake_llm)
+    assert f"## The curated unit\n\n{CURATED_TEXT}\n" in prompt
+    assert "Highlight 1" not in prompt

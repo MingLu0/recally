@@ -19,7 +19,14 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from recally.agents.base import AgentContext, CardDraft, CardVerdict, CriticRequest, CriticResult
+from recally.agents.base import (
+    AgentContext,
+    CardDraft,
+    CardVerdict,
+    CriticRequest,
+    CriticResult,
+    SourceHighlight,
+)
 from recally.agents.critic import default as critic_module
 from recally.agents.critic.default import DefaultCritic, _render_prompt
 from recally.config import Settings
@@ -472,3 +479,71 @@ def test_round_one_prompt_has_no_previous_critique_block() -> None:
     assert "previous critique" not in prompt.lower()
     assert "do not fault wording you suggested" not in prompt.lower()
     assert "$" not in prompt
+
+
+# --- Each source highlight is its own block (#319) ------------------------------
+
+
+FIRST_HIGHLIGHT = "Each review is scheduled just before the predicted moment of forgetting."
+CLIPPED_HIGHLIGHT = "Retrieval at peak effort reconsolidates the mem"
+
+
+def test_critic_prompt_renders_each_highlight_as_its_own_block() -> None:
+    """Two highlights render as two numbered blocks, and the joined text is gone."""
+    prompt = _render_prompt(
+        CriticRequest(
+            cards=[CARD_ONE],
+            source_text="The joined text of the unit.",
+            highlights=[SourceHighlight(FIRST_HIGHLIGHT), SourceHighlight(CLIPPED_HIGHLIGHT)],
+        )
+    )
+
+    assert f"Highlight 1\n{FIRST_HIGHLIGHT}\n" in prompt
+    assert f"Highlight 2\n{CLIPPED_HIGHLIGHT}\n" in prompt
+    assert "The joined text of the unit." not in prompt
+    assert "clipped" not in prompt.lower()
+
+
+def test_clipped_highlight_is_marked_in_its_own_block() -> None:
+    """Only the truncated highlight's block carries the mark; its text is unchanged,
+    and the prompt's note speaks of the marked highlight, not the whole source."""
+    prompt = _render_prompt(
+        CriticRequest(
+            cards=[CARD_ONE],
+            source_text="The joined text of the unit.",
+            source_truncated=True,
+            highlights=[
+                SourceHighlight(FIRST_HIGHLIGHT),
+                SourceHighlight(CLIPPED_HIGHLIGHT, truncated=True),
+            ],
+        )
+    )
+
+    assert f"Highlight 1\n{FIRST_HIGHLIGHT}\n" in prompt
+    assert f"Highlight 2 (clipped by the export)\n{CLIPPED_HIGHLIGHT}\n" in prompt
+    assert "the source text below was clipped" not in prompt
+    assert "CLIPPED_HIGHLIGHT_NOTE" not in prompt
+
+
+def test_critic_prompt_never_says_single_source_highlight() -> None:
+    assert "single source highlight" not in _rendered_gate_prompt().lower()
+
+
+def test_critic_fidelity_check_covers_claims_borrowed_from_a_sibling_highlight() -> None:
+    """The fifth check itself names the case; a mention elsewhere would not bind it."""
+    prompt = _rendered_gate_prompt()
+    fidelity_check = " ".join(
+        prompt[prompt.index("5. **Factual fidelity**") : prompt.index("## Verdicts")].split()
+    )
+    assert "sibling" in fidelity_check
+    assert "supported by that highlight" in fidelity_check
+
+
+def test_request_without_highlights_renders_curated_text_as_before() -> None:
+    """The replay harness builds requests without `highlights`: `source_text` fills the
+    source block alone, with no numbering, and `source_truncated` still marks it."""
+    prompt = _rendered_gate_prompt(source_truncated=True)
+
+    assert f"<source>\n{SOURCE_TEXT}\n</source>" in prompt
+    assert "Highlight 1" not in prompt
+    assert "the source text below was clipped" in prompt

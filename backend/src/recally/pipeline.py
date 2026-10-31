@@ -76,6 +76,7 @@ from recally.agents.base import (
     CuratorRequest,
     CuratorResult,
     HighlightInput,
+    SourceHighlight,
     Writer,
     WriterRequest,
 )
@@ -322,6 +323,7 @@ def rewrite_leech_card(
         highlights = _unit_highlights(session, leech.unit_id)
         guidance_version, guidance = _latest_guidance(session)
         source_truncated = any(highlight.truncated for highlight in highlights)
+        source_highlights = _source_highlights(highlights)
         session.commit()  # no open transaction while an agent runs (module docstring)
 
         writer, writer_context = _agent_context(
@@ -341,6 +343,7 @@ def rewrite_leech_card(
                 guidance_version=guidance_version,
                 guidance=guidance,
                 critique=_leech_rewrite_critique(leech),
+                highlights=source_highlights,
             ),
             writer_context,
         )
@@ -355,6 +358,7 @@ def rewrite_leech_card(
             unit,
             result.cards[0],
             source_truncated=source_truncated,
+            highlights=source_highlights,
             guidance_version=guidance_version,
             guidance=guidance,
             card_id=leech.id,
@@ -800,6 +804,7 @@ def _resolve_unit_cards(
     the cap is logged and dropped, never persisted.
     """
     source_truncated = any(highlight.truncated for highlight in highlights)
+    source_highlights = _source_highlights(highlights)
     writer, writer_context = _agent_context(
         "writer", registry, settings, llm_caller, ingest_run_id, unit_id=unit.id, round=1
     )
@@ -810,6 +815,7 @@ def _resolve_unit_cards(
             guidance_version=guidance_version,
             guidance=guidance,
             critique=None,
+            highlights=source_highlights,
         ),
         writer_context,
     )
@@ -824,6 +830,7 @@ def _resolve_unit_cards(
                 source_text=unit.curated_text,
                 source_truncated=source_truncated,
                 previous_critique=None,
+                highlights=source_highlights,
             ),
             critic_context,
         ).verdicts
@@ -848,6 +855,7 @@ def _resolve_unit_cards(
             unit,
             draft,
             source_truncated=source_truncated,
+            highlights=source_highlights,
             guidance_version=guidance_version,
             guidance=guidance,
             draft_index=draft_index,
@@ -884,6 +892,7 @@ def _resolve_card(
     draft_index: int | None = None,
     born_in_revision: bool = False,
     round_one_verdict: CardVerdict | None = None,
+    highlights: list[SourceHighlight] | None = None,
 ) -> _CardOutcome:
     """One card's Critic ⇄ Writer rounds, bounded by LLM_MAX_ROUNDS (hard rule 9).
 
@@ -931,6 +940,7 @@ def _resolve_card(
                     source_text=unit.curated_text,
                     source_truncated=source_truncated,
                     previous_critique=previous_critique,
+                    highlights=highlights,
                 ),
                 critic_context,
             ).verdicts[0]
@@ -996,6 +1006,7 @@ def _resolve_card(
                 guidance=guidance,
                 critique=verdict.critique,
                 previous_draft=current,
+                highlights=highlights,
             ),
             writer_context,
         )
@@ -1108,6 +1119,14 @@ def _card_counts(session: Session, unit_ids: list[int]) -> dict[int, int]:
         .tuples()
         .all()
     }
+
+
+def _source_highlights(highlights: list[Highlight]) -> list[SourceHighlight]:
+    """The rows as the Writer and the Critic see them: exported text, never completed."""
+    return [
+        SourceHighlight(text=highlight.raw_text, truncated=highlight.truncated)
+        for highlight in highlights
+    ]
 
 
 def _unit_highlights(session: Session, unit_id: int) -> list[Highlight]:
