@@ -84,9 +84,15 @@ class StubWriter:
 class StubCritic:
     """Replays one verdict for every card it is shown; calls `ctx.llm`."""
 
-    def __init__(self, verdict: str, critique: str = "stub critique") -> None:
+    def __init__(
+        self,
+        verdict: str,
+        critique: str = "stub critique",
+        quotes: tuple[str, ...] = ("curated text behind the leech",),
+    ) -> None:
         self.verdict = verdict
         self.critique = critique
+        self.quotes = quotes
         self.requests: list[CriticRequest] = []
 
     def __call__(self, request: CriticRequest, ctx: Any) -> CriticResult:
@@ -98,7 +104,13 @@ class StubCritic:
             ingest_run_id=ctx.ingest_run_id,
         )
         return CriticResult(
-            verdicts=[CardVerdict(verdict=self.verdict, critique=self.critique)]  # type: ignore[arg-type]
+            verdicts=[
+                CardVerdict(
+                    verdict=self.verdict,  # type: ignore[arg-type]
+                    critique=self.critique,
+                    quotes=self.quotes,
+                )
+            ]
         )
 
 
@@ -268,6 +280,28 @@ def test_rewrite_enters_the_queue_not_approved(
     )
     statuses = {card.id: card.status for card in _cards(container)}
     assert statuses[leech_id] == "approved"  # the leech itself was approved by a human
+
+
+def test_leech_rewrite_accept_with_a_quote_not_in_the_source_goes_to_needs_human(
+    make_container: Callable[..., Container],
+) -> None:
+    """The leech path applies the same quote check as initial generation (#324)."""
+    stub_learner = StubLearner(LearnerResult(guidance=None, rationale="r"))
+    container = make_container(
+        learner=stub_learner,
+        writer=StubWriter([REWRITE_DRAFT]),
+        critic=StubCritic("accept", critique="", quotes=("words the source lacks",)),
+        LEARNER_MIN_REVIEWS=3,
+    )
+    leech_id = _seed_leech(container)
+    stub_learner.result = LearnerResult(guidance=None, rationale="r", leech_card_ids=[leech_id])
+
+    _run_job(container)
+
+    rewrite = _rewrite_of(container, leech_id)
+    assert rewrite is not None
+    assert rewrite.status == "needs_human"
+    assert rewrite.status_reason == 'Critic quote not in source: "words the source lacks"'
 
 
 def test_rewrite_shares_the_leeches_unit_id(make_container: Callable[..., Container]) -> None:

@@ -95,7 +95,9 @@ Judge each card on all five:
    something specific, `reject` only when it names nothing.
 5. **Factual fidelity** — the card asserts nothing the source does not support.
    The rationale field is the Writer's claim about why the card matters; check the
-   card text against the source, not the rationale.
+   card text against the source, not the rationale. To accept, you must be able to
+   quote the source words behind every claim the card makes. A claim you cannot
+   quote is unsupported: the card does not pass this check.
 
 ## Verdicts
 
@@ -133,8 +135,12 @@ new violation while fixing the one you found:
 Respond with JSON only — no prose, no code fences — a list with exactly one object
 per candidate card, in the same order as above:
 
-[{"verdict": "accept", "critique": ""}, {"verdict": "revise", "critique": "..."}]
+[{"verdict": "accept", "critique": "", "quotes": ["...", "..."]}, {"verdict": "revise", "critique": "..."}]
 
 - `verdict` is exactly one of "accept", "revise", "reject".
 - `critique` is an empty string for `accept`. For `revise` and `reject` it must be
   a concrete, non-empty explanation.
+- `quotes` is required on `accept` and omitted on `revise` and `reject`. List,
+  for each claim the card makes, the exact source words that support it. Each quote
+  is one contiguous span copied verbatim from the source: no ellipses, no paraphrase,
+  no stitching separate passages together. Quote only the source, never the card.
