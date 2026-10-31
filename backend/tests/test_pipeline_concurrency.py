@@ -149,8 +149,14 @@ def writer_response(*fronts: str) -> str:
 
 
 def critic_response(*verdicts: tuple[str, str]) -> str:
+    """An `accept` quotes the words every `UNIT_TEXTS` entry shares (#324)."""
     return json.dumps(
-        [{"verdict": verdict, "critique": critique} for verdict, critique in verdicts]
+        [
+            {"verdict": verdict, "critique": critique, "quotes": ["Curated unit number"]}
+            if verdict == "accept"
+            else {"verdict": verdict, "critique": critique}
+            for verdict, critique in verdicts
+        ]
     )
 
 
