@@ -538,3 +538,36 @@ def test_writer_prompt_keeps_card_rules_and_placeholders() -> None:
     assert CURATED_TEXT in prompt
     assert CRITIQUE_TEXT in prompt
     assert "$" not in prompt
+
+
+# --- The #320 gate: a sibling's context needs a stated link -----------------
+# Cycle 6 cards 78, 80, 119 and 128 carried a sibling highlight's subject into a
+# claim the highlight doesn't make about it. Rule 3 asked for sibling context and
+# rule 6 banned resolving a dangling pronoun by guessing, but when a sibling was
+# the only candidate subject the prompt didn't say which won. The fix is prompt
+# guidance, so these assert on the prompt as rendered through DefaultWriter.
+
+
+def test_writer_prompt_carries_sibling_context_only_when_the_text_states_the_link() -> None:
+    """Rule 3 carries a sibling's subject, facts or structure only on a stated
+    link. Otherwise the card asks about the highlight itself and rule 6 wins —
+    being the only candidate subject is not a link."""
+    fake_llm = FakeLlm(ONE_CARD_RESPONSE)
+    DefaultWriter()(_request(), _ctx(fake_llm))
+
+    prompt = _normalised_prompt(fake_llm)
+    assert "subject, facts, or structure into the question only when the text states the link" in (
+        prompt
+    )
+    assert "asks about what the highlight itself says, and rule 6 wins" in prompt
+    assert "only candidate subject is not a stated link" in prompt
+
+
+def test_writer_prompt_keeps_the_dangling_pronoun_ban() -> None:
+    """Rule 6's ban on guessing a dangling referent is what the stated-link
+    condition defers to, so it has to survive."""
+    fake_llm = FakeLlm(ONE_CARD_RESPONSE)
+    DefaultWriter()(_request(), _ctx(fake_llm))
+
+    prompt = _normalised_prompt(fake_llm)
+    assert 'never resolve a dangling "it", "this" or "they" by guessing' in prompt

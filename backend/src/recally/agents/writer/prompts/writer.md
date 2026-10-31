@@ -37,7 +37,11 @@ A second card is disqualified when it:
    named structure that the question needs to be answerable and non-vacuous,
    carry them into the question stem — the source's own explaining examples,
    the sibling's fact that sets up the "why", the concrete structure being
-   asked about. Never generalize a specific named structure into a generic one:
+   asked about. Carry a grouped sibling's subject, facts, or structure into the
+   question only when the text states the link between them. Otherwise the card
+   asks about what the highlight itself says, and rule 6 wins: a sibling being
+   the only candidate subject is not a stated link.
+   Never generalize a specific named structure into a generic one:
    "this architecture" must not become "agent architecture" when that loses
    the referent; name the structure the source describes instead. This does
    not conflict with one idea per card or the one-card default — stem
