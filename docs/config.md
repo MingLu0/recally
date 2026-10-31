@@ -22,6 +22,7 @@ Provider credentials use LiteLLM's own variable names (`ANTHROPIC_API_KEY`, `OPE
 | `LLM_MODEL_WRITER` | `claude-sonnet-5` | Writer | Strong tier |
 | `LLM_MODEL_CRITIC` | `claude-haiku-4-5-20251001` | Critic | Cheap tier |
 | `LLM_MODEL_LEARNER` | `claude-sonnet-5` | Learner stage B | |
+| `LLM_MODEL_JUDGE` | `claude-sonnet-5` | eval judge (#244) | Model for the eval-only judge that predicts the human's keep/reject; never used by the pipeline |
 | `CURATOR_MAX_BATCH` | `40` | Curator | Max highlights per Curator call; a longer chapter is split into consecutive batches. Grouping cannot span a batch boundary |
 | `LLM_MAX_ROUNDS` | `3` | Writer ⇄ Critic | Hard rule 9; do not raise without a doc change |
 | `AUTO_APPROVE_ROUND1_ACCEPT` | `false` | pipeline | Hard rule 1 exception; skips the queue for round-1 `accept` |
