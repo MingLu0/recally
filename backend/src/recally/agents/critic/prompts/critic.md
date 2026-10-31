@@ -37,7 +37,7 @@ critique, and the Writer revised the card to follow it:
 $previous_critique
 </previous_critique>
 
-Judge the revised card on the five checks as usual, but keep your advice
+Judge the revised card on the checks as usual, but keep your advice
 consistent with what you said before. Do not fault wording you suggested
 unless the source does not support it. If your earlier advice was wrong, say so
 explicitly in the critique ("my previous suggestion was wrong because…") rather
@@ -47,7 +47,7 @@ than raising it as a new defect of the card.
 ## First, judge the source
 
 Before judging any card, answer one question: **can this source support a card
-worth making?** The five checks below judge how well a card was made; they
+worth making?** The six checks below judge how well a card was made; they
 cannot see a source that should never have yielded one. A well-formed question
 about a worthless source is still a card nobody wants.
 
@@ -82,9 +82,9 @@ The reviewer who approves these cards bins such sources as "too trivial",
 standard. A source the export cut short is judged as it stands: what survives
 either names something specific or it does not.
 
-## The five checks
+## The six checks
 
-Judge each card on all five:
+Judge each card on all six:
 
 1. **Atomicity** — one idea per card. A card that needs two separate recalls is two
    cards.
@@ -105,17 +105,30 @@ Judge each card on all five:
    highlights, a claim about one highlight's subject must be supported by that
    highlight, not by a sibling's words: a sibling may set up the question, but its
    words are no evidence for what another highlight's subject does.
+6. **Sibling overlap** — applies only when this request holds more than one card;
+   the other cards in the request are its sibling cards. Cards overlap when a card:
+   - restates a sibling card in another format — the same fact asked a second way;
+   - is a cloze whose deletion covers the clause a sibling card asks about;
+   - carries a sibling card's answer in its question.
+
+   On an overlap, the verdict goes on the later card in the list: `revise`, with a
+   critique pointing it at a concept the source states that no sibling card covers,
+   named concretely. Give `reject` only when the source states no concept left
+   uncovered. The earlier card is judged on its own merits.
 
 ## Verdicts
 
-- `accept` — the card passes all five checks as written.
+- `accept` — the card passes every check as written.
 - `revise` — the card fails a check but is fixable. The critique must say precisely
   what to change, concretely enough that the Writer can act on it without asking
   you anything.
 - `reject` — the card is unsalvageable: no rewrite could save it, because the
   source itself carries nothing worth a card — a bare heading, a navigation
   line, a pure transition, a fragment or claim with no nameable fact in it.
-  The critique must say why the source cannot support a card.
+  The critique must say why the source cannot support a card. The sibling overlap
+  check adds one case: a later card that overlaps a sibling card when the source
+  has no uncovered concept left for it. No rewrite saves that card either, and the
+  critique must say so.
 
 `reject` is for *unsalvageable*, not *bad*. A card that could be rewritten is
 `revise`. This distinction decides whether a human ever spends time on the card,
@@ -124,7 +137,7 @@ so escalate to `reject` only when revision is pointless.
 ## Revise advice
 
 A `revise` critique is the Writer's next draft in outline, so judge your advice
-by the same five checks before you give it. A suggestion must not introduce a
+by the same six checks before you give it. A suggestion must not introduce a
 new violation while fixing the one you found:
 
 - **Preserve atomicity** — never advise bundling two recalls into one card. If
