@@ -299,6 +299,32 @@ def test_flagged_highlight_gets_truncated_true(
     assert fetch_highlight(container, highlights[2].id).truncated is False
 
 
+def test_curator_batch_payload_marks_duplicate_pairs(
+    container: Container, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The runner flags the fixture's clipped row `efaf55cf-…` — an exact prefix of
+    `bf9830d8-…` under a different UUID — as `duplicate_of` its fuller sibling in the
+    Curator payload, and flags nothing else (#291). Flag, never merge: both rows are
+    still sent and still covered by the Curator's own units."""
+    run_id, highlights = ingest_fixture(container)
+    id_by_uuid_prefix = {highlight.dedupe_key[:8]: highlight.id for highlight in highlights}
+    scripted_llm = ScriptedLlm(
+        monkeypatch,
+        [curator_response(drop_unit([highlight.id for highlight in highlights]))],
+    )
+
+    container.run_pipeline(run_id)
+
+    payload = json.loads(scripted_llm.requests[0]["messages"][1]["content"])
+    duplicate_of_by_id = {
+        payload_highlight["id"]: payload_highlight["duplicate_of"]
+        for payload_highlight in payload["highlights"]
+    }
+    assert set(duplicate_of_by_id) == {highlight.id for highlight in highlights}
+    assert duplicate_of_by_id.pop(id_by_uuid_prefix["efaf55cf"]) == id_by_uuid_prefix["bf9830d8"]
+    assert set(duplicate_of_by_id.values()) == {None}
+
+
 def test_three_revise_rounds_end_in_needs_human(
     container: Container, monkeypatch: pytest.MonkeyPatch
 ) -> None:
