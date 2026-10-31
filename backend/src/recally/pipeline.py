@@ -60,7 +60,7 @@ and the failed unit's highlights retryable.
 import logging
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Literal, overload
 
 from sqlalchemy import func, select
@@ -164,7 +164,9 @@ class _CardOutcome:
     the round-1 Writer result, already stamped on every call of its own loop (#262).
     `split_drafts` are the extra cards the loop's revisions returned past the
     rewrite itself — usually a split the Critic asked for — which the caller turns
-    into new drafts of the unit (#305).
+    into new drafts of the unit (#305). `quotes` are the accepting verdict's source
+    quotes, which `_check_accept_quotes` checks before production writes the status
+    (#324).
     """
 
     draft: CardDraft
@@ -174,6 +176,7 @@ class _CardOutcome:
     terminal: Literal["accept", "reject", "exhausted"]
     draft_index: int | None = None
     split_drafts: tuple[CardDraft, ...] = ()
+    quotes: tuple[str, ...] = ()
 
 
 @dataclass
@@ -363,6 +366,7 @@ def rewrite_leech_card(
             guidance=guidance,
             card_id=leech.id,
         )
+        outcome = _check_accept_quotes(outcome, unit.curated_text, source_highlights)
         rewrite = _write_card(session, unit, outcome, settings)
         rewrite.supersedes_card_id = leech.id
         session.commit()
@@ -862,6 +866,7 @@ def _resolve_unit_cards(
             born_in_revision=round_one_verdict is None,
             round_one_verdict=round_one_verdict,
         )
+        outcome = _check_accept_quotes(outcome, unit.curated_text, source_highlights)
         outcomes.append(outcome)
         for split_draft in outcome.split_drafts:
             if next_draft_index >= MAX_CARDS_PER_UNIT:
@@ -961,6 +966,7 @@ def _resolve_card(
                 terminal="accept",
                 draft_index=draft_index,
                 split_drafts=tuple(split_drafts),
+                quotes=verdict.quotes,
             )
         if verdict.verdict == "reject":
             return _CardOutcome(
@@ -1015,6 +1021,53 @@ def _resolve_card(
         current = revised.cards[0]
         split_drafts.extend(revised.cards[1:])
         previous_critique = verdict.critique
+
+
+def _check_accept_quotes(
+    outcome: _CardOutcome, curated_text: str, highlights: list[SourceHighlight]
+) -> _CardOutcome:
+    """Send an accept to `needs_human` unless the source holds every quote it gives.
+
+    An accept used to record no reason, so the logs could not show what the Critic
+    checked (#324). This overrides whatever status the accept earned, including
+    `approved` under `AUTO_APPROVE_ROUND1_ACCEPT` (hard rule 1). The source is what
+    the Critic was shown: the highlights, or the curated text when there are none.
+    Each quote is one contiguous span, so it must lie within a single block.
+    """
+    if outcome.terminal != "accept":
+        return outcome
+    if not outcome.quotes:
+        return replace(
+            outcome, status="needs_human", status_reason="Critic accept has no source quotes."
+        )
+    source_blocks = [
+        _normalize_for_quote_match(block)
+        for block in ([highlight.text for highlight in highlights] or [curated_text])
+    ]
+    missing_quotes = [
+        quote
+        for quote in outcome.quotes
+        if not _quote_in_source(_normalize_for_quote_match(quote), source_blocks)
+    ]
+    if not missing_quotes:
+        return outcome
+    return replace(
+        outcome,
+        status="needs_human",
+        status_reason="; ".join(
+            f'Critic quote not in source: "{quote}"' for quote in missing_quotes
+        ),
+    )
+
+
+def _normalize_for_quote_match(text: str) -> str:
+    """Fold case and collapse runs of whitespace."""
+    return " ".join(text.casefold().split())
+
+
+def _quote_in_source(normalized_quote: str, normalized_blocks: list[str]) -> bool:
+    """An empty quote is in every string, so it never counts as found."""
+    return bool(normalized_quote) and any(normalized_quote in block for block in normalized_blocks)
 
 
 def _write_card(

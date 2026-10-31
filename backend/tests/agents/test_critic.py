@@ -83,7 +83,7 @@ class RecordingLlm:
         monkeypatch.setattr("recally.llm.litellm.completion_cost", lambda **kwargs: 0.0)
         self.caller = LlmCaller(session_factory, log_payloads=True)
 
-    def respond(self, verdicts: list[dict[str, str]]) -> None:
+    def respond(self, verdicts: list[dict[str, Any]]) -> None:
         self._next_response = json.dumps(verdicts)
 
     def last_prompt(self) -> str:
@@ -547,3 +547,32 @@ def test_request_without_highlights_renders_curated_text_as_before() -> None:
     assert f"<source>\n{SOURCE_TEXT}\n</source>" in prompt
     assert "Highlight 1" not in prompt
     assert "the source text below was clipped" in prompt
+
+
+# --- An accept quotes the source for each claim (#324) ----------------------------
+
+
+def test_critic_prompt_asks_accept_to_quote_the_source_for_each_claim() -> None:
+    prompt = " ".join(_rendered_gate_prompt().split())
+    assert '{"verdict": "accept", "critique": "", "quotes": [' in prompt
+    assert "for each claim the card makes" in prompt
+    assert "contiguous" in prompt
+    assert "verbatim" in prompt
+    # `revise` and `reject` are unchanged: they carry no quotes.
+    assert '{"verdict": "revise", "critique": "..."}' in prompt
+
+
+def test_accept_verdict_parses_its_quotes(recording_llm: RecordingLlm, ctx: AgentContext) -> None:
+    recording_llm.respond(
+        [
+            {"verdict": "accept", "critique": "", "quotes": ["first span", "second span"]},
+            {"verdict": "accept", "critique": ""},
+        ]
+    )
+
+    result = DefaultCritic()(_request(), ctx)
+
+    assert result.verdicts == [
+        CardVerdict(verdict="accept", critique="", quotes=("first span", "second span")),
+        CardVerdict(verdict="accept", critique="", quotes=()),
+    ]
