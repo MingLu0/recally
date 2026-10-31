@@ -80,7 +80,7 @@ class RoutedLlm:
 
     `test_pipeline.py`'s `ScriptedLlm` replays a `deque` in strict call order, which
     is exactly what concurrency makes nondeterministic. Here every response is keyed
-    on a marker the prompt contains (a unit's curated text), so which thread calls
+    on a marker the prompt contains (a unit's highlight text), so which thread calls
     first cannot change the outcome.
 
     `handler` receives the rendered prompt and returns either a response string or an
@@ -159,12 +159,12 @@ REVISE = ("revise", "Not atomic; split the two ideas.")
 
 
 def is_curator_prompt(prompt: str) -> bool:
-    """The Curator is the only call whose prompt carries no unit text yet."""
-    return not any(text in prompt for text in UNIT_TEXTS)
+    """The Curator is the only call whose prompt asks for `highlight_ids` back."""
+    return '"highlight_ids"' in prompt
 
 
 def unit_index_for(prompt: str) -> int:
-    """Which unit this Writer/Critic prompt serves, by the curated text it embeds."""
+    """Which unit this Writer/Critic prompt serves, by the highlight text it embeds."""
     for index, text in enumerate(UNIT_TEXTS):
         if text in prompt:
             return index
@@ -194,7 +194,7 @@ def seed_highlights(container: Container, count: int) -> tuple[int, list[int]]:
             highlight = Highlight(
                 book_id=book.id,
                 chapter="Chapter 9",
-                raw_text=f"The raw highlight number {position}.",
+                raw_text=UNIT_TEXTS[position],
                 dedupe_key=f"uuid-concurrency-{position}",
                 source="oreilly",
                 highlighted_at=date(2026, 9, 9),
@@ -303,6 +303,8 @@ def seed_chapters(container: Container, chapter_count: int) -> tuple[int, dict[s
 
 def chapter_of(prompt: str) -> str | None:
     """Which chapter a Curator prompt is about, by the marker its text carries."""
+    if not is_curator_prompt(prompt):
+        return None
     for index in range(32):
         if f"The raw highlight for Chapter {index}." in prompt:
             return f"Chapter {index}"

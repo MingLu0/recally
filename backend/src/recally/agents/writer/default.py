@@ -1,9 +1,10 @@
 """The default Card Writer variant (docs/agents.md §3).
 
 One LLM call per curated unit: renders `prompts/writer.md` (loaded from disk,
-ADR-003) with the unit text, the current `writer_guidance` and — on a revision
-round — the card under revision and the Critic's critique of it, then parses
-the JSON response into `CardDraft`s stamped with the request's `guidance_version`.
+ADR-003) with the unit's source highlights as numbered blocks, the current
+`writer_guidance` and — on a revision round — the card under revision and the
+Critic's critique of it, then parses the JSON response into `CardDraft`s stamped
+with the request's `guidance_version`.
 
 Round counting and the 3-round cap live in `pipeline.py` (hard rule 9 is
 structural): this agent sees one request and returns one result, holding no state
@@ -16,7 +17,13 @@ from pathlib import Path
 from string import Template
 from typing import Any
 
-from recally.agents.base import AgentContext, CardDraft, WriterRequest, WriterResult
+from recally.agents.base import (
+    AgentContext,
+    CardDraft,
+    WriterRequest,
+    WriterResult,
+    render_source_blocks,
+)
 from recally.agents.registry import register
 
 AGENT_NAME = "writer/default"
@@ -40,7 +47,11 @@ class DefaultWriter:
     def __call__(self, request: WriterRequest, ctx: AgentContext) -> WriterResult:
         prompt = _PROMPT_TEMPLATE.substitute(
             guidance=request.guidance or "No Learner guidance yet; follow the card rules above.",
-            curated_text=request.curated_text,
+            curated_text=(
+                render_source_blocks(request.highlights)
+                if request.highlights
+                else request.curated_text
+            ),
             critique_section=_critique_section(request.critique, request.previous_draft),
         )
         raw = ctx.llm(

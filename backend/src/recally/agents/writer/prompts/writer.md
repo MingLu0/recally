@@ -76,6 +76,10 @@ A second card is disqualified when it:
      grounded answer — no trailing "which orchestrates…" the source never says,
      and no turning the source's "a framework that supports both" into a
      freestanding "the architecture must support".
+   - When the unit lists several highlights, a claim about one highlight's subject
+     must be supported by that highlight, not by a sibling's words. A sibling may
+     set up the question on a stated link (rule 3), but its words are no evidence
+     for what another highlight's subject does.
    When revising, keep this rule: do not reintroduce framing an earlier
    critique removed.
 
@@ -97,7 +101,8 @@ Choose each card's format deliberately; QA is not the default.
 ## Working with truncated sources
 
 Some source highlights are clipped mid-word by the export, and the missing text
-exists nowhere else. You must never reconstruct, complete, or extend clipped
+exists nowhere else; a clipped highlight says so in its heading.
+You must never reconstruct, complete, or extend clipped
 text, and never write a card that depends on words that are not there. Work only
 from the text as given; if the surviving fragment supports no good card, write
 fewer cards.

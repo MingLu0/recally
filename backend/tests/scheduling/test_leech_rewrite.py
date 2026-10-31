@@ -13,7 +13,7 @@ exist until the implementation lands, so the negatives are red first (ADR-012).
 """
 
 from collections.abc import Callable, Iterator
-from datetime import timedelta
+from datetime import date, timedelta
 from types import SimpleNamespace
 from typing import Any
 
@@ -28,13 +28,25 @@ from recally.agents.base import (
     CriticResult,
     LearnerRequest,
     LearnerResult,
+    SourceHighlight,
     WriterRequest,
     WriterResult,
 )
 from recally.agents.registry import AgentRegistry
 from recally.config import Settings
 from recally.container import Container
-from recally.models import Base, Card, CardState, CuratedUnit, IngestRun, LlmCall, ReviewLog
+from recally.models import (
+    Base,
+    Book,
+    Card,
+    CardState,
+    CuratedUnit,
+    CuratedUnitHighlight,
+    Highlight,
+    IngestRun,
+    LlmCall,
+    ReviewLog,
+)
 from recally.models.base import utc_now
 
 TEST_API_KEY = "test-key-not-a-real-secret"
@@ -394,3 +406,47 @@ def test_leech_keeps_its_fsrs_state_while_the_rewrite_is_queued(
     assert _card_state_snapshot(container, leech_id) == before, (
         "the leech's FSRS state changed while its rewrite was still in the queue"
     )
+
+
+def test_rewrite_passes_the_units_highlights_to_writer_and_critic(
+    make_container: Callable[..., Container],
+) -> None:
+    """The leech rewrite renders separate blocks like initial generation, each
+    highlight keeping its own clipped flag (#319)."""
+    stub_learner = StubLearner(LearnerResult(guidance=None, rationale="r"))
+    stub_writer = StubWriter([REWRITE_DRAFT])
+    stub_critic = StubCritic("accept")
+    container = make_container(
+        learner=stub_learner, writer=stub_writer, critic=stub_critic, LEARNER_MIN_REVIEWS=3
+    )
+    leech_id = _seed_leech(container)
+    with container.session() as session:
+        leech = session.get(Card, leech_id)
+        assert leech is not None
+        book = Book(title="Leeches", source="oreilly", external_id="isbn-leech", user_id=1)
+        session.add(book)
+        session.flush()
+        for position, (text, truncated) in enumerate((("Whole.", False), ("Clip", True))):
+            highlight = Highlight(
+                book_id=book.id,
+                chapter="Chapter 1",
+                raw_text=text,
+                dedupe_key=f"uuid-leech-{position}",
+                source="oreilly",
+                highlighted_at=date(2026, 9, 9),
+                export_position=position,
+                truncated=truncated,
+                processed=True,
+                user_id=1,
+            )
+            session.add(highlight)
+            session.flush()
+            session.add(CuratedUnitHighlight(unit_id=leech.unit_id, highlight_id=highlight.id))
+        session.commit()
+    stub_learner.result = LearnerResult(guidance=None, rationale="r", leech_card_ids=[leech_id])
+
+    _run_job(container)
+
+    expected = [SourceHighlight("Whole."), SourceHighlight("Clip", truncated=True)]
+    assert stub_writer.requests[0].highlights == expected
+    assert stub_critic.requests[0].highlights == expected

@@ -715,6 +715,40 @@ def test_revision_writer_call_receives_the_draft_under_review(
     assert revision_request.critique == REVISE[1]
 
 
+def test_pipeline_passes_each_units_highlights_to_writer_and_critic(
+    container: Container, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every Writer and Critic prompt of the loop, the revision round included, carries
+    the unit's highlights as separate blocks instead of the joined text (#319)."""
+    run_id, highlights = ingest_fixture(container)
+    scripted_llm = ScriptedLlm(
+        monkeypatch,
+        [
+            curator_response(
+                keep_unit(
+                    [highlights[0].id, highlights[1].id],
+                    "The joined unit text.",
+                    truncated=(highlights[1].id,),
+                )
+            ),
+            writer_response("Draft round 1?"),
+            critic_response(REVISE),
+            writer_response("Draft round 2?"),
+            critic_response(ACCEPT),
+        ],
+    )
+
+    container.run_pipeline(run_id)
+
+    writer_and_critic_requests = scripted_llm.requests[1:]
+    assert len(writer_and_critic_requests) == 4
+    for request in writer_and_critic_requests:
+        prompt = "\n".join(message["content"] for message in request["messages"])
+        assert f"Highlight 1\n{highlights[0].raw_text}\n" in prompt
+        assert f"Highlight 2 (clipped by the export)\n{highlights[1].raw_text}\n" in prompt
+        assert "The joined unit text." not in prompt
+
+
 def test_split_card_from_a_revision_becomes_a_new_draft(
     container: Container, monkeypatch: pytest.MonkeyPatch
 ) -> None:

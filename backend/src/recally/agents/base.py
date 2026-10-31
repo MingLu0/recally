@@ -113,6 +113,18 @@ class CardDraft:
 
 
 @dataclass(frozen=True)
+class SourceHighlight:
+    """One source highlight of a unit, as the Writer and the Critic see it.
+
+    `text` is the row's exported text, never completed (hard rule 7); `truncated` is
+    that row's own flag, so a clipped mark lands on this highlight and not its siblings.
+    """
+
+    text: str
+    truncated: bool = False
+
+
+@dataclass(frozen=True)
 class WriterRequest:
     """One curated unit plus the current `writer_guidance` (hard rule 10).
 
@@ -121,6 +133,10 @@ class WriterRequest:
     call is a revision, and `previous_draft` the card that critique judged — the
     Writer edits that card rather than re-drafting from the unit text (#304). Both
     are None on round 1. The round cap lives in the runner, not here (hard rule 9).
+
+    `highlights` carries the unit's source highlights, rendered as separate numbered
+    blocks in place of `curated_text`, so one highlight's words cannot read as a claim
+    about another's subject (#319). Without it the prompt renders `curated_text`.
     """
 
     curated_text: str
@@ -129,6 +145,7 @@ class WriterRequest:
     guidance: str | None
     critique: str | None
     previous_draft: CardDraft | None = None
+    highlights: list[SourceHighlight] | None = None
 
 
 @dataclass(frozen=True)
@@ -147,7 +164,7 @@ class WriterResult:
 
 @dataclass(frozen=True)
 class CriticRequest:
-    """Candidate cards from the Writer plus the source highlight text to check against.
+    """Candidate cards from the Writer plus the source text to check against.
 
     `source_truncated` is set by the runner when any source highlight of the unit is
     flagged `truncated` (the flag lives on `highlights` rows, not on units or cards).
@@ -159,12 +176,17 @@ class CriticRequest:
     the runner from round 2 on and `None` on round 1. Without it each round judged
     the revised card with no memory of the advice that produced it, and the Critic
     faulted wording it had suggested itself (#306).
+
+    `highlights` carries the unit's source highlights, rendered as separate numbered
+    blocks in place of `source_text`, each marked when clipped (#319). Without it the
+    prompt renders `source_text` and `source_truncated` marks it as a whole.
     """
 
     cards: list[CardDraft]
     source_text: str
     source_truncated: bool = False
     previous_critique: str | None = None
+    highlights: list[SourceHighlight] | None = None
 
 
 @dataclass(frozen=True)
@@ -210,6 +232,15 @@ class LearnerResult:
     guidance: str | None
     rationale: str
     leech_card_ids: list[int] = field(default_factory=list)
+
+
+def render_source_blocks(highlights: list[SourceHighlight]) -> str:
+    """A unit's highlights as numbered blocks, the clipped mark on its own block only."""
+    blocks = []
+    for number, highlight in enumerate(highlights, start=1):
+        clipped_mark = " (clipped by the export)" if highlight.truncated else ""
+        blocks.append(f"Highlight {number}{clipped_mark}\n{highlight.text}\n")
+    return "\n".join(blocks)
 
 
 # --- Role protocols ----------------------------------------------------------------
