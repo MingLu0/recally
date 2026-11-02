@@ -7,12 +7,15 @@ import android.view.ViewGroup
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
@@ -35,6 +38,8 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.height
 import androidx.compose.ui.unit.width
@@ -721,6 +726,86 @@ class ApproveScreenTest {
         composeTestRule.onNodeWithTag(REJECT_DIALOG_TAG).assertDoesNotExist()
         assertEquals("closing must not reject (negative)", emptyList<Pair<Long, String?>>(), rejections)
         composeTestRule.onNode(hasText("Question 1", substring = true)).assertIsDisplayed()
+    }
+
+    // --- Issue #345: a boxed cloze answer is never clipped inside its blank ---
+
+    /**
+     * Negative: the reported card's deletion `/ docs` renders in full inside
+     * its blank — the inner answer text stays on one line with no width or
+     * height overflow. The defect surfaces at densities where 7dp lands on a
+     * fractional pixel: `Modifier.padding` rounds each side up (at 1.5,
+     * 7dp → 10.5px → 11px per side, 22px total) while the placeholder was
+     * budgeted from the doubled rounding (21px), so the box ends up narrower
+     * than the padded text and the answer wraps after the `/` onto a second
+     * line the one-line placeholder clips. At the class's default 1.0 density
+     * the rounding is exact and the bug cannot reproduce, which is why the
+     * override exists. The value stays small on purpose: a large override
+     * scales the whole screen past the fixed-size test window and the queue
+     * card never composes.
+     */
+    @Test
+    fun test_approve_cloze_answer_with_break_opportunity_is_fully_visible() {
+        val card =
+            queueCard(1).copy(
+                type = PendingCard.TYPE_CLOZE,
+                front = "The answer {{c1::/ docs}} has a break opportunity.",
+            )
+        composeTestRule.setContent {
+            CompositionLocalProvider(LocalDensity provides Density(1.5f, 1.0f)) {
+                RecallyTheme {
+                    Scaffold { innerPadding ->
+                        ApproveScreen(
+                            uiState = queueState(listOf(card), bulkApprovableCount = null),
+                            onFilterChange = {},
+                            onToggleHighlights = {},
+                            onApproveCard = {},
+                            onStartEdit = {},
+                            onDismissEdit = {},
+                            onEditCard = { _, _, _ -> },
+                            onRejectCard = { _, _ -> },
+                            onRejectReasonChange = { _, _ -> },
+                            onOpenSettings = {},
+                            onNavigateBack = {},
+                            onRetry = {},
+                            onBulkApproveClick = {},
+                            onConfirmBulkApprove = {},
+                            onDismissBulkApproveConfirm = {},
+                            modifier = Modifier.padding(innerPadding),
+                        )
+                    }
+                }
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        val results = mutableListOf<TextLayoutResult>()
+        composeTestRule
+            .onNodeWithText("/ docs", useUnmergedTree = true)
+            .fetchSemanticsNode()
+            .config[SemanticsActions.GetTextLayoutResult]
+            .action
+            ?.invoke(results)
+        assertTrue("the inner answer node must expose a text layout", results.isNotEmpty())
+        val layout = results.first()
+
+        // Full visibility: one line, painted extents inside the blank's inner
+        // constraint. The float line right/bottom vs the Int constraint is
+        // the true overflow signal — didOverflowWidth compares the
+        // paragraph's constraint width against the floored line size and
+        // trips on any sub-pixel slack (ClozeTextDensityTest has the matrix).
+        val constraints = layout.layoutInput.constraints
+        assertEquals("the complete answer stays on one line inside its blank", 1, layout.lineCount)
+        assertTrue(
+            "the answer must not overflow the blank's width: " +
+                "line right ${layout.getLineRight(0)}px vs ${constraints.maxWidth}px",
+            layout.getLineRight(0) <= constraints.maxWidth + 0.01f,
+        )
+        assertTrue(
+            "the answer must not overflow the blank's height: " +
+                "line bottom ${layout.getLineBottom(0)}px vs ${constraints.maxHeight}px",
+            layout.getLineBottom(0) <= constraints.maxHeight + 0.01f,
+        )
     }
 
     @Test
