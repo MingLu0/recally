@@ -46,6 +46,11 @@ import dev.recally.ui.theme.recallyColors
  * keeps every word of the answer at the cost of the rounded box on the
  * wrapped run. Shortening the answer to fit is not an option (hard rule 7).
  *
+ * A boxed answer is always fully visible: the placeholder is sized from the
+ * answer's own measurement plus the padding the box will apply, in px, so an
+ * answer that fits its box can never wrap onto a clipped second line — at
+ * any density or font scale (issue #345).
+ *
  * Parsing lives in [parseClozeSegments] so the never-raw-braces contract is
  * unit-testable; the composable only styles what the parser returns.
  */
@@ -165,8 +170,9 @@ private fun fitsOnOneLine(
     density: Density,
 ): Boolean {
     if (availableWidthPx <= 0 || availableWidthPx == Constraints.Infinity) return true
-    val paddingPx = with(density) { (CLOZE_HORIZONTAL_PADDING * 2).roundToPx() }
-    val budgetPx = (availableWidthPx - paddingPx).coerceAtLeast(0)
+    // The budget must spend the padding the way Modifier.padding applies it
+    // at layout time (per side, issue #345) — see clozeBoxPaddingPx.
+    val budgetPx = (availableWidthPx - clozeBoxPaddingPx(density)).coerceAtLeast(0)
     val measured =
         textMeasurer.measure(
             text = AnnotatedString(answerText),
@@ -197,13 +203,20 @@ private fun BoxedClozeText(
         answers
             .mapIndexed { index, segment ->
                 val measured = textMeasurer.measure(AnnotatedString(segment.text), answerStyle)
-                val width =
+                // Size the placeholder from the measured answer plus the
+                // padding the box will actually apply at layout time —
+                // per-side rounding (issue #345). The fit check, the
+                // placeholder and the inner Text all share these px figures,
+                // and the pixel of headroom absorbs the px↔dp↔sp round trip
+                // (and the floored IntSize measurement) so the laid-out
+                // placeholder is never narrower than the text inside it.
+                val (width, height) =
                     with(density) {
-                        (measured.size.width.toDp() + CLOZE_HORIZONTAL_PADDING * 2).toSp()
-                    }
-                val height =
-                    with(density) {
-                        (measured.size.height.toDp() + CLOZE_VERTICAL_PADDING * 2).toSp()
+                        val widthPx =
+                            measured.size.width + clozeBoxPaddingPx(density) + PLACEHOLDER_HEADROOM_PX
+                        val heightPx =
+                            measured.size.height + clozeBoxVerticalPaddingPx(density) + PLACEHOLDER_HEADROOM_PX
+                        widthPx.toDp().toSp() to heightPx.toDp().toSp()
                     }
                 clozeContentId(index) to
                     InlineTextContent(
@@ -239,6 +252,11 @@ private fun BoxedClozeText(
                                         vertical = CLOZE_VERTICAL_PADDING,
                                     ),
                         ) {
+                            // No maxLines: with the placeholder sized from
+                            // this text's own measurement plus a pixel of
+                            // headroom, an answer that fits its box can never
+                            // wrap onto a second line the one-line placeholder
+                            // would clip (issue #345).
                             Text(
                                 text = segment.text,
                                 style = answerStyle,
@@ -300,6 +318,29 @@ private val CLOZE_RADIUS = 4.dp
 private val CLOZE_BORDER_WIDTH = 2.dp
 private val CLOZE_HORIZONTAL_PADDING = 7.dp
 private val CLOZE_VERTICAL_PADDING = 1.dp
+
+/**
+ * Headroom added to the placeholder's measured size before the px→dp→sp
+ * conversion. Measurements floor the float glyph width to an IntSize, so the
+ * laid-out box needs a whole pixel of slack to stay at least as wide as the
+ * answer's true line width after the unit round trip (issue #345). Invisible
+ * on the device pixel grid.
+ */
+private const val PLACEHOLDER_HEADROOM_PX = 1f
+
+/**
+ * The horizontal padding the blank's box adds around the answer, in px.
+ * Must equal what [Modifier.padding] computes at layout time: each side
+ * rounds its own dp value, and two per-side roundings are not always the
+ * doubled rounding — at densities where 7dp lands on a fractional pixel
+ * (1.5 → 10.5, 2.8 → 19.6, 3.5 → 24.5) the total can differ by a whole
+ * pixel. Sizing the placeholder from any other figure lets the box end up
+ * narrower than the padded text inside it.
+ */
+private fun clozeBoxPaddingPx(density: Density): Int = with(density) { CLOZE_HORIZONTAL_PADDING.roundToPx() * 2 }
+
+/** The vertical counterpart of [clozeBoxPaddingPx], same rounding contract. */
+private fun clozeBoxVerticalPaddingPx(density: Density): Int = with(density) { CLOZE_VERTICAL_PADDING.roundToPx() * 2 }
 
 private fun clozeContentId(index: Int): String = "cloze-$index"
 
