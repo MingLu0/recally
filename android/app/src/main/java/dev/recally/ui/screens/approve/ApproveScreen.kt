@@ -52,6 +52,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.recally.domain.model.PendingCard
 import dev.recally.ui.components.ClozeText
+import dev.recally.ui.components.shimmer
 import dev.recally.ui.theme.CombinedPreviews
 import dev.recally.ui.theme.RecallyBottomInset
 import dev.recally.ui.theme.RecallyRadius
@@ -391,7 +392,7 @@ private fun OfflineRow(onRetry: () -> Unit) {
     }
 }
 
-/** Skeleton blocks at the real components' dimensions — no spinners (design-system.md, "States"). */
+/** Skeleton blocks at the real components' dimensions — no spinners (design-system.md, "States"); swept by the shared shimmer (issue #344). */
 @Composable
 private fun LoadingSkeletons() {
     Column(
@@ -403,7 +404,7 @@ private fun LoadingSkeletons() {
                 Modifier
                     .size(width = SKELETON_HEADER_WIDTH, height = RecallySpacing.lg)
                     .clip(RoundedCornerShape(RecallyRadius.sm))
-                    .background(MaterialTheme.recallyColors.lineSoft),
+                    .shimmer(),
         )
         repeat(2) {
             Box(
@@ -412,7 +413,7 @@ private fun LoadingSkeletons() {
                         .fillMaxWidth()
                         .height(SKELETON_CARD_HEIGHT)
                         .clip(RoundedCornerShape(RecallyRadius.md))
-                        .background(MaterialTheme.recallyColors.lineSoft),
+                        .shimmer(),
             )
         }
     }

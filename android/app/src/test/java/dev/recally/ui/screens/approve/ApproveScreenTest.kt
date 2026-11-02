@@ -14,6 +14,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -23,6 +24,7 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -37,6 +39,7 @@ import androidx.compose.ui.unit.height
 import androidx.compose.ui.unit.width
 import dev.recally.domain.model.PendingCard
 import dev.recally.shadows.ShadowMagnifier
+import dev.recally.ui.components.SHIMMER_TAG
 import dev.recally.ui.theme.DarkRecallyColorTokens
 import dev.recally.ui.theme.LightRecallyColorTokens
 import dev.recally.ui.theme.RecallyTheme
@@ -690,6 +693,17 @@ class ApproveScreenTest {
         composeTestRule.onNodeWithTag(REJECT_DIALOG_TAG).assertDoesNotExist()
         assertEquals("cancel must not reject (negative)", emptyList<Pair<Long, String?>>(), rejections)
         composeTestRule.onNode(hasText("Question 1", substring = true)).assertIsDisplayed()
+    }
+
+    @Test
+    fun test_loading_queue_cards_use_shimmer() {
+        // Issue #344: the loading queue's placeholders — the group-header bar
+        // and both approval-card blocks — carry the shared shimmer, so the
+        // queue reads as loading rather than rendered-but-empty. The
+        // animation itself is gated in ShimmerTest.
+        setApproveContent(ApproveUiState(isLoading = true))
+
+        composeTestRule.onAllNodesWithTag(SHIMMER_TAG).assertCountEquals(3)
     }
 
     // --- helpers ---

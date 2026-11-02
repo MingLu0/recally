@@ -3,9 +3,11 @@ package dev.recally.ui.screens.decks
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import dev.recally.domain.model.Deck
+import dev.recally.ui.components.SHIMMER_TAG
 import dev.recally.ui.theme.RecallyTheme
 import org.junit.Rule
 import org.junit.Test
@@ -140,6 +142,26 @@ class DecksScreenTest {
         setScreen(decks = emptyList())
 
         composeTestRule.onNodeWithText("Drop an O'Reilly export").assertIsDisplayed()
+    }
+
+    @Test
+    fun test_loading_deck_rows_use_shimmer() {
+        // Issue #344: the three deck-row placeholders carry the shared
+        // shimmer, so the list reads as loading rather than rendered-but-
+        // empty. The animation itself is gated in ShimmerTest.
+        composeTestRule.setContent {
+            RecallyTheme {
+                DecksScreen(
+                    uiState = DecksUiState(isLoading = true),
+                    onDeckClick = {},
+                    onRetry = {},
+                    onOpenSettings = {},
+                    onExportPicked = {},
+                )
+            }
+        }
+
+        composeTestRule.onAllNodesWithTag(SHIMMER_TAG).assertCountEquals(3)
     }
 
     private fun setScreen(decks: List<Deck>) {
