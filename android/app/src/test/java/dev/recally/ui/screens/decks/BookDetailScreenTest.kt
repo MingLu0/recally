@@ -1,15 +1,20 @@
 package dev.recally.ui.screens.decks
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import dev.recally.domain.model.DeckCard
+import dev.recally.ui.components.SHIMMER_TAG
 import dev.recally.ui.theme.RecallyTheme
 import dev.recally.ui.theme.bookCoverColor
 import org.junit.Assert.assertEquals
@@ -205,6 +210,57 @@ class BookDetailScreenTest {
                     .positionInRoot.y
             }
         assertEquals(rendered.sorted(), rendered)
+    }
+
+    @Test
+    fun test_initial_and_expanded_chapter_loading_use_shimmer() {
+        // Issue #344: both of the book-detail loading paths — the initial
+        // chapter list and the expanded chapter's card placeholder — carry
+        // the shared shimmer. The animation itself is gated in ShimmerTest.
+        // setContent may only run once per test, so the two paths swap in
+        // through one snapshot var.
+        var uiState by
+            mutableStateOf(
+                DecksUiState(
+                    isBookDetail = true,
+                    bookId = 2,
+                    bookTitle = "Evals for AI Engineers",
+                    isLoading = true,
+                ),
+            )
+        composeTestRule.setContent {
+            RecallyTheme {
+                BookDetailScreen(
+                    uiState = uiState,
+                    onBack = {},
+                    onChapterToggled = {},
+                    onStartEdit = {},
+                    onDismissEdit = {},
+                    onSubmitEdit = { _, _ -> },
+                    onSuspendCard = {},
+                    onUnsuspendCard = {},
+                    onRetry = {},
+                    onOpenSettings = {},
+                )
+            }
+        }
+
+        // Initial load: four chapter-row placeholders.
+        composeTestRule.onAllNodesWithTag(SHIMMER_TAG).assertCountEquals(4)
+
+        // Expanded chapter mid-fetch: one card-list placeholder under the
+        // chapter row (chapters resolved, so the initial block is gone).
+        uiState =
+            DecksUiState(
+                isBookDetail = true,
+                bookId = 2,
+                bookTitle = "Evals for AI Engineers",
+                chapters = listOf(ChapterSummary(name = "3. Error Analysis", cardCount = 2)),
+                expandedChapter = "3. Error Analysis",
+                isChapterLoading = true,
+            )
+        composeTestRule.waitForIdle()
+        composeTestRule.onAllNodesWithTag(SHIMMER_TAG).assertCountEquals(1)
     }
 
     private fun setDetailContent(uiState: DecksUiState) {
