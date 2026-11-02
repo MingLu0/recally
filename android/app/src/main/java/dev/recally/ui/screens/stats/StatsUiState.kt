@@ -33,6 +33,13 @@ data class StatsUiState(
     val lapseRateByGuidanceVersion: List<GuidanceVersionLapseRate> = emptyList(),
     /** Earliest future due across the collection; null when nothing is scheduled. */
     val nextDueAt: Instant? = null,
+    /**
+     * A manual pull-to-refresh is in flight (issue #346). Distinct from
+     * initial [isLoading]: a refresh over loaded content keeps the figures
+     * on screen — never the initial-load skeletons — and the indicator
+     * clears on both success and failure.
+     */
+    val isRefreshing: Boolean = false,
 ) {
     /**
      * Lapse rate by guidance version renders only when there is more than one

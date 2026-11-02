@@ -1,13 +1,20 @@
 package dev.recally.ui.screens.today
 
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipe
 import dev.recally.domain.model.Deck
+import dev.recally.ui.components.PULL_TO_REFRESH_INDICATOR_TAG
 import dev.recally.ui.components.SHIMMER_TAG
 import dev.recally.ui.theme.RecallyTheme
 import org.junit.Assert.assertEquals
@@ -43,6 +50,7 @@ class TodayScreenTest {
                     onOpenSettings = {},
                     onRetry = {},
                     onBookClick = {},
+                    onRefresh = {},
                 )
             }
         }
@@ -63,6 +71,7 @@ class TodayScreenTest {
                     onOpenSettings = {},
                     onRetry = {},
                     onBookClick = {},
+                    onRefresh = {},
                 )
             }
         }
@@ -83,6 +92,7 @@ class TodayScreenTest {
                     onOpenSettings = {},
                     onRetry = {},
                     onBookClick = {},
+                    onRefresh = {},
                 )
             }
         }
@@ -101,6 +111,7 @@ class TodayScreenTest {
                     onOpenSettings = {},
                     onRetry = {},
                     onBookClick = {},
+                    onRefresh = {},
                 )
             }
         }
@@ -124,6 +135,7 @@ class TodayScreenTest {
                     onOpenSettings = {},
                     onRetry = {},
                     onBookClick = {},
+                    onRefresh = {},
                 )
             }
         }
@@ -145,6 +157,7 @@ class TodayScreenTest {
                     onOpenSettings = {},
                     onRetry = {},
                     onBookClick = {},
+                    onRefresh = {},
                 )
             }
         }
@@ -164,6 +177,7 @@ class TodayScreenTest {
                     onOpenSettings = {},
                     onRetry = {},
                     onBookClick = {},
+                    onRefresh = {},
                 )
             }
         }
@@ -184,6 +198,7 @@ class TodayScreenTest {
                     onOpenSettings = {},
                     onRetry = {},
                     onBookClick = {},
+                    onRefresh = {},
                 )
             }
         }
@@ -204,6 +219,7 @@ class TodayScreenTest {
                     onOpenSettings = {},
                     onRetry = {},
                     onBookClick = {},
+                    onRefresh = {},
                 )
             }
         }
@@ -222,6 +238,7 @@ class TodayScreenTest {
                     onOpenSettings = {},
                     onRetry = {},
                     onBookClick = {},
+                    onRefresh = {},
                 )
             }
         }
@@ -241,6 +258,7 @@ class TodayScreenTest {
                     onOpenSettings = {},
                     onRetry = {},
                     onBookClick = { bookId -> clickedBookIds += bookId },
+                    onRefresh = {},
                 )
             }
         }
@@ -264,6 +282,7 @@ class TodayScreenTest {
                     onOpenSettings = {},
                     onRetry = {},
                     onBookClick = { bookId -> clickedBookIds += bookId },
+                    onRefresh = {},
                 )
             }
         }
@@ -288,6 +307,7 @@ class TodayScreenTest {
                     onOpenSettings = {},
                     onRetry = {},
                     onBookClick = {},
+                    onRefresh = {},
                 )
             }
         }
@@ -309,6 +329,7 @@ class TodayScreenTest {
                     onOpenSettings = {},
                     onRetry = {},
                     onBookClick = {},
+                    onRefresh = {},
                 )
             }
         }
@@ -330,6 +351,7 @@ class TodayScreenTest {
                     onOpenSettings = {},
                     onRetry = {},
                     onBookClick = {},
+                    onRefresh = {},
                 )
             }
         }
@@ -354,11 +376,76 @@ class TodayScreenTest {
                     onOpenSettings = {},
                     onRetry = {},
                     onBookClick = {},
+                    onRefresh = {},
                 )
             }
         }
 
         composeTestRule.onAllNodesWithTag(SHIMMER_TAG).assertCountEquals(3)
+    }
+
+    @Test
+    fun test_pull_down_invokes_today_refresh_exactly_once() {
+        // Issue #346: the pull-to-refresh gesture invokes Today's refresh
+        // callback exactly once — the same gesture the error copy ("Something
+        // went wrong — pull to retry.") promises.
+        val refreshCalls = mutableListOf<Unit>()
+        composeTestRule.setContent {
+            RecallyTheme {
+                TodayScreen(
+                    uiState = loadedState(books = listOf(sampleDeck())),
+                    onStartReview = {},
+                    onOpenApprove = {},
+                    onOpenSettings = {},
+                    onRetry = {},
+                    onBookClick = {},
+                    onRefresh = { refreshCalls += Unit },
+                )
+            }
+        }
+
+        pullDownToRefresh()
+
+        assertEquals("one downward pull triggers exactly one refresh", 1, refreshCalls.size)
+    }
+
+    @Test
+    fun test_today_refresh_indicator_is_visible_only_while_refreshing() {
+        // Negative: the refresh indicator exists only while isRefreshing is
+        // true. The positive branch (shown while refreshing) is asserted
+        // first, so the absence below cannot pass on an indicator that never
+        // renders at all.
+        val refreshing = mutableStateOf(true)
+        composeTestRule.setContent {
+            RecallyTheme {
+                TodayScreen(
+                    uiState = loadedState(books = listOf(sampleDeck())).copy(isRefreshing = refreshing.value),
+                    onStartReview = {},
+                    onOpenApprove = {},
+                    onOpenSettings = {},
+                    onRetry = {},
+                    onBookClick = {},
+                    onRefresh = {},
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag(PULL_TO_REFRESH_INDICATOR_TAG).assertIsDisplayed()
+
+        composeTestRule.runOnIdle { refreshing.value = false }
+
+        composeTestRule.onNodeWithTag(PULL_TO_REFRESH_INDICATOR_TAG).assertDoesNotExist()
+    }
+
+    /**
+     * One downward pull released past the 80dp trigger threshold, as a user
+     * dragging the list down would produce.
+     */
+    private fun pullDownToRefresh() {
+        composeTestRule.onRoot().performTouchInput {
+            swipe(center, center + Offset(0f, 400f), durationMillis = 300)
+        }
+        composeTestRule.waitForIdle()
     }
 
     private companion object {

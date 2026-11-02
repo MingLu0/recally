@@ -24,6 +24,8 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -38,6 +40,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.recally.domain.model.Deck
+import dev.recally.ui.components.PullToRefreshIndicator
 import dev.recally.ui.screens.approve.QueueFilter
 import dev.recally.ui.screens.decks.BookSpineChip
 import dev.recally.ui.screens.decks.DeckProgressBar
@@ -67,8 +70,10 @@ fun TodayScreen(
     onOpenSettings: () -> Unit,
     onRetry: () -> Unit,
     onBookClick: (Long) -> Unit,
+    onRefresh: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val pullToRefreshState = rememberPullToRefreshState()
     Column(modifier = modifier.fillMaxSize()) {
         WordmarkHeader()
         HorizontalDivider(color = MaterialTheme.recallyColors.lineSoft)
@@ -80,49 +85,67 @@ fun TodayScreen(
             CheckSettingsBanner(onOpenSettings = onOpenSettings)
         }
 
-        Column(
-            verticalArrangement = Arrangement.spacedBy(RecallySpacing.lg),
+        // The pull-to-refresh gesture wraps only the scrolling body — the
+        // wordmark and the banners above it stay fixed (issue #346).
+        PullToRefreshBox(
+            isRefreshing = uiState.isRefreshing,
+            onRefresh = onRefresh,
+            state = pullToRefreshState,
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    // The book rail can push the lower content past a small
-                    // display; Today scrolls rather than clipping it.
-                    .verticalScroll(rememberScrollState())
-                    .padding(
-                        horizontal = RecallySpacing.screenPadding,
-                        vertical = RecallySpacing.lg,
-                    ),
-        ) {
-            when {
-                uiState.isLoading -> StatsStripSkeleton()
-                else ->
-                    StatsStrip(
-                        streakDays = uiState.streakDays,
-                        reviewsToday = uiState.reviewsToday,
-                        retention30d = uiState.retention30d,
-                        newCount = uiState.newCount,
-                        dueCount = uiState.dueCount,
-                        nothingDue = uiState.nothingDue,
-                        onStartReview = onStartReview,
-                        nextDueLabel = uiState.nextDueLabel,
-                    )
-            }
-            WaitingForYouSection(
-                pendingReviewCount = uiState.pendingReviewCount,
-                needsHumanCount = uiState.needsHumanCount,
-                onOpenApprove = onOpenApprove,
-            )
-            if (uiState.books.isNotEmpty() || uiState.booksFailedToLoad) {
-                YourBooksRail(
-                    books = uiState.books,
-                    failedToLoad = uiState.booksFailedToLoad,
-                    failureMessage = uiState.booksFailureMessage,
-                    onBookClick = onBookClick,
-                    onRetry = onRetry,
+                    .weight(1f),
+            indicator = {
+                PullToRefreshIndicator(
+                    state = pullToRefreshState,
+                    isRefreshing = uiState.isRefreshing,
                 )
-            }
-            if (uiState.errorMessage != null && uiState.dueCount == null && !uiState.isLoading) {
-                ErrorRow(message = uiState.errorMessage, onRetry = onRetry)
+            },
+        ) {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(RecallySpacing.lg),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        // The book rail can push the lower content past a small
+                        // display; Today scrolls rather than clipping it.
+                        .verticalScroll(rememberScrollState())
+                        .padding(
+                            horizontal = RecallySpacing.screenPadding,
+                            vertical = RecallySpacing.lg,
+                        ),
+            ) {
+                when {
+                    uiState.isLoading -> StatsStripSkeleton()
+                    else ->
+                        StatsStrip(
+                            streakDays = uiState.streakDays,
+                            reviewsToday = uiState.reviewsToday,
+                            retention30d = uiState.retention30d,
+                            newCount = uiState.newCount,
+                            dueCount = uiState.dueCount,
+                            nothingDue = uiState.nothingDue,
+                            onStartReview = onStartReview,
+                            nextDueLabel = uiState.nextDueLabel,
+                        )
+                }
+                WaitingForYouSection(
+                    pendingReviewCount = uiState.pendingReviewCount,
+                    needsHumanCount = uiState.needsHumanCount,
+                    onOpenApprove = onOpenApprove,
+                )
+                if (uiState.books.isNotEmpty() || uiState.booksFailedToLoad) {
+                    YourBooksRail(
+                        books = uiState.books,
+                        failedToLoad = uiState.booksFailedToLoad,
+                        failureMessage = uiState.booksFailureMessage,
+                        onBookClick = onBookClick,
+                        onRetry = onRetry,
+                    )
+                }
+                if (uiState.errorMessage != null && uiState.dueCount == null && !uiState.isLoading) {
+                    ErrorRow(message = uiState.errorMessage, onRetry = onRetry)
+                }
             }
         }
     }
@@ -500,6 +523,7 @@ private fun TodayScreenLoadingPreview() {
             onOpenSettings = {},
             onRetry = {},
             onBookClick = {},
+            onRefresh = {},
         )
     }
 }
@@ -546,6 +570,45 @@ private fun TodayScreenLoadedPreview() {
             onOpenSettings = {},
             onRetry = {},
             onBookClick = {},
+            onRefresh = {},
+        )
+    }
+}
+
+/** A manual pull-to-refresh over loaded content: the content stays, the indicator shows. */
+@CombinedPreviews
+@Composable
+private fun TodayScreenRefreshingPreview() {
+    RecallyTheme {
+        TodayScreen(
+            uiState =
+                TodayUiState(
+                    isLoading = false,
+                    isRefreshing = true,
+                    dueCount = 12,
+                    newCount = 5,
+                    streakDays = 9,
+                    reviewsToday = 23,
+                    retention30d = 0.87,
+                    books =
+                        listOf(
+                            Deck(
+                                bookId = 1,
+                                title = "Evals for AI Engineers",
+                                total = 48,
+                                due = 6,
+                                progress = 0.62f,
+                                chapters = 9,
+                                truncated = 0,
+                            ),
+                        ),
+                ),
+            onStartReview = {},
+            onOpenApprove = {},
+            onOpenSettings = {},
+            onRetry = {},
+            onBookClick = {},
+            onRefresh = {},
         )
     }
 }
@@ -571,6 +634,7 @@ private fun TodayScreenEmptyBooksPreview() {
             onOpenSettings = {},
             onRetry = {},
             onBookClick = {},
+            onRefresh = {},
         )
     }
 }
@@ -600,6 +664,7 @@ private fun TodayScreenBooksFailedPreview() {
             onOpenSettings = {},
             onRetry = {},
             onBookClick = {},
+            onRefresh = {},
         )
     }
 }
@@ -624,6 +689,7 @@ private fun TodayScreenNothingDuePreview() {
             onOpenSettings = {},
             onRetry = {},
             onBookClick = {},
+            onRefresh = {},
         )
     }
 }
@@ -659,6 +725,7 @@ private fun TodayScreenOfflinePreview() {
             onOpenSettings = {},
             onRetry = {},
             onBookClick = {},
+            onRefresh = {},
         )
     }
 }
@@ -678,6 +745,7 @@ private fun TodayScreenCheckSettingsPreview() {
             onOpenSettings = {},
             onRetry = {},
             onBookClick = {},
+            onRefresh = {},
         )
     }
 }

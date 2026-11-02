@@ -14,6 +14,7 @@ import dev.recally.domain.repository.CardRepository
 import dev.recally.domain.repository.DeckRepository
 import dev.recally.domain.repository.Result
 import dev.recally.domain.repository.StatsRepository
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -126,7 +127,20 @@ class TodayViewModelTest {
     private class FakeDeckRepository(
         var decksResult: Result<List<Deck>> = Result.NetworkError(IOException("no route to host")),
     ) : DeckRepository {
-        override suspend fun decks(): Result<List<Deck>> = decksResult
+        /**
+         * Holds the decks call open mid-flight (issue #346): the refreshing
+         * tests assert the indicator outlasts the other three loads.
+         */
+        var decksGate: CompletableDeferred<Unit>? = null
+
+        /** Throws instead of returning a Result, for the exception-path test. */
+        var decksFailure: Throwable? = null
+
+        override suspend fun decks(): Result<List<Deck>> {
+            decksGate?.await()
+            decksFailure?.let { throw it }
+            return decksResult
+        }
 
         override suspend fun deckCards(
             bookId: Long,
@@ -690,6 +704,96 @@ class TodayViewModelTest {
                 .filter { truncatedField.containsMatchIn(it) }
         assertTrue("TodayUiState derives a truncated count: $offending", offending.isEmpty())
     }
+
+    @Test
+    fun test_today_refreshing_stays_true_until_all_four_loads_finish() =
+        runTest {
+            // Issue #346: Today's indicator covers all four loads
+            // (/reviews/due, /stats, /cards/pending, /decks) — not only the
+            // first. Hold /decks open; the other three settle.
+            val deckRepository = FakeDeckRepository(decksResult = Result.Success(emptyList()))
+            val decksGate = CompletableDeferred<Unit>()
+            deckRepository.decksGate = decksGate
+            val viewModel =
+                TodayViewModel(
+                    cardRepository = FakeCardRepository(Result.Success(dueSummary(dueCount = 3))),
+                    statsRepository = FakeStatsRepository(Result.Success(sampleStats())),
+                    approvalRepository =
+                        FakeApprovalRepository(
+                            pendingResult =
+                                Result.Success(
+                                    PendingQueue(
+                                        cards = emptyList(),
+                                        counts = PendingCounts(pendingReview = 5, needsHuman = 0),
+                                    ),
+                                ),
+                        ),
+                    deckRepository = deckRepository,
+                    ioDispatcher = testDispatcher,
+                    clock = FIXED_CLOCK,
+                )
+            advanceUntilIdle()
+
+            // Three of the four loads have settled...
+            val settled = viewModel.uiState.value
+            assertEquals("/reviews/due settled", 3, settled.dueCount)
+            assertEquals("/stats settled", 9, settled.streakDays)
+            assertEquals("/cards/pending settled", 5, settled.pendingReviewCount)
+            assertFalse(settled.isLoading)
+            // ...and the refresh is still running.
+            assertTrue(
+                "the indicator outlasts the first three loads",
+                settled.isRefreshing,
+            )
+
+            decksGate.complete(Unit)
+            advanceUntilIdle()
+
+            assertFalse(
+                "the indicator clears once all four loads settle",
+                viewModel.uiState.value.isRefreshing,
+            )
+        }
+
+    @Test
+    fun test_today_refreshing_clears_after_failure() =
+        runTest {
+            // Negative: a failed refresh must not leave the indicator
+            // spinning. Hold /decks open to prove the flag rose, then let it
+            // throw — a thrown fault, not a Result — so the
+            // exception-handler path is what must clear the flag.
+            val deckRepository = FakeDeckRepository()
+            deckRepository.decksFailure = IOException("connection dropped mid-flight")
+            val decksGate = CompletableDeferred<Unit>()
+            deckRepository.decksGate = decksGate
+            val viewModel =
+                TodayViewModel(
+                    cardRepository = FakeCardRepository(Result.Success(emptyDueSummary())),
+                    statsRepository = FakeStatsRepository(Result.Success(sampleStats())),
+                    approvalRepository = FakeApprovalRepository(),
+                    deckRepository = deckRepository,
+                    ioDispatcher = testDispatcher,
+                    clock = FIXED_CLOCK,
+                )
+            advanceUntilIdle()
+
+            assertTrue(
+                "the refresh is in flight while /decks hangs",
+                viewModel.uiState.value.isRefreshing,
+            )
+
+            decksGate.complete(Unit)
+            advanceUntilIdle()
+
+            val state = viewModel.uiState.value
+            assertEquals(
+                "the fault surfaces as the generic error copy",
+                "Something went wrong — pull to retry.",
+                state.errorMessage,
+            )
+            assertFalse("a failed refresh leaves no stuck indicator", state.isRefreshing)
+            assertFalse(state.isLoading)
+        }
 
     private companion object {
         val FIXED_INSTANT: Instant = Instant.parse("2026-09-09T01:00:00Z")

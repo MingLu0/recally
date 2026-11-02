@@ -44,7 +44,7 @@ class StatsViewModel
         private val exceptionHandler =
             CoroutineExceptionHandler { _, _ ->
                 mutableUiState.update {
-                    it.copy(isLoading = false, errorMessage = MESSAGE_UNEXPECTED)
+                    it.copy(isLoading = false, isRefreshing = false, errorMessage = MESSAGE_UNEXPECTED)
                 }
             }
 
@@ -52,10 +52,25 @@ class StatsViewModel
             refresh()
         }
 
+        /**
+         * Re-queries `GET /stats`. A manual pull-to-refresh (issue #346)
+         * rides this same path as the initial, resume and
+         * connectivity-triggered loads (issue #147); a pull while a refresh
+         * is already in flight is ignored, never duplicated.
+         * [StatsUiState.isRefreshing] tracks a manual refresh separately from
+         * initial [StatsUiState.isLoading]: loaded figures stay on screen —
+         * never the initial-load skeletons — and the indicator clears on both
+         * success and failure.
+         */
         fun refresh() {
+            if (mutableUiState.value.isRefreshing) return
             viewModelScope.launch(exceptionHandler) {
-                mutableUiState.update { it.copy(isLoading = true, errorMessage = null) }
-                loadStats()
+                mutableUiState.update { it.copy(isRefreshing = true, errorMessage = null) }
+                try {
+                    loadStats()
+                } finally {
+                    mutableUiState.update { it.copy(isRefreshing = false) }
+                }
             }
         }
 

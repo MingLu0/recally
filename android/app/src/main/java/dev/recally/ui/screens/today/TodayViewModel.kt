@@ -54,7 +54,7 @@ class TodayViewModel
         private val exceptionHandler =
             CoroutineExceptionHandler { _, _ ->
                 mutableUiState.update {
-                    it.copy(isLoading = false, errorMessage = MESSAGE_UNEXPECTED)
+                    it.copy(isLoading = false, isRefreshing = false, errorMessage = MESSAGE_UNEXPECTED)
                 }
             }
 
@@ -62,13 +62,28 @@ class TodayViewModel
             refresh()
         }
 
+        /**
+         * Re-queries all four endpoints. A manual pull-to-refresh (issue
+         * #346) rides this same path as the initial, resume and
+         * connectivity-triggered loads (issue #147); a pull while a refresh
+         * is already in flight is ignored, never duplicated.
+         * [TodayUiState.isRefreshing] tracks a manual refresh separately from
+         * initial [TodayUiState.isLoading]: loaded content stays on screen —
+         * no skeleton flash — and the indicator holds until all four loads
+         * settle, success or failure.
+         */
         fun refresh() {
+            if (mutableUiState.value.isRefreshing) return
             viewModelScope.launch(exceptionHandler) {
-                mutableUiState.update { it.copy(isLoading = true, errorMessage = null) }
-                loadDueCounts()
-                loadStats()
-                loadPendingCounts()
-                loadDecks()
+                mutableUiState.update { it.copy(isRefreshing = true, errorMessage = null) }
+                try {
+                    loadDueCounts()
+                    loadStats()
+                    loadPendingCounts()
+                    loadDecks()
+                } finally {
+                    mutableUiState.update { it.copy(isRefreshing = false) }
+                }
             }
         }
 

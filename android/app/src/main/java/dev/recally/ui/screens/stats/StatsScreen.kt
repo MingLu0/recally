@@ -17,6 +17,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -25,6 +27,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import dev.recally.ui.components.PullToRefreshIndicator
 import dev.recally.ui.theme.CombinedPreviews
 import dev.recally.ui.theme.RecallyRadius
 import dev.recally.ui.theme.RecallySpacing
@@ -48,49 +51,80 @@ fun StatsScreen(
     uiState: StatsUiState,
     onRetry: () -> Unit,
     onOpenSettings: () -> Unit,
+    onRefresh: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = MaterialTheme.recallyColors
+    val pullToRefreshState = rememberPullToRefreshState()
     Column(
         modifier =
             modifier
                 .fillMaxSize()
-                .background(colors.ground)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = RecallySpacing.screenPadding),
+                .background(colors.ground),
     ) {
         Spacer(Modifier.height(RecallySpacing.screenPadding))
-        Text("Stats", style = MaterialTheme.typography.titleLarge, color = colors.ink)
+        Text(
+            "Stats",
+            style = MaterialTheme.typography.titleLarge,
+            color = colors.ink,
+            modifier = Modifier.padding(horizontal = RecallySpacing.screenPadding),
+        )
         Spacer(Modifier.height(RecallySpacing.md))
 
-        if (uiState.isOffline) OfflineBar()
-        if (uiState.isUnauthorized) UnauthorizedBanner(onOpenSettings)
-        uiState.errorMessage?.let { ErrorRow(message = it, onRetry = onRetry) }
-
-        if (uiState.isLoading && !uiState.isOffline) {
-            // Skeleton blocks at the real sections' dimensions — no spinners
-            // (design-system.md, "States").
-            Column(verticalArrangement = Arrangement.spacedBy(RecallySpacing.lg)) {
-                SkeletonBlock(height = 76.dp)
-                SkeletonBlock(height = 200.dp)
-                SkeletonBlock(height = 132.dp)
-            }
-        } else {
-            Column(verticalArrangement = Arrangement.spacedBy(RecallySpacing.lg)) {
-                HeadlineStrip(
-                    streakDays = uiState.streakDays,
-                    reviewsToday = uiState.reviewsToday,
-                    retention30d = uiState.retention30d,
-                    retentionReviewCount = uiState.retentionReviewCount,
+        // The pull-to-refresh gesture wraps the scrollable content — empty
+        // and error states included (issue #346).
+        PullToRefreshBox(
+            isRefreshing = uiState.isRefreshing,
+            onRefresh = onRefresh,
+            state = pullToRefreshState,
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+            indicator = {
+                PullToRefreshIndicator(
+                    state = pullToRefreshState,
+                    isRefreshing = uiState.isRefreshing,
                 )
-                ForecastSection(forecast = uiState.forecast)
-                LapseRateByTypeSection(lapseRateByType = uiState.lapseRateByType)
-                if (uiState.showGuidanceVersionSection) {
-                    LapseRateByGuidanceVersionSection(versions = uiState.lapseRateByGuidanceVersion)
+            },
+        ) {
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = RecallySpacing.screenPadding),
+            ) {
+                if (uiState.isOffline) OfflineBar()
+                if (uiState.isUnauthorized) UnauthorizedBanner(onOpenSettings)
+                uiState.errorMessage?.let { ErrorRow(message = it, onRetry = onRetry) }
+
+                if (uiState.isLoading && !uiState.isOffline) {
+                    // Skeleton blocks at the real sections' dimensions — no spinners
+                    // (design-system.md, "States").
+                    Column(verticalArrangement = Arrangement.spacedBy(RecallySpacing.lg)) {
+                        SkeletonBlock(height = 76.dp)
+                        SkeletonBlock(height = 200.dp)
+                        SkeletonBlock(height = 132.dp)
+                    }
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(RecallySpacing.lg)) {
+                        HeadlineStrip(
+                            streakDays = uiState.streakDays,
+                            reviewsToday = uiState.reviewsToday,
+                            retention30d = uiState.retention30d,
+                            retentionReviewCount = uiState.retentionReviewCount,
+                        )
+                        ForecastSection(forecast = uiState.forecast)
+                        LapseRateByTypeSection(lapseRateByType = uiState.lapseRateByType)
+                        if (uiState.showGuidanceVersionSection) {
+                            LapseRateByGuidanceVersionSection(versions = uiState.lapseRateByGuidanceVersion)
+                        }
+                    }
                 }
+                Spacer(Modifier.height(RecallySpacing.screenPadding))
             }
         }
-        Spacer(Modifier.height(RecallySpacing.screenPadding))
     }
 }
 
@@ -388,6 +422,7 @@ private fun StatsScreenPreview() {
                 ),
             onRetry = {},
             onOpenSettings = {},
+            onRefresh = {},
         )
     }
 }
@@ -417,6 +452,7 @@ private fun StatsScreenTwoVersionsPreview() {
                 ),
             onRetry = {},
             onOpenSettings = {},
+            onRefresh = {},
         )
     }
 }
@@ -439,6 +475,7 @@ private fun StatsScreenEmptyPreview() {
                 ),
             onRetry = {},
             onOpenSettings = {},
+            onRefresh = {},
         )
     }
 }
@@ -451,6 +488,7 @@ private fun StatsScreenLoadingPreview() {
             uiState = StatsUiState(isLoading = true),
             onRetry = {},
             onOpenSettings = {},
+            onRefresh = {},
         )
     }
 }
@@ -463,6 +501,7 @@ private fun StatsScreenOfflinePreview() {
             uiState = StatsUiState(isOffline = true),
             onRetry = {},
             onOpenSettings = {},
+            onRefresh = {},
         )
     }
 }
@@ -475,6 +514,7 @@ private fun StatsScreenUnauthorizedPreview() {
             uiState = StatsUiState(isUnauthorized = true),
             onRetry = {},
             onOpenSettings = {},
+            onRefresh = {},
         )
     }
 }

@@ -1,11 +1,15 @@
 package dev.recally.ui.screens.stats
 
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipe
 import dev.recally.ui.components.SHIMMER_TAG
 import dev.recally.ui.theme.RecallyTheme
 import org.junit.Assert.assertEquals
@@ -41,6 +45,7 @@ class StatsScreenTest {
                     uiState = loadedState(retention30d = null),
                     onRetry = {},
                     onOpenSettings = {},
+                    onRefresh = {},
                 )
             }
         }
@@ -56,6 +61,7 @@ class StatsScreenTest {
                     uiState = loadedState(retention30d = null),
                     onRetry = {},
                     onOpenSettings = {},
+                    onRefresh = {},
                 )
             }
         }
@@ -75,6 +81,7 @@ class StatsScreenTest {
                     uiState = loadedState(retention30d = 0.87),
                     onRetry = {},
                     onOpenSettings = {},
+                    onRefresh = {},
                 )
             }
         }
@@ -90,6 +97,7 @@ class StatsScreenTest {
                     uiState = loadedState(retention30d = 0.87, retentionReviewCount = 143),
                     onRetry = {},
                     onOpenSettings = {},
+                    onRefresh = {},
                 )
             }
         }
@@ -105,6 +113,7 @@ class StatsScreenTest {
                     uiState = loadedState(retention30d = 0.87, retentionReviewCount = 143),
                     onRetry = {},
                     onOpenSettings = {},
+                    onRefresh = {},
                 )
             }
         }
@@ -123,6 +132,7 @@ class StatsScreenTest {
                     uiState = loadedState(retention30d = 0.67, retentionReviewCount = 3),
                     onRetry = {},
                     onOpenSettings = {},
+                    onRefresh = {},
                 )
             }
         }
@@ -138,6 +148,7 @@ class StatsScreenTest {
                     uiState = loadedState(retention30d = null),
                     onRetry = {},
                     onOpenSettings = {},
+                    onRefresh = {},
                 )
             }
         }
@@ -157,11 +168,77 @@ class StatsScreenTest {
                     uiState = StatsUiState(isLoading = true),
                     onRetry = {},
                     onOpenSettings = {},
+                    onRefresh = {},
                 )
             }
         }
 
         composeTestRule.onAllNodesWithTag(SHIMMER_TAG).assertCountEquals(3)
+    }
+
+    /**
+     * Issue #346: pulling down on Stats invokes its refresh callback exactly
+     * once over loaded content.
+     */
+    @Test
+    fun test_pull_down_invokes_stats_refresh_exactly_once() {
+        val refreshCalls = mutableListOf<Unit>()
+        composeTestRule.setContent {
+            RecallyTheme {
+                StatsScreen(
+                    uiState = loadedState(retention30d = 0.87),
+                    onRetry = {},
+                    onOpenSettings = {},
+                    onRefresh = { refreshCalls += Unit },
+                )
+            }
+        }
+
+        pullDownToRefresh()
+
+        assertEquals("one downward pull triggers exactly one refresh", 1, refreshCalls.size)
+    }
+
+    /**
+     * Issue #346: the error state's copy says "Something went wrong — pull to
+     * retry." — the promised gesture must actually work there.
+     */
+    @Test
+    fun test_stats_error_state_supports_pull_to_refresh() {
+        val refreshCalls = mutableListOf<Unit>()
+        composeTestRule.setContent {
+            RecallyTheme {
+                StatsScreen(
+                    uiState =
+                        StatsUiState(
+                            isLoading = false,
+                            errorMessage = "Something went wrong — pull to retry.",
+                        ),
+                    onRetry = {},
+                    onOpenSettings = {},
+                    onRefresh = { refreshCalls += Unit },
+                )
+            }
+        }
+
+        // The retry copy is on screen, so the assertion below is about the
+        // gesture honouring it, not about an error state rendering nothing.
+        composeTestRule.onNodeWithText("Something went wrong — pull to retry.").assertIsDisplayed()
+
+        pullDownToRefresh()
+
+        assertEquals("the error state still refreshes on pull", 1, refreshCalls.size)
+    }
+
+    /**
+     * One downward pull released past the 80dp trigger threshold, as a user
+     * dragging the screen down would produce.
+     */
+    private fun pullDownToRefresh() {
+        composeTestRule.onRoot().performTouchInput {
+            swipe(center, center + Offset(0f, 400f), durationMillis = 300)
+        }
+        composeTestRule.waitForIdle()
     }
 
     private fun loadedState(

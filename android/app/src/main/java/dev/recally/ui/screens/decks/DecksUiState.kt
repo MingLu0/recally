@@ -45,6 +45,12 @@ data class DecksUiState(
      * Never touches [decks]: a failed import must leave the list intact.
      */
     val importState: ImportState = ImportState.Idle,
+    /**
+     * A manual pull-to-refresh is in flight (issue #346). Distinct from
+     * initial [isLoading]: the loaded rows stay on screen while it runs and
+     * the indicator clears on both success and failure.
+     */
+    val isRefreshing: Boolean = false,
 ) {
     /**
      * Edit, suspend and unsuspend all require connectivity — they are
