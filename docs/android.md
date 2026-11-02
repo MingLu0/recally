@@ -88,7 +88,7 @@ composable(Screen.Approve.route) {
 }
 ```
 
-The route entry also owns *when* a screen re-queries (issue #147). The ViewModel's `init` block owns the first load; because the ViewModel survives on the back stack while another route is pushed over it, the resumable list screens (Today, Decks, Stats) additionally call `refresh()` from two route-entry effects in `ui/navigation/RouteRefreshEffects.kt`: `RefreshOnResumeEffect` re-queries when the entry returns to RESUMED (its first resume is skipped — that load is `init`'s), and `RefreshOnConnectivityChangeEffect` re-queries when connectivity crosses the online/offline boundary, so the offline bar appears and clears on an already-loaded screen without a cold start. The fetch result still decides the `isOffline` flag (`Result.NetworkError` / `servedFromCache`); the connectivity signal only triggers the re-query, it never sets state directly.
+The route entry also owns *when* a screen re-queries (issue #147). The ViewModel's `init` block owns the first load; because the ViewModel survives on the back stack while another route is pushed over it, the resumable list screens (Today, Decks, Stats) additionally call `refresh()` from two route-entry effects in `ui/navigation/RouteRefreshEffects.kt`: `RefreshOnResumeEffect` re-queries when the entry returns to RESUMED (its first resume is skipped — that load is `init`'s), and `RefreshOnConnectivityChangeEffect` re-queries when connectivity crosses the online/offline boundary, so the offline bar appears and clears on an already-loaded screen without a cold start. The fetch result still decides the `isOffline` flag (`Result.NetworkError` / `servedFromCache`); the connectivity signal only triggers the re-query, it never sets state directly. The same three screens also expose a manual pull-to-refresh gesture (issue #346), wired at the route entry to the same `refresh()` and rendered by Material 3's `PullToRefreshBox` — never Accompanist. `UiState.isRefreshing` tracks it separately from initial `isLoading`: a manual refresh over loaded content keeps that content on screen (never the initial-load skeletons), and the indicator holds until the whole refresh settles — on Today, that is all four loads (`/reviews/due`, `/stats`, `/cards/pending`, `/decks`) — then clears on both success and failure. A pull while a refresh is already in flight is ignored, never duplicated; Review, Approve, Book detail and Settings have no pull-to-refresh.
 
 ### Navigation decisions live at the route, not in the screen
 
@@ -148,6 +148,7 @@ Bottom navigation with four items: **Today, Decks, Stats, Settings**. Review and
 
 ### 1. Today
 - Due count + new card count, streak, start-review button.
+- Pull-to-refresh re-queries all four endpoints; the indicator holds until all four loads settle and loaded content stays on screen (issue #346).
 - Approval-queue row with the collection-wide `GET /cards/pending` counts.
 - "Your books" rail: one card per book from `GET /decks` — spine colour, card count and the server's `progress`, rendered unmodified (never recomputed from `total`/`due`). Tapping a card opens that book's Book detail, the same destination the Decks row opens — one book, one destination. The section heading and subtitle are not click targets. Decks are remote-only, so an unreachable endpoint leaves the rail absent without blanking the rest of the screen. No Import affordance **on Today**: the import tile lives on Decks, next to the books it adds to (see *4. Decks*).
 - Entry point from FCM notification deep link.
@@ -171,6 +172,7 @@ Bottom navigation with four items: **Today, Decks, Stats, Settings**. Review and
 
 ### 4. Decks
 - Book list → chapters → cards. Browsing, plus the per-card controls from ADR-008: edit (`PATCH /cards/{id}`), suspend and unsuspend. Suspended cards are shown here with their state — this screen is the only way back from a suspend, so it cannot filter them out.
+- Pull-to-refresh re-queries `GET /decks` in every list state — loaded rows, the empty/import state and errors (issue #346).
 - A single book can reach ~1000 cards. `GET /decks/{book_id}/cards` is unpaginated in v1 by decision (`api-spec.md`), so the client fetches the book and filters by chapter (`?chapter=`) to keep the rendered list small; use a lazy list so the row count, not the response size, is what matters.
 - **Import tile** (the dashed affordance at the foot of the list in `RcDecks.dc.html`/`DkDecks.dc.html`): opens the system file picker (`ACTION_OPEN_DOCUMENT`, MIME `text/*` — O'Reilly exports are served as `text/csv` but some providers report `text/plain`) and uploads the chosen CSV to `POST /ingest` as multipart. **The app is a transport and nothing more**: it streams bytes and never parses the CSV, extracts a UUID or decides what is new. Dedupe needs the whole `highlights` table (hard rule 6, `ingest/dedupe.py`), so only the server can do it, and a second CSV parser in Kotlin would be a second thing to keep in step with the first.
 - Upload is **not** the only path and does not replace the watched folder — the two are peers, which is what the tile's subtitle says. The watcher stays the zero-tap path when exporting on the same Mac that runs the backend; the tile is for exporting anywhere else. Ingestion is idempotent (hard rule 6), so a file arriving by both routes is harmless.
@@ -178,6 +180,7 @@ Bottom navigation with four items: **Today, Decks, Stats, Settings**. Review and
 
 ### 5. Stats
 - Streak, retention, forecast chart, lapse rate by card type, lapse rate by Writer guidance version (the roadmap 6b gate; hidden until there is more than one version), curation yield.
+- Pull-to-refresh re-queries `GET /stats` over loaded, empty and error states (issue #346) — the error copy "Something went wrong — pull to retry." promises the gesture, so it must work there.
 
 ### 6. Settings
 - Backend base URL, API key, connection test. See *Connecting to the backend*.

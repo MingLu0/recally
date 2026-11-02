@@ -25,6 +25,8 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,6 +45,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.recally.domain.model.Deck
+import dev.recally.ui.components.PullToRefreshIndicator
 import dev.recally.ui.theme.CombinedPreviews
 import dev.recally.ui.theme.RecallyRadius
 import dev.recally.ui.theme.RecallySpacing
@@ -81,6 +84,7 @@ fun DecksScreen(
     onRetry: () -> Unit,
     onOpenSettings: () -> Unit,
     onExportPicked: (Uri) -> Unit,
+    onRefresh: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = MaterialTheme.recallyColors
@@ -93,6 +97,7 @@ fun DecksScreen(
         rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
             if (uri != null) onExportPicked(uri)
         }
+    val pullToRefreshState = rememberPullToRefreshState()
     Column(
         modifier =
             modifier
@@ -110,26 +115,51 @@ fun DecksScreen(
         )
         Spacer(Modifier.height(RecallySpacing.md))
 
-        if (uiState.isOffline) OfflineBar()
-        if (uiState.isUnauthorized) UnauthorizedBanner(onOpenSettings)
-        uiState.errorMessage?.let { ErrorRow(message = it, onRetry = onRetry) }
+        // The pull-to-refresh gesture wraps the list container — banners,
+        // errors, the loaded rows and the empty/import state all stay
+        // reachable by it (issue #346).
+        PullToRefreshBox(
+            isRefreshing = uiState.isRefreshing,
+            onRefresh = onRefresh,
+            state = pullToRefreshState,
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+            indicator = {
+                PullToRefreshIndicator(
+                    state = pullToRefreshState,
+                    isRefreshing = uiState.isRefreshing,
+                )
+            },
+        ) {
+            if (uiState.isOffline) OfflineBar()
+            if (uiState.isUnauthorized) UnauthorizedBanner(onOpenSettings)
+            uiState.errorMessage?.let { ErrorRow(message = it, onRetry = onRetry) }
 
-        if (uiState.isLoading && uiState.decks.isEmpty()) {
-            // Skeleton blocks at the real row's dimensions — no spinners
-            // (design-system.md, "States").
-            Column(verticalArrangement = Arrangement.spacedBy(RecallySpacing.md)) {
-                repeat(3) { SkeletonBlock(height = 72.dp) }
-            }
-        } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(RecallySpacing.md)) {
-                items(uiState.decks, key = { it.bookId }) { deck ->
-                    DeckRow(deck = deck, onClick = { onDeckClick(deck.bookId) })
+            if (uiState.isLoading && uiState.decks.isEmpty()) {
+                // Skeleton blocks at the real row's dimensions — no spinners
+                // (design-system.md, "States").
+                Column(verticalArrangement = Arrangement.spacedBy(RecallySpacing.md)) {
+                    repeat(3) { SkeletonBlock(height = 72.dp) }
                 }
-                item(key = "import-tile") {
-                    ImportTile(
-                        state = uiState.importState,
-                        onClick = { exportPicker.launch(arrayOf("text/*")) },
-                    )
+            } else {
+                // fillMaxSize: a short list must still fill the refresh
+                // container, or its drag never reaches the pull-to-refresh
+                // parent (issue #346) — the M3 sample does the same.
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(RecallySpacing.md),
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    items(uiState.decks, key = { it.bookId }) { deck ->
+                        DeckRow(deck = deck, onClick = { onDeckClick(deck.bookId) })
+                    }
+                    item(key = "import-tile") {
+                        ImportTile(
+                            state = uiState.importState,
+                            onClick = { exportPicker.launch(arrayOf("text/*")) },
+                        )
+                    }
                 }
             }
         }
@@ -364,6 +394,7 @@ private fun DecksScreenPreview() {
             onRetry = {},
             onOpenSettings = {},
             onExportPicked = {},
+            onRefresh = {},
         )
     }
 }
@@ -378,6 +409,37 @@ private fun DecksScreenLoadingPreview() {
             onRetry = {},
             onOpenSettings = {},
             onExportPicked = {},
+            onRefresh = {},
+        )
+    }
+}
+
+@CombinedPreviews
+@Composable
+private fun DecksScreenRefreshingPreview() {
+    RecallyTheme {
+        DecksScreen(
+            uiState =
+                DecksUiState(
+                    isRefreshing = true,
+                    decks =
+                        listOf(
+                            Deck(
+                                bookId = 1,
+                                title = "Evals for AI Engineers",
+                                total = 48,
+                                due = 6,
+                                progress = 0.62f,
+                                chapters = 9,
+                                truncated = 0,
+                            ),
+                        ),
+                ),
+            onDeckClick = {},
+            onRetry = {},
+            onOpenSettings = {},
+            onExportPicked = {},
+            onRefresh = {},
         )
     }
 }
@@ -407,6 +469,7 @@ private fun DecksScreenOfflinePreview() {
             onRetry = {},
             onOpenSettings = {},
             onExportPicked = {},
+            onRefresh = {},
         )
     }
 }

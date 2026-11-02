@@ -46,6 +46,13 @@ data class TodayUiState(
     val isOffline: Boolean = false,
     val showCheckSettingsBanner: Boolean = false,
     val errorMessage: String? = null,
+    /**
+     * A manual pull-to-refresh is in flight (issue #346). Distinct from
+     * initial [isLoading]: a refresh over loaded content keeps that content
+     * on screen — the refresh indicator replaces nothing — and holds until
+     * all four loads settle, success or failure.
+     */
+    val isRefreshing: Boolean = false,
 ) {
     /**
      * The nothing-due treatment: the fused action bar goes `line`-bordered and

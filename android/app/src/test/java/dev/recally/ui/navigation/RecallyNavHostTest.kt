@@ -277,6 +277,7 @@ class RecallyNavHostTest {
                     onOpenSettings = {},
                     onRetry = {},
                     onBookClick = {},
+                    onRefresh = {},
                 )
             }
         }

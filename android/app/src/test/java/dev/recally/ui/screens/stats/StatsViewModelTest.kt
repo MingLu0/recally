@@ -4,6 +4,7 @@ import dev.recally.domain.model.ForecastDay
 import dev.recally.domain.model.Stats
 import dev.recally.domain.repository.Result
 import dev.recally.domain.repository.StatsRepository
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -306,11 +307,65 @@ class StatsViewModelTest {
             assertEquals("the updated figure is emitted", 25, viewModel.uiState.value.reviewsToday)
         }
 
+    @Test
+    fun test_stats_refreshing_clears_after_success_and_failure() =
+        runTest {
+            // Negative (issue #346): both outcomes clear the indicator; the
+            // in-flight assertTrue first proves the flag rises at all, so
+            // the clear assertions cannot pass on a flag never set.
+            statsRepository.result = Result.Success(fullStats())
+            statsRepository.gate = CompletableDeferred()
+            val viewModel = StatsViewModel(statsRepository, testDispatcher, FIXED_CLOCK)
+            assertTrue("a refresh in flight flags isRefreshing", viewModel.uiState.value.isRefreshing)
+
+            statsRepository.gate!!.complete(Unit)
+            advanceUntilIdle()
+            assertFalse("success clears the indicator", viewModel.uiState.value.isRefreshing)
+
+            statsRepository.result = Result.NetworkError(IOException("unreachable"))
+            statsRepository.gate = CompletableDeferred()
+            viewModel.refresh()
+            assertTrue("a second refresh flags isRefreshing again", viewModel.uiState.value.isRefreshing)
+
+            statsRepository.gate!!.complete(Unit)
+            advanceUntilIdle()
+            assertFalse("failure clears the indicator", viewModel.uiState.value.isRefreshing)
+        }
+
+    @Test
+    fun test_stats_refresh_preserves_loaded_content_while_in_flight() =
+        runTest {
+            // Issue #346: a manual refresh must not swap loaded figures back
+            // to the initial-load skeleton — content and isLoading stay put
+            // until the new figures land.
+            statsRepository.result = Result.Success(fullStats(reviewsToday = 23))
+            val viewModel = StatsViewModel(statsRepository, testDispatcher, FIXED_CLOCK)
+            advanceUntilIdle()
+            assertEquals(23, viewModel.uiState.value.reviewsToday)
+
+            statsRepository.result = Result.Success(fullStats(reviewsToday = 25))
+            statsRepository.gate = CompletableDeferred()
+            viewModel.refresh()
+
+            val inFlight = viewModel.uiState.value
+            assertTrue(inFlight.isRefreshing)
+            assertFalse("loaded content never switches back to initial loading", inFlight.isLoading)
+            assertEquals("the old figures stay until the new ones land", 23, inFlight.reviewsToday)
+
+            statsRepository.gate!!.complete(Unit)
+            advanceUntilIdle()
+            assertEquals(25, viewModel.uiState.value.reviewsToday)
+        }
+
     private class FakeStatsRepository : StatsRepository {
         var result: Result<Stats> = Result.Success(statsWithForecast())
         var calls = 0
 
+        /** Holds the stats call open mid-flight (issue #346). */
+        var gate: CompletableDeferred<Unit>? = null
+
         override suspend fun stats(): Result<Stats> {
+            gate?.await()
             calls++
             return result
         }

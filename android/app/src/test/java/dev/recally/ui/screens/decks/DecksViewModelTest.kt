@@ -361,6 +361,79 @@ class DecksViewModelTest {
             )
         }
 
+    @Test
+    fun test_decks_refreshing_clears_after_success_and_failure() =
+        runTest {
+            // Negative (issue #346): both outcomes clear the indicator — a
+            // success that never hides it and a failure that leaves it
+            // spinning are equally wrong. The in-flight assertTrue first
+            // proves the flag rises at all, so the clear assertions cannot
+            // pass on a flag that is never set.
+            deckRepository.decksResult =
+                Result.Success(listOf(Deck(BOOK_ID, "Evals for AI Engineers", 48, 6, 0.625f, chapters = 9, truncated = 0)))
+            deckRepository.decksGate = CompletableDeferred()
+            val viewModel = listViewModel()
+            assertTrue("a refresh in flight flags isRefreshing", viewModel.uiState.value.isRefreshing)
+
+            deckRepository.decksGate!!.complete(Unit)
+            advanceUntilIdle()
+            assertFalse("success clears the indicator", viewModel.uiState.value.isRefreshing)
+
+            deckRepository.decksResult = Result.NetworkError(IOException("unreachable"))
+            deckRepository.decksGate = CompletableDeferred()
+            viewModel.refresh()
+            assertTrue("a second refresh flags isRefreshing again", viewModel.uiState.value.isRefreshing)
+
+            deckRepository.decksGate!!.complete(Unit)
+            advanceUntilIdle()
+            assertFalse("failure clears the indicator", viewModel.uiState.value.isRefreshing)
+            assertTrue("the failure itself still surfaces", viewModel.uiState.value.isOffline)
+        }
+
+    @Test
+    fun test_decks_refresh_preserves_loaded_rows_while_in_flight() =
+        runTest {
+            // Issue #346: a manual refresh over loaded rows must not blank
+            // them back to the initial-load skeleton — the rows stay in the
+            // UiState for the whole refresh, and only the new data replaces
+            // them once it lands.
+            deckRepository.decksResult =
+                Result.Success(listOf(Deck(BOOK_ID, "Evals for AI Engineers", 48, 6, 0.625f, chapters = 9, truncated = 0)))
+            val viewModel = listViewModel()
+            assertEquals(
+                listOf("Evals for AI Engineers"),
+                viewModel.uiState.value.decks
+                    .map { it.title },
+            )
+
+            deckRepository.decksResult =
+                Result.Success(
+                    listOf(
+                        Deck(BOOK_ID, "Evals for AI Engineers", 48, 6, 0.625f, chapters = 9, truncated = 0),
+                        Deck(9L, "Designing Machine Learning Systems", 100, 10, 0.5f, chapters = 12, truncated = 0),
+                    ),
+                )
+            deckRepository.decksGate = CompletableDeferred()
+            viewModel.refresh()
+
+            val inFlight = viewModel.uiState.value
+            assertTrue(inFlight.isRefreshing)
+            assertEquals(
+                "loaded rows stay while the refresh runs",
+                listOf("Evals for AI Engineers"),
+                inFlight.decks.map { it.title },
+            )
+
+            deckRepository.decksGate!!.complete(Unit)
+            advanceUntilIdle()
+            assertEquals(
+                "the new rows replace the old only once they land",
+                listOf("Evals for AI Engineers", "Designing Machine Learning Systems"),
+                viewModel.uiState.value.decks
+                    .map { it.title },
+            )
+        }
+
     private fun detailViewModel(): DecksViewModel {
         deckRepository.decksResult =
             Result.Success(listOf(Deck(BOOK_ID, "Evals for AI Engineers", 48, 6, 0.625f, chapters = 9, truncated = 0)))
@@ -423,7 +496,11 @@ class DecksViewModelTest {
         var decksCalls = 0
         val deckCardsCalls = mutableListOf<Pair<Long, String?>>()
 
+        /** Holds the decks call open mid-flight (issue #346). */
+        var decksGate: CompletableDeferred<Unit>? = null
+
         override suspend fun decks(): Result<List<Deck>> {
+            decksGate?.await()
             decksCalls++
             return decksResult
         }

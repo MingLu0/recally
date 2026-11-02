@@ -1,14 +1,19 @@
 package dev.recally.ui.screens.decks
 
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipe
 import dev.recally.domain.model.Deck
 import dev.recally.ui.components.SHIMMER_TAG
 import dev.recally.ui.theme.RecallyTheme
+import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -157,11 +162,77 @@ class DecksScreenTest {
                     onRetry = {},
                     onOpenSettings = {},
                     onExportPicked = {},
+                    onRefresh = {},
                 )
             }
         }
 
         composeTestRule.onAllNodesWithTag(SHIMMER_TAG).assertCountEquals(3)
+    }
+
+    /**
+     * Issue #346: pulling down on the deck list invokes its refresh callback
+     * exactly once, over loaded rows.
+     */
+    @Test
+    fun test_pull_down_invokes_decks_refresh_exactly_once() {
+        val refreshCalls = mutableListOf<Unit>()
+        composeTestRule.setContent {
+            RecallyTheme {
+                DecksScreen(
+                    uiState = DecksUiState(decks = listOf(deck(total = 8, chapters = 9))),
+                    onDeckClick = {},
+                    onRetry = {},
+                    onOpenSettings = {},
+                    onExportPicked = {},
+                    onRefresh = { refreshCalls += Unit },
+                )
+            }
+        }
+
+        pullDownToRefresh()
+
+        assertEquals("one downward pull triggers exactly one refresh", 1, refreshCalls.size)
+    }
+
+    /**
+     * Issue #346: the gesture stays available when there are no decks — the
+     * empty state is exactly when a manual retry matters most.
+     */
+    @Test
+    fun test_decks_empty_state_supports_pull_to_refresh() {
+        val refreshCalls = mutableListOf<Unit>()
+        composeTestRule.setContent {
+            RecallyTheme {
+                DecksScreen(
+                    uiState = DecksUiState(decks = emptyList()),
+                    onDeckClick = {},
+                    onRetry = {},
+                    onOpenSettings = {},
+                    onExportPicked = {},
+                    onRefresh = { refreshCalls += Unit },
+                )
+            }
+        }
+
+        // The import tile is on screen, so the assertion below is about the
+        // gesture working, not about an empty screen rendering nothing.
+        composeTestRule.onNodeWithText("Drop an O'Reilly export").assertIsDisplayed()
+
+        pullDownToRefresh()
+
+        assertEquals("the empty state still refreshes on pull", 1, refreshCalls.size)
+    }
+
+    /**
+     * One downward pull released past the 80dp trigger threshold, as a user
+     * dragging the list down would produce.
+     */
+    private fun pullDownToRefresh() {
+        composeTestRule.onRoot().performTouchInput {
+            swipe(center, center + Offset(0f, 400f), durationMillis = 300)
+        }
+        composeTestRule.waitForIdle()
     }
 
     private fun setScreen(decks: List<Deck>) {
@@ -173,6 +244,7 @@ class DecksScreenTest {
                     onRetry = {},
                     onOpenSettings = {},
                     onExportPicked = {},
+                    onRefresh = {},
                 )
             }
         }

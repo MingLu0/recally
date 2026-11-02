@@ -101,7 +101,15 @@ class DecksViewModel
             }
         }
 
+        /**
+         * Re-queries the decks list (or the book detail — see
+         * [refreshBook]). A manual pull-to-refresh (issue #346) rides this
+         * same path; a pull while a refresh is already in flight is ignored,
+         * never duplicated. Only the list route fills
+         * [DecksUiState.isRefreshing]: book detail has no pull-to-refresh.
+         */
         fun refresh() {
+            if (mutableUiState.value.isRefreshing) return
             val currentBookId = bookId
             if (currentBookId == null) refreshDeckList() else refreshBook(currentBookId)
         }
@@ -252,9 +260,16 @@ class DecksViewModel
             }
         }
 
+        /**
+         * The list route's load. [DecksUiState.isRefreshing] rides here (the
+         * pull-to-refresh gesture, issue #346): the loaded rows stay in the
+         * state for the whole refresh — the screen's skeleton guard
+         * (`isLoading && decks.isEmpty()`) already keeps them on screen — and
+         * the flag clears on both success and failure.
+         */
         private fun refreshDeckList() {
             viewModelScope.launch {
-                mutableUiState.update { it.copy(isLoading = true) }
+                mutableUiState.update { it.copy(isLoading = true, isRefreshing = true) }
                 when (val result = deckRepository.decks()) {
                     is Result.Success ->
                         mutableUiState.update {
@@ -283,6 +298,7 @@ class DecksViewModel
                             it.copy(isLoading = false, errorMessage = result.displayMessage())
                         }
                 }
+                mutableUiState.update { it.copy(isRefreshing = false) }
             }
         }
 

@@ -58,6 +58,7 @@ fun RecallyNavHost(
                 onOpenSettings = { navController.navigate(Screen.Settings.route) },
                 onRetry = todayViewModel::refresh,
                 onBookClick = navController::openBookDetail,
+                onRefresh = todayViewModel::refresh,
             )
         }
         composable(Screen.Review.route) {
@@ -115,6 +116,7 @@ fun RecallyNavHost(
                 onRetry = decksViewModel::refresh,
                 onOpenSettings = { navController.navigate(Screen.Settings.route) },
                 onExportPicked = decksViewModel::onExportPicked,
+                onRefresh = decksViewModel::refresh,
             )
         }
         composable(
@@ -146,6 +148,7 @@ fun RecallyNavHost(
                 uiState = statsUiState,
                 onRetry = statsViewModel::refresh,
                 onOpenSettings = { navController.navigate(Screen.Settings.route) },
+                onRefresh = statsViewModel::refresh,
             )
         }
         composable(Screen.Settings.route) {
