@@ -50,3 +50,15 @@ Provider credentials use LiteLLM's own variable names (`ANTHROPIC_API_KEY`, `OPE
 ## Android
 
 The app has no build-time config. Base URL and API key are entered in the Settings screen and stored encrypted on device (see [android.md](android.md)). FCM project config comes from `google-services.json`, which is gitignored.
+
+## QA servers (evals)
+
+Debug builds and evals work point at pre-seeded QA databases served by uvicorn, never at production (`data/recally.db`). The QA databases live in the main checkout's `data/` dir; the workflow to seed/serve/extract them is the `recally-qa-env` skill, and the journey context is issue #256.
+
+| Port | Database | Used for |
+|---|---|---|
+| `8001` | `data/evals.db` | Debug-build UI/display testing only — never approve or reject through it for real. Its deliberate labels are already extracted into `backend/tests/fixtures/eval/writer_eval.jsonl`, so later verdicts on it are not ground truth. |
+| `8002` | the active cycle DB (currently `data/eval-r3.db`) | The evals phone pass — verdicts entered here *are* ground-truth labels |
+
+Both serve with API key `qa-key`, reachable on LAN and Tailscale. They run detached (`nohup`), which survives a session exit but **not a reboot** — after one, restart them with the same command.
+
