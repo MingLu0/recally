@@ -31,6 +31,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.SolidColor
@@ -218,6 +220,10 @@ private fun ImportTile(
         modifier =
             Modifier
                 .fillMaxWidth()
+                // Clip before the border and the ripple: the clip is what
+                // keeps the click shadow inside the rounded corners, and the
+                // dashed stroke is drawn inset so the full 1.5dp survives it.
+                .clip(RoundedCornerShape(RecallyRadius.md))
                 .dashedBorder(1.5.dp, colors.line, RecallyRadius.md)
                 .then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier)
                 .padding(horizontal = RecallySpacing.cardPadding, vertical = RecallySpacing.lg),
@@ -284,19 +290,28 @@ private fun importSubline(state: ImportState): String =
         is ImportState.Unexpected -> state.detail ?: "Something went wrong on the server"
     }
 
-/** The artboard's dashed border (docs/design/RcDecks.dc.html): 1.5dp `line` dashes. */
+/**
+ * The artboard's dashed border (docs/design/RcDecks.dc.html): 1.5dp `line`
+ * dashes. The stroke is drawn inset by half its width so it lands whole
+ * inside a caller-applied `clip` — the same convention as the platform
+ * `Modifier.border` on the deck rows.
+ */
 private fun Modifier.dashedBorder(
     width: Dp,
     color: Color,
     radius: Dp,
 ): Modifier =
     drawBehind {
+        val strokeWidth = width.toPx()
+        val inset = strokeWidth / 2
         drawRoundRect(
             color = color,
-            cornerRadius = CornerRadius(radius.toPx()),
+            topLeft = Offset(inset, inset),
+            size = Size(size.width - strokeWidth, size.height - strokeWidth),
+            cornerRadius = CornerRadius((radius - width / 2).toPx()),
             style =
                 Stroke(
-                    width = width.toPx(),
+                    width = strokeWidth,
                     pathEffect = PathEffect.dashPathEffect(floatArrayOf(12f, 8f)),
                 ),
         )
