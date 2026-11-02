@@ -166,6 +166,7 @@ Bottom navigation with four items: **Today, Decks, Stats, Settings**. Review and
 - Pending cards grouped by chapter, with front/back, critic critique, and all source highlights shown for context (a grouped card has several). Expanded source highlights are labelled Source 1, Source 2, and so on, per card — the numbering restarts for every card and follows the server's export-position order.
 - Read-only card text — badges, front/back or rendered cloze, critique, and the source-highlight disclosure — supports long-press text selection and copying, so exact wording can be lifted into an edit or a note about a bad generation. The Reject / Edit / Approve row, reject dialog, and inline editor sit outside the selection context; collapsed highlights stay collapsed until expanded (issue #267).
 - Approve / edit inline / reject (with optional reason). **Save is distinct from Approve** (issue #287, ADR-018): the inline editor's Save calls `PATCH /cards/{id}`, updates the wording and keeps the card queued; only Approve decides the card and enters it into FSRS.
+- The reject reason **auto-saves as a device-local draft, per card** (issue #343): it is kept in its own DataStore Preferences file (`recally_reject_drafts`, not the encrypted Settings store, and not a Room table — a version bump there rebuilds the cache), survives closing the dialog, leaving the screen and a process death, and reappears when the dialog reopens. A blank field removes the draft; the draft is dropped once the card leaves the queue — a successful reject or approve removes it, a failed one keeps it so the reason is not lost. Drafts never reach the server: only confirming Reject sends the text through the existing reject path. The reject dialog has no Cancel (it would read as "discard" now that closing discards nothing): a top-right X and Android Back close it keeping the draft, and tapping outside it does nothing.
 - `needs_human` cards get their own **"needs you" filter chip** rather than being folded indistinguishably into the single queue — they are the cards the Writer ⇄ Critic loop could not clear, so they are opened individually and excluded from any bulk approve (hard rule 1).
 
 ### 4. Decks
@@ -281,6 +282,7 @@ android/
     │   ├── remote/              # Retrofit service, DTOs, X-API-Key interceptor
     │   ├── repository/          # interface implementations, DTO/entity ↔ domain mapping
     │   ├── settings/            # Keystore-encrypted DataStore: base URL + API key
+    │   ├── drafts/              # reject-reason drafts DataStore (approval queue)
     │   └── sync/                # rating outbox entity + WorkManager flush worker
     ├── fcm/                     # messaging service, token registration
     └── di/                      # Hilt modules (network, database, repository, dispatchers)
