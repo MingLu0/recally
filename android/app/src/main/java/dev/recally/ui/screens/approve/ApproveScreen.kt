@@ -50,6 +50,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import dev.recally.domain.model.PendingCard
 import dev.recally.ui.components.ClozeText
 import dev.recally.ui.components.shimmer
@@ -71,6 +72,12 @@ import dev.recally.ui.theme.recallyColors
  * behind a confirmation dialog, since one stray tap approved 152 cards
  * (issue #266). `needs_human` cards are excluded from it and opened
  * individually (hard rule 1).
+ *
+ * The reject dialog's reason is a per-card draft (issue #343): the field is
+ * seeded from [ApproveUiState.rejectReasonDrafts] and every change leaves
+ * through [onRejectReasonChange], so closing the dialog, the screen, or the
+ * app never loses it. Nothing reaches the server until the user confirms
+ * Reject, which sends the text through the existing [onRejectCard] path.
  */
 @Composable
 fun ApproveScreen(
@@ -82,6 +89,7 @@ fun ApproveScreen(
     onDismissEdit: () -> Unit,
     onEditCard: (Long, String, String) -> Unit,
     onRejectCard: (Long, String?) -> Unit,
+    onRejectReasonChange: (Long, String) -> Unit,
     onOpenSettings: () -> Unit,
     onNavigateBack: () -> Unit,
     onRetry: () -> Unit,
@@ -115,6 +123,7 @@ fun ApproveScreen(
                         onDismissEdit = onDismissEdit,
                         onEditCard = onEditCard,
                         onRejectCard = onRejectCard,
+                        onRejectReasonChange = onRejectReasonChange,
                     )
             }
 
@@ -457,6 +466,7 @@ private fun QueueList(
     onDismissEdit: () -> Unit,
     onEditCard: (Long, String, String) -> Unit,
     onRejectCard: (Long, String?) -> Unit,
+    onRejectReasonChange: (Long, String) -> Unit,
 ) {
     val actionsEnabled = !uiState.isOffline && uiState.busyCardId == null
     LazyColumn(
@@ -488,12 +498,14 @@ private fun QueueList(
                         isEditing = uiState.editingCardId == card.id,
                         highlightsExpanded = uiState.isHighlightsExpanded(card.id),
                         actionsEnabled = actionsEnabled,
+                        rejectDraft = uiState.rejectReasonDrafts[card.id].orEmpty(),
                         onToggleHighlights = { onToggleHighlights(card.id) },
                         onApprove = { onApproveCard(card.id) },
                         onStartEdit = { onStartEdit(card.id) },
                         onDismissEdit = onDismissEdit,
                         onSaveEdit = { front, back -> onEditCard(card.id, front, back) },
                         onReject = { reason -> onRejectCard(card.id, reason) },
+                        onRejectReasonChange = { text -> onRejectReasonChange(card.id, text) },
                         modifier = Modifier.padding(horizontal = RecallySpacing.screenPadding),
                     )
                 }
@@ -518,12 +530,14 @@ private fun ApproveCard(
     isEditing: Boolean,
     highlightsExpanded: Boolean,
     actionsEnabled: Boolean,
+    rejectDraft: String,
     onToggleHighlights: () -> Unit,
     onApprove: () -> Unit,
     onStartEdit: () -> Unit,
     onDismissEdit: () -> Unit,
     onSaveEdit: (String, String) -> Unit,
     onReject: (String?) -> Unit,
+    onRejectReasonChange: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var approveDialogOpen by remember(card.id) { mutableStateOf(false) }
@@ -608,6 +622,8 @@ private fun ApproveCard(
 
     if (rejectDialogOpen) {
         RejectDialog(
+            initialReason = rejectDraft,
+            onReasonChange = onRejectReasonChange,
             onConfirm = { reason ->
                 rejectDialogOpen = false
                 onReject(reason)
@@ -848,16 +864,48 @@ private fun ApproveConfirmDialog(
  * dialog explains the consequence before the user confirms (issue #288):
  * the card is marked rejected, leaves this queue and never enters the
  * review schedule, and the optional reason feeds the Learner.
+ *
+ * The reason is a per-card draft (issue #343): the field's value is local
+ * Compose state seeded once from [initialReason], so an asynchronous state
+ * update cannot move the cursor or overwrite typing, and every change is
+ * reported through [onReasonChange] for the ViewModel to persist. Closing
+ * keeps the draft — there is no Cancel to misread as "discard" — so the
+ * only ways out are the top-right X, Android Back (both keep the draft,
+ * and a tap outside the dialog is ignored), and the Reject confirm, which
+ * sends the text through the existing reject path.
  */
 @Composable
 private fun RejectDialog(
+    initialReason: String,
+    onReasonChange: (String) -> Unit,
     onConfirm: (String?) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var reason by remember { mutableStateOf("") }
+    var reason by remember { mutableStateOf(initialReason) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Reject card?") },
+        properties =
+            DialogProperties(
+                dismissOnClickOutside = false,
+                dismissOnBackPress = true,
+            ),
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    text = "Reject card?",
+                    modifier = Modifier.weight(1f),
+                )
+                IconButton(onClick = onDismiss) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Close",
+                    )
+                }
+            }
+        },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(RecallySpacing.sm)) {
                 Text(
@@ -867,7 +915,10 @@ private fun RejectDialog(
                 )
                 OutlinedTextField(
                     value = reason,
-                    onValueChange = { reason = it },
+                    onValueChange = {
+                        reason = it
+                        onReasonChange(it)
+                    },
                     label = { Text("Reason (optional — feeds the Learner)") },
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -877,9 +928,6 @@ private fun RejectDialog(
             TextButton(onClick = { onConfirm(reason.ifBlank { null }) }) {
                 Text("Reject", color = MaterialTheme.recallyColors.danger)
             }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
         },
         modifier = Modifier.testTag(REJECT_DIALOG_TAG),
     )
@@ -970,6 +1018,7 @@ private fun ApproveScreenPreviewHost(uiState: ApproveUiState) {
             onDismissEdit = {},
             onEditCard = { _, _, _ -> },
             onRejectCard = { _, _ -> },
+            onRejectReasonChange = { _, _ -> },
             onOpenSettings = {},
             onNavigateBack = {},
             onRetry = {},
@@ -1062,6 +1111,22 @@ private fun ApproveConfirmDialogPreview() {
 @Composable
 private fun RejectDialogPreview() {
     RecallyTheme {
-        RejectDialog(onConfirm = {}, onDismiss = {})
+        RejectDialog(initialReason = "", onReasonChange = {}, onConfirm = {}, onDismiss = {})
+    }
+}
+
+// Issue #343: the reason auto-saves per card, so a reopened dialog shows the
+// draft — the preview renders that state directly.
+
+@CombinedPreviews
+@Composable
+private fun RejectDialogWithDraftPreview() {
+    RecallyTheme {
+        RejectDialog(
+            initialReason = "Too trivial to be worth recalling.",
+            onReasonChange = {},
+            onConfirm = {},
+            onDismiss = {},
+        )
     }
 }

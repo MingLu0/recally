@@ -95,6 +95,7 @@ fun RecallyNavHost(
                 onDismissEdit = approveViewModel::onDismissEdit,
                 onEditCard = approveViewModel::editCard,
                 onRejectCard = approveViewModel::rejectCard,
+                onRejectReasonChange = approveViewModel::onRejectReasonChange,
                 onOpenSettings = { navController.navigate(Screen.Settings.route) },
                 onNavigateBack = { navController.popBackStack() },
                 onRetry = approveViewModel::refresh,

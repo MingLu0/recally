@@ -6,6 +6,7 @@ import dev.recally.domain.model.PendingCard
 import dev.recally.domain.model.PendingCounts
 import dev.recally.domain.model.PendingQueue
 import dev.recally.domain.repository.ApprovalRepository
+import dev.recally.domain.repository.RejectReasonDraftsRepository
 import dev.recally.domain.repository.Result
 import dev.recally.ui.navigation.ARG_FILTER
 import kotlinx.coroutines.Dispatchers
@@ -51,6 +52,10 @@ class ApproveViewModelTest {
         var pendingResult: Result<PendingQueue>,
     ) : ApprovalRepository {
         var pendingCalls = 0
+
+        /** Optional hook that runs inside the pendingCards() call, for ordering proofs. */
+        var onPendingCards: (() -> Unit)? = null
+
         val approveCalls = mutableListOf<Long>()
         var approveResult: Result<Unit> = Result.Success(Unit)
 
@@ -69,9 +74,11 @@ class ApproveViewModelTest {
         )
 
         val rejectCalls = mutableListOf<RejectCall>()
+        var rejectResult: Result<Unit> = Result.Success(Unit)
 
         override suspend fun pendingCards(): Result<PendingQueue> {
             pendingCalls++
+            onPendingCards?.invoke()
             return pendingResult
         }
 
@@ -94,7 +101,7 @@ class ApproveViewModelTest {
             reason: String?,
         ): Result<Unit> {
             rejectCalls += RejectCall(cardId, reason)
-            return Result.Success(Unit)
+            return rejectResult
         }
 
         val batchCalls = mutableListOf<List<Long>>()
@@ -108,12 +115,44 @@ class ApproveViewModelTest {
         }
     }
 
+    /** In-memory stand-in for the draft store; [writeLog] records saves in arrival order. */
+    private class FakeRejectReasonDraftsRepository : RejectReasonDraftsRepository {
+        val drafts = mutableMapOf<Long, String>()
+        val writeLog = mutableListOf<Pair<Long, String>>()
+        var loadCount = 0
+
+        override suspend fun load(): Map<Long, String> {
+            loadCount++
+            return drafts.toMap()
+        }
+
+        override suspend fun save(
+            cardId: Long,
+            reason: String,
+        ) {
+            writeLog += cardId to reason
+            if (reason.isBlank()) {
+                drafts -= cardId
+            } else {
+                drafts[cardId] = reason
+            }
+        }
+
+        override suspend fun clear(cardIds: Set<Long>) {
+            cardIds.forEach { drafts -= it }
+        }
+    }
+
+    /** One fake per test instance (JUnit constructs a fresh instance per test). */
+    private val draftsRepository = FakeRejectReasonDraftsRepository()
+
     private fun viewModelWith(
         repository: FakeApprovalRepository,
         savedStateHandle: SavedStateHandle = SavedStateHandle(),
     ): ApproveViewModel =
         ApproveViewModel(
             approvalRepository = repository,
+            rejectReasonDraftsRepository = draftsRepository,
             ioDispatcher = testDispatcher,
             savedStateHandle = savedStateHandle,
         )
@@ -673,6 +712,214 @@ class ApproveViewModelTest {
                     .flatMap { it.cards }
                     .isEmpty(),
             )
+        }
+
+    // --- Issue #343: reject-reason drafts are auto-saved per card ---
+
+    @Test
+    fun test_saved_drafts_are_loaded_before_the_queue_shows() =
+        runTest {
+            // A draft from a previous run must be in ApproveUiState by the
+            // time the queue fetch runs, so a dialog can never open empty and
+            // then be overwritten. The hook captures the UiState at the
+            // pendingCards() call — the ordering proof, not just the settled
+            // end state.
+            draftsRepository.drafts[1L] = "too trivial"
+            var draftsInStateAtQueueLoad: Map<Long, String>? = null
+            lateinit var viewModel: ApproveViewModel
+            val repository =
+                FakeApprovalRepository(
+                    Result.Success(PendingQueue(listOf(pendingCard(id = 1)), PendingCounts(1, 0))),
+                )
+            repository.onPendingCards = {
+                draftsInStateAtQueueLoad = viewModel.uiState.value.rejectReasonDrafts
+            }
+            viewModel = viewModelWith(repository)
+            advanceUntilIdle()
+
+            assertEquals(
+                "the draft from a previous run is in ApproveUiState by the time the queue is loaded",
+                mapOf(1L to "too trivial"),
+                draftsInStateAtQueueLoad,
+            )
+            assertEquals(
+                "the queue loaded too",
+                listOf(1L),
+                viewModel.uiState.value.groups
+                    .flatMap { it.cards }
+                    .map { it.id },
+            )
+            assertEquals(1, draftsRepository.loadCount)
+        }
+
+    @Test
+    fun test_reason_change_is_saved_in_typing_order() =
+        runTest {
+            val (viewModel, _) = loadedViewModel(listOf(pendingCard(id = 1)))
+            advanceUntilIdle()
+            draftsRepository.writeLog.clear()
+
+            // Several quick changes with no settle between them: the writes
+            // must be applied in the order they were typed, and the last
+            // keystroke is what stays stored.
+            viewModel.onRejectReasonChange(1L, "t")
+            viewModel.onRejectReasonChange(1L, "to")
+            viewModel.onRejectReasonChange(1L, "too")
+            advanceUntilIdle()
+
+            assertEquals(
+                "writes are applied in typing order",
+                listOf(1L to "t", 1L to "to", 1L to "too"),
+                draftsRepository.writeLog,
+            )
+            assertEquals("the last text is what stays stored", "too", draftsRepository.drafts[1L])
+        }
+
+    @Test
+    fun test_blank_reason_removes_the_draft() =
+        runTest {
+            val (viewModel, _) = loadedViewModel(listOf(pendingCard(id = 1)))
+            advanceUntilIdle()
+
+            viewModel.onRejectReasonChange(1L, "too trivial")
+            advanceUntilIdle()
+            viewModel.onRejectReasonChange(1L, "")
+            advanceUntilIdle()
+
+            assertTrue("a blank reason removes the stored draft", draftsRepository.drafts.isEmpty())
+            assertEquals(
+                "and the UiState map",
+                emptyMap<Long, String>(),
+                viewModel.uiState.value.rejectReasonDrafts,
+            )
+        }
+
+    @Test
+    fun test_successful_reject_removes_the_draft() =
+        runTest {
+            val (viewModel, repository) = loadedViewModel(listOf(pendingCard(id = 1)))
+            advanceUntilIdle()
+            viewModel.onRejectReasonChange(1L, "too trivial")
+            advanceUntilIdle()
+
+            viewModel.rejectCard(1L, "too trivial")
+            advanceUntilIdle()
+
+            assertEquals(
+                listOf(FakeApprovalRepository.RejectCall(1L, "too trivial")),
+                repository.rejectCalls,
+            )
+            assertTrue("a successful reject removes the draft", draftsRepository.drafts.isEmpty())
+            assertEquals(
+                emptyMap<Long, String>(),
+                viewModel.uiState.value.rejectReasonDrafts,
+            )
+        }
+
+    @Test
+    fun test_failed_reject_does_not_remove_the_draft() =
+        runTest {
+            val (viewModel, repository) = loadedViewModel(listOf(pendingCard(id = 1)))
+            advanceUntilIdle()
+            repository.rejectResult = Result.HttpError(status = 500, detail = "boom")
+            viewModel.onRejectReasonChange(1L, "too trivial")
+            advanceUntilIdle()
+
+            viewModel.rejectCard(1L, "too trivial")
+            advanceUntilIdle()
+
+            assertEquals(
+                "a failed reject keeps the draft so the reason is not lost (negative)",
+                mapOf(1L to "too trivial"),
+                draftsRepository.drafts,
+            )
+            assertEquals(
+                mapOf(1L to "too trivial"),
+                viewModel.uiState.value.rejectReasonDrafts,
+            )
+        }
+
+    @Test
+    fun test_successful_approve_removes_the_draft() =
+        runTest {
+            val (viewModel, _) = loadedViewModel(listOf(pendingCard(id = 1)))
+            advanceUntilIdle()
+            viewModel.onRejectReasonChange(1L, "too trivial")
+            advanceUntilIdle()
+
+            viewModel.approveCard(1L)
+            advanceUntilIdle()
+
+            assertTrue("a successful approve removes the draft", draftsRepository.drafts.isEmpty())
+            assertEquals(
+                emptyMap<Long, String>(),
+                viewModel.uiState.value.rejectReasonDrafts,
+            )
+        }
+
+    @Test
+    fun test_failed_approve_does_not_remove_the_draft() =
+        runTest {
+            val (viewModel, repository) = loadedViewModel(listOf(pendingCard(id = 1)))
+            advanceUntilIdle()
+            repository.approveResult = Result.HttpError(status = 500, detail = "boom")
+            viewModel.onRejectReasonChange(1L, "too trivial")
+            advanceUntilIdle()
+
+            viewModel.approveCard(1L)
+            advanceUntilIdle()
+
+            assertEquals(
+                "a failed approve keeps the draft (negative)",
+                mapOf(1L to "too trivial"),
+                draftsRepository.drafts,
+            )
+        }
+
+    @Test
+    fun test_bulk_approve_removes_drafts_only_for_approved_cards() =
+        runTest {
+            val (viewModel, repository) =
+                loadedViewModel(listOf(pendingCard(id = 1), pendingCard(id = 2)))
+            advanceUntilIdle()
+            viewModel.onRejectReasonChange(1L, "one")
+            viewModel.onRejectReasonChange(2L, "two")
+            advanceUntilIdle()
+            repository.batchResult = { ids ->
+                Result.Success(
+                    ids.map { ApproveBatchResult(cardId = it, ok = it != 2L, detail = null) },
+                )
+            }
+
+            viewModel.approveAllClean()
+            advanceUntilIdle()
+
+            assertEquals(
+                "only the cards that came back ok lose their drafts (negative)",
+                mapOf(2L to "two"),
+                draftsRepository.drafts,
+            )
+            assertEquals(
+                mapOf(2L to "two"),
+                viewModel.uiState.value.rejectReasonDrafts,
+            )
+        }
+
+    @Test
+    fun test_reason_change_never_calls_reject() =
+        runTest {
+            // Negative: typing a reason is a local draft write — it must never
+            // reach the approval repository as a reject (or any other call).
+            val (viewModel, repository) = loadedViewModel(listOf(pendingCard(id = 1)))
+            advanceUntilIdle()
+
+            viewModel.onRejectReasonChange(1L, "too trivial")
+            viewModel.onRejectReasonChange(1L, "too trivial, and vague")
+            advanceUntilIdle()
+
+            assertTrue("typing must never reject (negative)", repository.rejectCalls.isEmpty())
+            assertTrue("typing must never approve (negative)", repository.approveCalls.isEmpty())
+            assertTrue("typing must never bulk-approve (negative)", repository.batchCalls.isEmpty())
         }
 
     private fun ChapterGroup.key(): Triple<Long, String, String> = Triple(bookId, book, chapter)

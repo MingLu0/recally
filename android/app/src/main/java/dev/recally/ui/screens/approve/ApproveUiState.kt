@@ -78,6 +78,14 @@ data class ApproveUiState(
      */
     val showBulkApproveConfirm: Boolean = false,
     val errorMessage: String? = null,
+    /**
+     * Reject-reason drafts keyed by card id (issue #343): what the user typed
+     * into the reject dialog, auto-saved per keystroke on the device and
+     * seeded into the dialog when it reopens. Removed when the card is
+     * approved or its reject succeeds; never sent anywhere — only the reject
+     * confirm passes the text to the server.
+     */
+    val rejectReasonDrafts: Map<Long, String> = emptyMap(),
 ) {
     /**
      * The bulk bar shows only when there is clean work to do. It is hidden on
