@@ -1,9 +1,12 @@
 package dev.recally.ui.screens.stats
 
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
+import dev.recally.ui.components.SHIMMER_TAG
 import dev.recally.ui.theme.RecallyTheme
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -140,6 +143,25 @@ class StatsScreenTest {
         }
 
         composeTestRule.onNodeWithText(NO_DATA).assertIsDisplayed()
+    }
+
+    @Test
+    fun test_loading_stat_sections_use_shimmer() {
+        // Issue #344: the three Stats loading sections (streak strip, forecast
+        // chart, lapse-rate list) carry the shared shimmer, so the screen
+        // reads as loading rather than rendered-but-empty. The animation
+        // itself is gated in ShimmerTest.
+        composeTestRule.setContent {
+            RecallyTheme {
+                StatsScreen(
+                    uiState = StatsUiState(isLoading = true),
+                    onRetry = {},
+                    onOpenSettings = {},
+                )
+            }
+        }
+
+        composeTestRule.onAllNodesWithTag(SHIMMER_TAG).assertCountEquals(3)
     }
 
     private fun loadedState(

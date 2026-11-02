@@ -6,11 +6,13 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.recally.di.IoDispatcher
 import dev.recally.domain.repository.ApprovalRepository
+import dev.recally.domain.repository.RejectReasonDraftsRepository
 import dev.recally.domain.repository.Result
 import dev.recally.domain.repository.displayMessage
 import dev.recally.ui.navigation.ARG_FILTER
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineExceptionHandler
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -30,12 +32,19 @@ import javax.inject.Inject
  * it sends only `pending_review` ids, and the server refuses `needs_human`
  * per card besides (hard rule 1). Since issue #266 the pill tap arms a
  * confirmation dialog rather than calling it directly.
+ *
+ * Also owns the reject-reason drafts (issue #343): loading them into
+ * [ApproveUiState] before the queue renders, saving every keystroke in
+ * typing order, and clearing a card's draft once the card leaves the queue.
+ * Drafts are device-local convenience state — the repository never throws
+ * into the queue, and typing never touches the approval repository.
  */
 @HiltViewModel
 class ApproveViewModel
     @Inject
     constructor(
         private val approvalRepository: ApprovalRepository,
+        private val rejectReasonDraftsRepository: RejectReasonDraftsRepository,
         @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
         savedStateHandle: SavedStateHandle,
     ) : ViewModel() {
@@ -61,8 +70,56 @@ class ApproveViewModel
                 }
             }
 
+        /**
+         * Draft writes funnel through one actor coroutine so they land in the
+         * order they were typed (issue #343). DataStore serialises edits to a
+         * file, but two ad-hoc launches could still reach it out of order;
+         * the last keystroke must win.
+         */
+        private sealed interface DraftCommand {
+            data class Save(
+                val cardId: Long,
+                val reason: String,
+            ) : DraftCommand
+
+            data class Clear(
+                val cardIds: Set<Long>,
+            ) : DraftCommand
+        }
+
+        private val draftCommands = Channel<DraftCommand>(Channel.BUFFERED)
+
         init {
-            refresh()
+            viewModelScope.launch(ioDispatcher) {
+                for (command in draftCommands) {
+                    try {
+                        when (command) {
+                            is DraftCommand.Save ->
+                                rejectReasonDraftsRepository.save(command.cardId, command.reason)
+                            is DraftCommand.Clear -> rejectReasonDraftsRepository.clear(command.cardIds)
+                        }
+                    } catch (_: Exception) {
+                        // A draft is a convenience: a storage failure must not
+                        // block the queue or a rejection (issue #343).
+                    }
+                }
+            }
+            viewModelScope.launch(exceptionHandler) {
+                loadDrafts()
+                refresh()
+            }
+        }
+
+        /** Stored drafts go into the UiState before the queue renders, so a dialog cannot open empty and then be overwritten (issue #343). */
+        private suspend fun loadDrafts() {
+            val drafts =
+                try {
+                    rejectReasonDraftsRepository.load()
+                } catch (_: Exception) {
+                    // Convenience-only storage: a read failure yields no drafts.
+                    emptyMap()
+                }
+            mutableUiState.update { it.copy(rejectReasonDrafts = drafts) }
         }
 
         fun refresh() {
@@ -173,6 +230,30 @@ class ApproveViewModel
         ) = actOnCard(cardId) { approvalRepository.rejectCard(cardId, reason) }
 
         /**
+         * Every keystroke in a reject dialog (issue #343): update the card's
+         * draft in the UiState and persist it in typing order. A blank text
+         * removes the draft. This never touches the approval repository —
+         * typing saves a device-local draft; only [rejectCard] sends text to
+         * the server.
+         */
+        fun onRejectReasonChange(
+            cardId: Long,
+            reason: String,
+        ) {
+            mutableUiState.update {
+                it.copy(
+                    rejectReasonDrafts =
+                        if (reason.isBlank()) {
+                            it.rejectReasonDrafts - cardId
+                        } else {
+                            it.rejectReasonDrafts + (cardId to reason)
+                        },
+                )
+            }
+            draftCommands.trySend(DraftCommand.Save(cardId, reason))
+        }
+
+        /**
          * Pill tap: arm the confirmation dialog instead of approving (issue
          * #266). One stray tap on "Approve N ready" approved 152 cards in a
          * minute; the same guards that gate [approveAllClean] apply here, so
@@ -226,14 +307,18 @@ class ApproveViewModel
             viewModelScope.launch(exceptionHandler) {
                 mutableUiState.update { it.copy(isBulkApproving = true, errorMessage = null) }
                 val result = withContext(ioDispatcher) { approvalRepository.approveBatch(cleanIds) }
+                val approved =
+                    (result as? Result.Success)
+                        ?.data
+                        ?.filter { it.ok }
+                        ?.map { it.cardId }
+                        ?.toSet()
+                        .orEmpty()
+                // Only the cards that actually left the queue lose their drafts.
+                if (approved.isNotEmpty()) draftCommands.trySend(DraftCommand.Clear(approved))
                 mutableUiState.update { state ->
                     when (result) {
                         is Result.Success -> {
-                            val approved =
-                                result.data
-                                    .filter { it.ok }
-                                    .map { it.cardId }
-                                    .toSet()
                             val failed = result.data.count { !it.ok }
                             state.copy(
                                 groups = approved.fold(state.groups) { groups, id -> removeCard(groups, id) },
@@ -242,6 +327,7 @@ class ApproveViewModel
                                 bulkApprovableCount =
                                     state.bulkApprovableCount?.let { (it - approved.size).coerceAtLeast(0) },
                                 expandedHighlightCardIds = state.expandedHighlightCardIds - approved,
+                                rejectReasonDrafts = state.rejectReasonDrafts - approved,
                                 isBulkApproving = false,
                                 errorMessage =
                                     if (failed > 0) "$failed card${if (failed == 1) "" else "s"} could not be approved." else null,
@@ -266,8 +352,10 @@ class ApproveViewModel
 
         /**
          * Runs one card action. A success drops the card from the queue
-         * locally — no refetch. Offline or while another card is busy, the
-         * action is disabled rather than queued.
+         * locally — no refetch — and removes its reject-reason draft, if any
+         * (issue #343); a failure keeps the draft so a typed reason is not
+         * lost. Offline or while another card is busy, the action is disabled
+         * rather than queued.
          */
         private fun actOnCard(
             cardId: Long,
@@ -278,6 +366,7 @@ class ApproveViewModel
             viewModelScope.launch(exceptionHandler) {
                 mutableUiState.update { it.copy(busyCardId = cardId, errorMessage = null) }
                 val result = withContext(ioDispatcher) { call() }
+                if (result is Result.Success) draftCommands.trySend(DraftCommand.Clear(setOf(cardId)))
                 mutableUiState.update {
                     when (result) {
                         is Result.Success ->
@@ -287,6 +376,7 @@ class ApproveViewModel
                                 busyCardId = null,
                                 editingCardId = null,
                                 expandedHighlightCardIds = it.expandedHighlightCardIds - cardId,
+                                rejectReasonDrafts = it.rejectReasonDrafts - cardId,
                             )
                         Result.Unauthorized ->
                             it.copy(busyCardId = null, isUnauthorized = true)

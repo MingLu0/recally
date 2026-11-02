@@ -3,10 +3,12 @@ package dev.recally.ui.screens.today
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import dev.recally.domain.model.Deck
+import dev.recally.ui.components.SHIMMER_TAG
 import dev.recally.ui.theme.RecallyTheme
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -334,6 +336,29 @@ class TodayScreenTest {
 
         composeTestRule.onAllNodesWithText("Your books").assertCountEquals(0)
         composeTestRule.onAllNodesWithText(BOOKS_FAILURE_TEXT).assertCountEquals(0)
+    }
+
+    @Test
+    fun test_loading_stats_strip_uses_shimmer() {
+        // Issue #344: the loading strip's three placeholders (the two top
+        // cells and the fused action bar) carry the shared shimmer, so
+        // loading reads as visibly active rather than a static `line-soft`
+        // fill. What animates is proven once, in ShimmerTest; here the gate
+        // is that the loading state actually applies the shared modifier.
+        composeTestRule.setContent {
+            RecallyTheme {
+                TodayScreen(
+                    uiState = TodayUiState(isLoading = true),
+                    onStartReview = {},
+                    onOpenApprove = {},
+                    onOpenSettings = {},
+                    onRetry = {},
+                    onBookClick = {},
+                )
+            }
+        }
+
+        composeTestRule.onAllNodesWithTag(SHIMMER_TAG).assertCountEquals(3)
     }
 
     private companion object {

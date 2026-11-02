@@ -38,6 +38,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -47,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import dev.recally.ui.components.ClozeText
+import dev.recally.ui.components.shimmer
 import dev.recally.ui.theme.CombinedPreviews
 import dev.recally.ui.theme.RecallyBottomInset
 import dev.recally.ui.theme.RecallyRadius
@@ -456,17 +458,37 @@ private fun UnauthorizedBanner(
     }
 }
 
-/** Loading state (design-system.md, "States"): skeletons, never spinners. */
+/** Loading state (design-system.md, "States"): skeletons, never spinners — swept by the shared shimmer (issue #344). */
 @Composable
 private fun ReviewLoadingSkeleton() {
-    val colors = MaterialTheme.recallyColors
     Column(
         modifier = Modifier.fillMaxSize().padding(RecallySpacing.screenPadding),
         verticalArrangement = Arrangement.spacedBy(RecallySpacing.lg),
     ) {
-        Box(modifier = Modifier.fillMaxWidth().height(6.dp).background(colors.lineSoft, RoundedCornerShape(RecallyRadius.pill)))
-        Box(modifier = Modifier.fillMaxWidth().weight(1f).background(colors.lineSoft, RoundedCornerShape(RecallyRadius.md)))
-        Box(modifier = Modifier.fillMaxWidth().height(56.dp).background(colors.lineSoft, RoundedCornerShape(RecallyRadius.md)))
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .height(6.dp)
+                    .clip(RoundedCornerShape(RecallyRadius.pill))
+                    .shimmer(),
+        )
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .clip(RoundedCornerShape(RecallyRadius.md))
+                    .shimmer(),
+        )
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+                    .clip(RoundedCornerShape(RecallyRadius.md))
+                    .shimmer(),
+        )
     }
 }
 

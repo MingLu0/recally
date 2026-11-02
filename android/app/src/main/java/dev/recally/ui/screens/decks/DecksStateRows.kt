@@ -20,6 +20,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import dev.recally.ui.components.shimmer
 import dev.recally.ui.theme.CombinedPreviews
 import dev.recally.ui.theme.RecallyRadius
 import dev.recally.ui.theme.RecallySpacing
@@ -94,7 +95,11 @@ internal fun ErrorRow(
     }
 }
 
-/** Skeleton block at the real component's dimensions — never a spinner. */
+/**
+ * Skeleton block at the real component's dimensions — never a spinner —
+ * swept by the shared shimmer (issue #344), so a loading list reads as
+ * loading rather than rendered-but-empty.
+ */
 @Composable
 internal fun SkeletonBlock(height: Dp) {
     Box(
@@ -103,7 +108,7 @@ internal fun SkeletonBlock(height: Dp) {
                 .fillMaxWidth()
                 .height(height)
                 .clip(RoundedCornerShape(RecallyRadius.md))
-                .background(MaterialTheme.recallyColors.lineSoft),
+                .shimmer(),
     )
 }
 

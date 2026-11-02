@@ -31,6 +31,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.recally.ui.components.shimmer
 import dev.recally.ui.theme.RecallyRadius
 import dev.recally.ui.theme.RecallySpacing
 import dev.recally.ui.theme.recallyColors
@@ -278,7 +279,8 @@ private fun ActionBar(
 
 /**
  * Loading skeleton in `line-soft` at the strip's real dimensions
- * (design-system.md, "States": no spinners).
+ * (design-system.md, "States": no spinners), swept by the shared shimmer
+ * (issue #344) so the strip reads as loading rather than rendered-but-empty.
  */
 @Composable
 fun StatsStripSkeleton(modifier: Modifier = Modifier) {
@@ -302,7 +304,7 @@ fun StatsStripSkeleton(modifier: Modifier = Modifier) {
                         .fillMaxWidth()
                         .fillMaxHeight()
                         .clip(RoundedCornerShape(RecallyRadius.sm))
-                        .background(colors.lineSoft),
+                        .shimmer(),
                 )
             }
             Box(
@@ -322,7 +324,7 @@ fun StatsStripSkeleton(modifier: Modifier = Modifier) {
                         .fillMaxWidth()
                         .fillMaxHeight()
                         .clip(RoundedCornerShape(RecallyRadius.sm))
-                        .background(colors.lineSoft),
+                        .shimmer(),
                 )
             }
         }
@@ -330,7 +332,7 @@ fun StatsStripSkeleton(modifier: Modifier = Modifier) {
             Modifier
                 .fillMaxWidth()
                 .height(ACTION_BAR_HEIGHT)
-                .background(colors.lineSoft),
+                .shimmer(),
         )
     }
 }

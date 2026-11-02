@@ -2,13 +2,16 @@ package dev.recally.ui.screens.review
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import dev.recally.ui.components.SHIMMER_TAG
 import dev.recally.ui.theme.RecallyTheme
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -110,6 +113,21 @@ class ReviewScreenTest {
     }
 
     // --- fixtures ---
+
+    @Test
+    fun test_loading_review_card_uses_shimmer() {
+        // Issue #344: the loading layout's three placeholders (progress
+        // strip, card surface, action area) carry the shared shimmer. The
+        // animation itself is gated in ShimmerTest; here the loading state
+        // must expose the shared modifier on every placeholder.
+        composeTestRule.setContent {
+            RecallyTheme {
+                ReviewScreenUnderTest(uiState = ReviewUiState(isLoading = true), onFlip = {})
+            }
+        }
+
+        composeTestRule.onAllNodesWithTag(SHIMMER_TAG).assertCountEquals(3)
+    }
 
     @Composable
     private fun ReviewScreenUnderTest(
