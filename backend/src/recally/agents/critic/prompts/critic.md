@@ -161,7 +161,11 @@ per candidate card, in the same order as above:
 
 - `verdict` is exactly one of "accept", "revise", "reject".
 - `critique` is an empty string for `accept`. For `revise` and `reject` it must be
-  a concrete, non-empty explanation.
+  a concrete, non-empty explanation, written as one reason per line, each line
+  starting with "- ". Put each defect, and each change you ask for, on its own
+  line; never run several reasons together in one paragraph. Every rule above
+  about what a critique must say still applies to each line. In the JSON string,
+  separate the lines with `\n`.
 - `quotes` is required on `accept` and absent on `revise` and `reject`. It lists,
   for each claim the card makes, the exact source words that support it. Each quote
   is one contiguous span copied verbatim from a single highlight: no ellipses, no

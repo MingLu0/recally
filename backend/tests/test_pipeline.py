@@ -405,6 +405,33 @@ def test_critic_reject_ends_in_needs_human(
     assert cards[0].status_reason == REJECT[1]
 
 
+def test_reject_critique_reaches_status_reason_with_its_line_breaks(
+    container: Container, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A one-reason-per-line critique (#357) lands in `status_reason` unchanged, so the
+    review screen shows each reason on its own line."""
+    multiline_critique = (
+        "- The source is a chapter transition with no nameable fact.\n"
+        "- No rewrite can recover a subject the export never held."
+    )
+    run_id, highlights = ingest_fixture(container)
+    ScriptedLlm(
+        monkeypatch,
+        [
+            curator_response(keep_unit([highlights[0].id])),
+            writer_response("What is Stage 1?"),
+            critic_response(("reject", multiline_critique)),
+        ],
+    )
+
+    container.run_pipeline(run_id)
+
+    cards = all_cards(container)
+    assert len(cards) == 1
+    assert cards[0].status == "needs_human"
+    assert cards[0].status_reason == multiline_critique
+
+
 def test_pipeline_never_writes_rejected_or_approved(
     container: Container, monkeypatch: pytest.MonkeyPatch
 ) -> None:
