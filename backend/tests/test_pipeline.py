@@ -405,6 +405,33 @@ def test_critic_reject_ends_in_needs_human(
     assert cards[0].status_reason == REJECT[1]
 
 
+def test_reject_critique_reaches_status_reason_with_its_line_breaks(
+    container: Container, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A one-reason-per-line critique (#357) lands in `status_reason` unchanged, so the
+    review screen shows each reason on its own line."""
+    multiline_critique = (
+        "- The source is a chapter transition with no nameable fact.\n"
+        "- No rewrite can recover a subject the export never held."
+    )
+    run_id, highlights = ingest_fixture(container)
+    ScriptedLlm(
+        monkeypatch,
+        [
+            curator_response(keep_unit([highlights[0].id])),
+            writer_response("What is Stage 1?"),
+            critic_response(("reject", multiline_critique)),
+        ],
+    )
+
+    container.run_pipeline(run_id)
+
+    cards = all_cards(container)
+    assert len(cards) == 1
+    assert cards[0].status == "needs_human"
+    assert cards[0].status_reason == multiline_critique
+
+
 def test_pipeline_never_writes_rejected_or_approved(
     container: Container, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1023,7 +1050,10 @@ def test_auto_approve_flag_on_approves_only_round_one_accepts(
 
 
 def run_one_accepted_card(
-    container: Container, monkeypatch: pytest.MonkeyPatch, critic_reply: str
+    container: Container,
+    monkeypatch: pytest.MonkeyPatch,
+    critic_reply: str,
+    writer_reply: str | None = None,
 ) -> Card:
     """One keep unit over the first fixture highlight, one draft, this Critic reply."""
     run_id, highlights = ingest_fixture(container)
@@ -1031,7 +1061,7 @@ def run_one_accepted_card(
         monkeypatch,
         [
             curator_response(keep_unit([highlights[0].id])),
-            writer_response("What flows into the sensing layer?"),
+            writer_reply or writer_response("What flows into the sensing layer?"),
             critic_reply,
         ],
     )
@@ -1115,6 +1145,136 @@ def test_quote_failure_is_never_auto_approved(monkeypatch: pytest.MonkeyPatch) -
     assert card.status == "needs_human"
     assert card.status_reason is not None
     assert "words no highlight contains" in card.status_reason
+
+
+# --- An accepted cloze that hides more words than it shows goes to a human (#355) --
+
+
+def one_card_writer_response(card_type: str, front: str, back: str) -> str:
+    return json.dumps(
+        {"cards": [{"type": card_type, "front": front, "back": back, "rationale": "r"}]}
+    )
+
+
+# Hides 6 words ("sensing layer gathers every observable outcome"), shows 2: the
+# lone dash holds no letter or digit, so it is not a shown word.
+CLOZE_HIDING_MORE = "The {{c1::sensing layer gathers every observable outcome}} — here."
+
+
+def test_accepted_cloze_hiding_more_words_than_it_shows_goes_to_needs_human(
+    container: Container, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    card = run_one_accepted_card(
+        container,
+        monkeypatch,
+        critic_response(ACCEPT),
+        writer_reply=one_card_writer_response("cloze", CLOZE_HIDING_MORE, "sensing layer"),
+    )
+
+    assert card.type == "cloze"
+    assert card.status == "needs_human"
+    assert card.status_reason is not None
+    assert "Cloze hides" in card.status_reason
+
+
+def test_accepted_cloze_hiding_as_many_words_as_it_shows_stays_pending_review(
+    container: Container, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The boundary: 4 hidden, 4 shown."""
+    card = run_one_accepted_card(
+        container,
+        monkeypatch,
+        critic_response(ACCEPT),
+        writer_reply=one_card_writer_response(
+            "cloze", "Outcomes flow into the {{c1::sensing layer of systems}}.", "s"
+        ),
+    )
+
+    assert card.status == "pending_review"
+    assert card.status_reason is None
+
+
+def test_accepted_cloze_hiding_fewer_words_than_it_shows_stays_pending_review(
+    container: Container, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    card = run_one_accepted_card(
+        container,
+        monkeypatch,
+        critic_response(ACCEPT),
+        writer_reply=one_card_writer_response(
+            "cloze", "Execution outcomes flow into the {{c1::sensing layer}}.", "sensing layer"
+        ),
+    )
+
+    assert card.status == "pending_review"
+    assert card.status_reason is None
+
+
+def test_blank_check_reason_names_both_word_counts(
+    container: Container, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    card = run_one_accepted_card(
+        container,
+        monkeypatch,
+        critic_response(ACCEPT),
+        writer_reply=one_card_writer_response("cloze", CLOZE_HIDING_MORE, "sensing layer"),
+    )
+
+    assert card.status_reason == "Cloze hides 6 words and shows 2."
+
+
+def test_qa_card_is_never_blank_checked(
+    container: Container, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A QA front that would fail the count if it were a cloze — so a check that
+    ignored the card type would flag it — and a back far longer than the front."""
+    card = run_one_accepted_card(
+        container,
+        monkeypatch,
+        critic_response(ACCEPT),
+        writer_reply=one_card_writer_response(
+            "qa",
+            "What does {{c1::the sensing layer collect from every outcome}} mean?",
+            "Every observable outcome of execution flows into the sensing layer, "
+            "which gathers it for the next decision the system makes.",
+        ),
+    )
+
+    assert card.type == "qa"
+    assert card.status == "pending_review"
+    assert card.status_reason is None
+
+
+def test_card_failing_quote_and_blank_checks_keeps_both_reasons(
+    container: Container, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    card = run_one_accepted_card(
+        container,
+        monkeypatch,
+        accept_quoting("words no highlight contains"),
+        writer_reply=one_card_writer_response("cloze", CLOZE_HIDING_MORE, "sensing layer"),
+    )
+
+    assert card.status == "needs_human"
+    assert card.status_reason == (
+        'Critic quote not in source: "words no highlight contains"; '
+        "Cloze hides 6 words and shows 2."
+    )
+
+
+def test_blank_check_never_sets_rejected(
+    container: Container, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Hard rule 9: only a human sets `rejected`; a flagged card waits for one."""
+    card = run_one_accepted_card(
+        container,
+        monkeypatch,
+        critic_response(ACCEPT),
+        writer_reply=one_card_writer_response("cloze", CLOZE_HIDING_MORE, "sensing layer"),
+    )
+
+    assert card.status != "rejected"
+    assert card.status == "needs_human"
 
 
 # --- Round 1 judges a unit's first drafts in one Critic call (#316) --------------

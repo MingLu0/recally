@@ -53,9 +53,14 @@ jobs:
         uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
+          # Keep in step with .python-version at the repo root. uv run from
+          # backend/ does not reach that file, so without this it takes the
+          # runner's system python3: 3.14 on ubuntu-26.04, where pgserver has
+          # no wheel.
+          python-version: "3.12"
 
-      # Interpreter comes from .python-version at the repo root; uv.lock is
-      # committed, so --frozen installs bit-identical dependencies.
+      # The interpreter is pinned above; uv.lock is committed, so --frozen
+      # installs bit-identical dependencies.
       - name: Install dependencies
         if: steps.changes.outputs.backend == 'true' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
         run: uv sync --frozen
