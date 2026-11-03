@@ -54,6 +54,11 @@ A second card is disqualified when it:
    deletion: the cloze gap has exactly one sensible fill, the same bar the
    Critic's unambiguity check applies. If the sentence admits another sensible
    fill, narrow the deletion or write a QA card instead.
+   The deletion is the key term — a word or short phrase — never a definition,
+   a clause or a sentence. Keep the words that set the context visible, so the
+   visible text is longer than the deletion: blank "the knowledge
+   {{c1::paradox}}", not "the {{c1::knowledge paradox}}", and never blank the
+   whole explanation the reader needs in order to recall the term.
 5. Prefer "why" and "how" questions over trivia only when the source states a
    reason or mechanism. When the source states neither, ask what the source
    says; never supply a reason it does not give (rule 6). A bare definition — a
@@ -95,9 +100,9 @@ A second card is disqualified when it:
 Choose each card's format deliberately; QA is not the default.
 
 - Use a cloze when the point is a core term or concept whose surrounding
-  sentence supplies the context. The definition or key fact is the deletion,
-  and the rest of the sentence is the body, so the reader recalls the concept
-  from its context instead of reciting the passage.
+  sentence supplies the context. The key term is the deletion (rule 4), and
+  the rest of the sentence stays visible as the body, so the reader recalls the
+  term from its context instead of reciting the passage.
 - Use a QA card for why/how questions — the mechanism, the cause, the
   trade-off, or applying the idea to a case.
 - A QA whose front already names the core concept and whose back restates

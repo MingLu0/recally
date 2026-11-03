@@ -70,7 +70,7 @@ PK (`unit_id`, `highlight_id`). Gives every card full provenance back to each so
 | original_back | text | |
 | tags | json | inherited + card-specific |
 | status | text | `pending_review` / `needs_human` / `approved` / `rejected` |
-| status_reason | text, nullable | critic critique, failed quote check on a critic accept, human rejection reason, or `superseded by <id>` (feeds the Learner) |
+| status_reason | text, nullable | critic critique, failed quote check on a critic accept, `Cloze hides <hidden> words and shows <shown>.` from the blank-size check on an accepted cloze (both joined by `; ` when both fail; docs/agents.md, "Pipeline runner and handoffs"), human rejection reason, or `superseded by <id>` (feeds the Learner) |
 | supersedes_card_id | int, nullable FK cards | set only on a Learner-driven leech rewrite: the approved card it replaces. Approving the rewrite sets that card `rejected` with `status_reason="superseded by <id>"`; a column rather than the string alone because approve receives only the rewrite's id and needs the lookup. NULL for every ordinary card (docs/agents.md §7) |
 | approved_at | datetime, nullable | when the human approved; `card_state` is created at the same time |
 | edited_at | datetime, nullable | last **post-approval** `PATCH` of `front`/`back`/`tags`. FSRS state is untouched by an edit; the timestamp lets the Learner segment hand-fixed cards so they do not flatter the `guidance_version` that wrote the flawed original (ADR-008). A pre-approval save of a queued card does not set it — pre-approval edits are read through `original_front`/`original_back` vs `front`/`back` (ADR-018) |
@@ -190,6 +190,7 @@ One row per call through `llm.py`. Doubles as the trace and the replay corpus: t
 | cost_microusd | int | sum of `llm_calls` for this run |
 | started_at / finished_at | datetime | |
 | error | text, nullable | set if the run aborted |
+| unreturned_highlight_ids | JSON list of int, nullable | highlight ids a Curator reply left out of every unit, accumulated across the run's chapters and batches (#356); `[]` when every highlight came back, null on runs from before the column. Those highlights stay `processed=false` and the next run retries them |
 
 `rows_unchanged = rows_seen - rows_new - rows_updated`.
 

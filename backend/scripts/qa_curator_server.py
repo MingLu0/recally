@@ -223,7 +223,8 @@ def _run_pipeline(target: Path) -> None:
         if finished is not None:
             print(
                 f"run {run_id}: kept={finished.units_kept} dropped={finished.units_dropped} "
-                f"cards={finished.cards_generated} error={finished.error!r}"
+                f"cards={finished.cards_generated} "
+                f"unreturned={finished.unreturned_highlight_ids or []} error={finished.error!r}"
             )
 
 

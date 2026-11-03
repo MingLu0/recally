@@ -685,3 +685,37 @@ def test_accept_verdict_parses_its_quotes(recording_llm: RecordingLlm, ctx: Agen
         CardVerdict(verdict="accept", critique="", quotes=("first span", "second span")),
         CardVerdict(verdict="accept", critique="", quotes=()),
     ]
+
+
+# --- A critique is one reason per line (#357) ------------------------------------
+
+
+def test_critic_prompt_asks_for_one_reason_per_line() -> None:
+    """Card 109: a one-paragraph critique is hard to read on the review screen, which
+    prints the stored text as it is. `revise` and `reject` list one reason per line."""
+    prompt = " ".join(_rendered_gate_prompt().split())
+    assert "one reason per line" in prompt
+    assert 'each line starting with "- "' in prompt
+    # `accept` still carries an empty critique.
+    assert "`critique` is an empty string for `accept`" in prompt
+
+
+def test_multiline_critique_keeps_its_line_breaks(
+    recording_llm: RecordingLlm, ctx: AgentContext
+) -> None:
+    """The parser strips only the critique's outer whitespace: the line breaks between
+    reasons reach `status_reason` and the Writer intact."""
+    multiline_critique = "- Not atomic: asks for two ideas.\n- The back invents a subject."
+    recording_llm.respond(
+        [
+            {"verdict": "revise", "critique": f"\n{multiline_critique}\n"},
+            {"verdict": "reject", "critique": multiline_critique},
+        ]
+    )
+
+    result = DefaultCritic()(_request(), ctx)
+
+    assert [verdict.critique for verdict in result.verdicts] == [
+        multiline_critique,
+        multiline_critique,
+    ]
