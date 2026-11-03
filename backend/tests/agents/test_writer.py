@@ -705,3 +705,31 @@ def test_request_without_highlights_renders_curated_text_as_before() -> None:
     prompt = _rendered_prompt(fake_llm)
     assert f"## The curated unit\n\n{CURATED_TEXT}\n" in prompt
     assert "Highlight 1" not in prompt
+
+
+# --- The #353 gate: no card answers itself, a lone card included --------------
+# Cycle 7's card 114 was its unit's only card: "Why is understanding the levels
+# of agent interaction essential?" / "Because it is essential for designing…".
+# The self-answering stem was banned only inside the second-card list, so a lone
+# card was never held to it.
+
+
+def test_writer_prompt_forbids_a_self_answering_card_on_every_card() -> None:
+    """The rule sits in the card rules, not in the "A second card is disqualified
+    when it:" list, and it covers a "why" back that restates the front's claim."""
+    fake_llm = FakeLlm(ONE_CARD_RESPONSE)
+    DefaultWriter()(_request(), _ctx(fake_llm))
+
+    prompt = _rendered_prompt(fake_llm).lower()
+    card_rules_start = prompt.index("## card rules")
+    card_rules_end = prompt.index("\n## ", card_rules_start)
+    card_rules = " ".join(prompt[card_rules_start:card_rules_end].split())
+    second_card_list = prompt[
+        prompt.index("a second card is disqualified when it:") : card_rules_start
+    ]
+
+    assert "## card rules" not in second_card_list
+    assert "a lone card included" in card_rules
+    assert "must not contain or restate its own answer" in card_rules
+    assert 'a "why" card\'s back' in card_rules
+    assert "never the claim in the front restated as its own reason" in card_rules

@@ -82,6 +82,13 @@ A second card is disqualified when it:
      for what another highlight's subject does.
    When revising, keep this rule: do not reintroduce framing an earlier
    critique removed.
+7. No card answers itself — this holds for every card, a lone card included,
+   not only for a second one.
+   The front must not contain or restate its own answer: a stem that gives the
+   answer away tests nothing. A "why" card's back gives the reason the source
+   states, never the claim in the front restated as its own reason — "Why is X
+   essential?" answered "Because it is essential for…" tests nothing. If the
+   source states no reason, ask what it says instead (rule 5).
 
 ## Choosing the format
 

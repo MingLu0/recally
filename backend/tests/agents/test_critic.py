@@ -324,9 +324,10 @@ def test_critic_prompt_routes_specific_fragments_to_revise_not_reject() -> None:
     assert "reject" in prompt[max(0, empty_idx - 200) : empty_idx + 600]
 
 
-def test_critic_prompt_keeps_all_six_criteria() -> None:
+def test_critic_prompt_keeps_all_seven_criteria() -> None:
     """Atomicity, unambiguity, self-containedness, non-triviality, factual
-    fidelity and sibling overlap all survive the edit (regression guard)."""
+    fidelity, sibling overlap and self-answering all survive the edit
+    (regression guard)."""
     prompt = _rendered_gate_prompt().lower()
     for criterion in (
         "atomicity",
@@ -335,6 +336,7 @@ def test_critic_prompt_keeps_all_six_criteria() -> None:
         "non-triviality",
         "factual fidelity",
         "sibling overlap",
+        "self-answering",
     ):
         assert criterion in prompt
 
@@ -401,9 +403,10 @@ def test_critic_prompt_advice_preserves_atomicity_and_context() -> None:
     assert "the source does not support" in advice_section
 
 
-def test_critic_prompt_keeps_six_criteria_and_verdict_rules() -> None:
-    """The six checks and the unsalvageable-vs-rewrite distinction survive the
-    advice rule, which sits alongside them rather than replacing them (#280)."""
+def test_critic_prompt_keeps_seven_criteria_and_verdict_rules() -> None:
+    """The seven checks and the unsalvageable-vs-rewrite distinction survive the
+    advice rule, which sits alongside them rather than replacing them (#280;
+    the seventh check is #353's)."""
     prompt = _rendered_gate_prompt()
     lowered = prompt.lower()
     for criterion in (
@@ -413,13 +416,15 @@ def test_critic_prompt_keeps_six_criteria_and_verdict_rules() -> None:
         "non-triviality",
         "factual fidelity",
         "sibling overlap",
+        "self-answering",
     ):
         assert criterion in lowered
     assert "unsalvageable" in lowered
     assert "could be rewritten" in lowered
-    for heading in ("## The six checks", "## Verdicts"):
+    for heading in ("## The seven checks", "## Verdicts"):
         assert heading in prompt
     assert "five checks" not in lowered
+    assert "six checks" not in lowered
 
 
 # --- The #317 gate: a unit's drafts must not overlap each other ---------------
@@ -441,11 +446,17 @@ def _collapsed_prompt_section(prompt: str, heading: str) -> str:
 
 def _sibling_overlap_check() -> str:
     """The sixth check alone, so a phrase elsewhere in the prompt cannot satisfy
-    an assertion about it. It is the last item in the checks section."""
-    checks_section = _collapsed_prompt_section(_rendered_gate_prompt(), "The six checks")
+    an assertion about it. It ends where the seventh check starts."""
+    checks_section = _collapsed_prompt_section(_rendered_gate_prompt(), "The seven checks")
     marker = "6. **sibling overlap**"
     assert marker in checks_section, "the checks section has no sixth check"
-    return checks_section[checks_section.index(marker) :]
+    overlap_start = checks_section.index(marker)
+    overlap_end = checks_section.find("7. **", overlap_start)
+    return (
+        checks_section[overlap_start:]
+        if overlap_end == -1
+        else checks_section[overlap_start:overlap_end]
+    )
 
 
 def test_critic_prompt_has_the_sibling_overlap_check() -> None:
@@ -475,6 +486,46 @@ def test_overlap_check_rejects_only_when_nothing_is_left() -> None:
     assert "`reject` only when the source states no concept left uncovered" in overlap_check
     verdicts_section = _collapsed_prompt_section(_rendered_gate_prompt(), "Verdicts")
     assert "no uncovered concept" in verdicts_section
+
+
+# --- The #353 gate: no card answers itself, a lone card included --------------
+# Cycle 7's card 114 was its unit's only card. The Critic's round-1 revise advice
+# proposed "Q: Why is understanding the levels of agent interaction essential?
+# A: Because it is essential for…", the Writer used it word for word, and the
+# Critic accepted it. The only self-answering fault was sibling overlap's, which
+# a lone card never reaches.
+
+
+def _self_answering_check() -> str:
+    """The seventh check alone, from its marker to the end of the checks section."""
+    checks_section = _collapsed_prompt_section(_rendered_gate_prompt(), "The seven checks")
+    marker = "7. **self-answering**"
+    assert marker in checks_section, "the checks section has no self-answering check"
+    return checks_section[checks_section.index(marker) :]
+
+
+def test_critic_prompt_faults_a_self_answering_card_without_siblings() -> None:
+    """The fault is its own check, not part of sibling overlap, so the one-card
+    request `_rendered_gate_prompt` builds is judged on it."""
+    self_answering_check = _self_answering_check()
+    assert "only when this request holds more than one card" not in self_answering_check
+    assert "every card, a lone card included" in self_answering_check
+    assert "must not contain or restate its own answer" in self_answering_check
+    assert 'a "why" card\'s back must not give the claim in the front' in self_answering_check
+    assert "`revise`" in self_answering_check
+
+
+def test_critic_revise_advice_is_held_to_the_self_answering_fault() -> None:
+    """The revise-advice rule holds suggestions to every check, the count it
+    names matches the checks section, and it names the self-answering shape so a
+    suggested front/back cannot answer itself."""
+    prompt = _rendered_gate_prompt()
+    advice_section = _revise_advice_section(prompt)
+    assert "judge your advice by the same seven checks" in advice_section
+    assert "## The seven checks" in prompt
+    assert "7. **self-answering**" in _collapsed_prompt_section(prompt, "The seven checks")
+    assert "never suggest a card that answers itself" in advice_section
+    assert "own answer" in advice_section
 
 
 # --- The #306 gate: the Critic sees its previous critique ---------------------
