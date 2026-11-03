@@ -115,11 +115,34 @@ def test_trace_link_columns_migrate_up_and_down(
     command.upgrade(config, "head")
     assert all(present_columns().values())
 
-    command.downgrade(config, "-1")
+    # Pinned to its parent revision rather than "-1": later migrations sit above it.
+    command.downgrade(config, "3f7a1c9e52b0")
     assert not any(present_columns().values())
 
     command.upgrade(config, "head")
     assert all(present_columns().values())
+
+
+def test_unreturned_highlight_ids_column_migrates_up_and_down(
+    migration_target: tuple[Config, Engine],
+) -> None:
+    """#356: `ingest_runs.unreturned_highlight_ids` applies and rolls back cleanly
+    under `render_as_batch=True` (ADR-004)."""
+    config, engine = migration_target
+
+    def column_present() -> bool:
+        with engine.connect() as connection:
+            columns = inspect(connection).get_columns("ingest_runs")
+            return "unreturned_highlight_ids" in {column["name"] for column in columns}
+
+    command.upgrade(config, "head")
+    assert column_present()
+
+    command.downgrade(config, "5b8d2e41c7a9")
+    assert not column_present()
+
+    command.upgrade(config, "head")
+    assert column_present()
 
 
 def test_every_table_carries_user_id() -> None:

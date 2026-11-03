@@ -187,6 +187,9 @@ class _RunStats:
     units_dropped: int = 0
     highlights_dropped: int = 0
     cards_generated: int = 0
+    # Highlight ids a Curator reply left out of every unit (#356); they stay
+    # `processed=false`, so the next run retries them.
+    unreturned_highlight_ids: list[int] = field(default_factory=list)
     # (unit, cards) for the run's finished keep units; per-card cost shares are
     # attributed from `llm_calls` at finalize time.
     finished: list[tuple[CuratedUnit, list[Card]]] = field(default_factory=list)
@@ -411,6 +414,7 @@ def _run_phases(
     def record_chapter(highlights: list[Highlight], result: CuratorResult) -> None:
         """Persist one chapter's units and fold them into the run counters."""
         curated = _persist_chapter(session, ingest_run, highlights, result)
+        stats.unreturned_highlight_ids.extend(result.unreturned_highlight_ids)
         by_id = {highlight.id: highlight for highlight in highlights}
         for unit, highlight_ids in curated:
             covered = [
@@ -1136,6 +1140,7 @@ def _record_outcome(
     ingest_run.units_dropped = stats.units_dropped
     ingest_run.highlights_dropped = stats.highlights_dropped
     ingest_run.cards_generated = stats.cards_generated
+    ingest_run.unreturned_highlight_ids = sorted(stats.unreturned_highlight_ids)
     ingest_run.cost_microusd = int(
         session.scalar(
             select(func.coalesce(func.sum(LlmCall.cost_microusd), 0)).where(

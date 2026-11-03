@@ -190,6 +190,7 @@ One row per call through `llm.py`. Doubles as the trace and the replay corpus: t
 | cost_microusd | int | sum of `llm_calls` for this run |
 | started_at / finished_at | datetime | |
 | error | text, nullable | set if the run aborted |
+| unreturned_highlight_ids | JSON list of int, nullable | highlight ids a Curator reply left out of every unit, accumulated across the run's chapters and batches (#356); `[]` when every highlight came back, null on runs from before the column. Those highlights stay `processed=false` and the next run retries them |
 
 `rows_unchanged = rows_seen - rows_new - rows_updated`.
 

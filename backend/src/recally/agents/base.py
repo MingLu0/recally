@@ -90,7 +90,15 @@ class CuratedUnitDraft:
 
 @dataclass(frozen=True)
 class CuratorResult:
+    """The chapter's units, plus the batch ids its replies left out of every unit.
+
+    An unreturned highlight is not an error (#356): the runner keeps the returned
+    units, leaves the missing highlights `processed=false` for the next run, and
+    records their ids on `ingest_runs.unreturned_highlight_ids`.
+    """
+
     units: list[CuratedUnitDraft]
+    unreturned_highlight_ids: list[int] = field(default_factory=list)
 
 
 # --- Writer (docs/agents.md §3) ---------------------------------------------------

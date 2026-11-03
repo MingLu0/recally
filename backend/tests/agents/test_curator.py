@@ -18,6 +18,7 @@ docs are the spec (AGENTS.md):
 
 import csv
 import json
+import logging
 from collections import deque
 from pathlib import Path
 from typing import Any
@@ -182,6 +183,38 @@ def test_truncated_ids_must_be_subset_of_highlight_ids() -> None:
 
     with pytest.raises(CuratorValidationError):
         DefaultCurator()(_request([_highlight(1, "text"), _highlight(2, "more")]), _ctx(fake_llm))
+
+
+def test_reply_missing_a_batch_id_reports_it_as_unreturned() -> None:
+    """A batch id that appears in no returned unit is named on the result (#356: h182
+    vanished from cycle 7 with nothing recording the loss)."""
+    fake_llm = FakeLlm(
+        [
+            _units_payload([_keep_unit([1], "highlight 1")]),
+            _units_payload([_keep_unit([3], "highlight 3")]),
+        ]
+    )
+    highlights = [_highlight(id_, f"highlight {id_}") for id_ in (1, 2, 3, 4)]
+
+    result = DefaultCurator()(_request(highlights), _ctx(fake_llm, curator_max_batch=2))
+
+    assert result.unreturned_highlight_ids == [2, 4]
+
+
+def test_reply_missing_a_batch_id_never_raises(caplog: pytest.LogCaptureFixture) -> None:
+    """A missing id is recorded, not an error: the returned units are still parsed and
+    kept, and a warning names the missing id."""
+    fake_llm = FakeLlm(
+        [_units_payload([_keep_unit([1], "highlight 1"), _keep_unit([3], "highlight 3")])]
+    )
+    highlights = [_highlight(id_, f"highlight {id_}") for id_ in (1, 2, 3)]
+
+    with caplog.at_level(logging.WARNING, logger="recally.agents.curator.default"):
+        result = DefaultCurator()(_request(highlights), _ctx(fake_llm))
+
+    assert [unit.highlight_ids for unit in result.units] == [[1], [3]]
+    assert [unit.curated_text for unit in result.units] == ["highlight 1", "highlight 3"]
+    assert any("[2]" in record.getMessage() for record in caplog.records)
 
 
 def test_batch_is_split_at_curator_max_batch() -> None:
