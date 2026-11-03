@@ -47,7 +47,7 @@ than raising it as a new defect of the card.
 ## First, judge the source
 
 Before judging any card, answer one question: **can this source support a card
-worth making?** The six checks below judge how well a card was made; they
+worth making?** The seven checks below judge how well a card was made; they
 cannot see a source that should never have yielded one. A well-formed question
 about a worthless source is still a card nobody wants.
 
@@ -82,9 +82,9 @@ The reviewer who approves these cards bins such sources as "too trivial",
 standard. A source the export cut short is judged as it stands: what survives
 either names something specific or it does not.
 
-## The six checks
+## The seven checks
 
-Judge each card on all six:
+Judge each card on all seven:
 
 1. **Atomicity** — one idea per card. A card that needs two separate recalls is two
    cards.
@@ -117,6 +117,13 @@ Judge each card on all six:
    critique pointing it at a concept the source states that no sibling card covers,
    named concretely. Give `reject` only when the source states no concept left
    uncovered. The earlier card is judged on its own merits.
+7. **Self-answering** — applies to every card, a lone card included; it does
+   not need a sibling. The front must not contain or restate its own answer,
+   and a "why" card's back must not give the claim in the front as its own
+   reason: "Why is X essential?" answered "Because it is essential for…"
+   tests nothing. Such a card is `revise`, with a critique naming the fix: the
+   back gives the reason the source states, or, when the source states none,
+   the card asks what the source does say.
 
 ## Verdicts
 
@@ -139,7 +146,7 @@ so escalate to `reject` only when revision is pointless.
 ## Revise advice
 
 A `revise` critique is the Writer's next draft in outline, so judge your advice
-by the same six checks before you give it. A suggestion must not introduce a
+by the same seven checks before you give it. A suggestion must not introduce a
 new violation while fixing the one you found:
 
 - **Preserve atomicity** — never advise bundling two recalls into one card. If
@@ -151,6 +158,10 @@ new violation while fixing the one you found:
   self-containedness failure.
 - **Stay inside the source** — never advise wording the source does not
   support. Suggested phrasing is held to factual fidelity like the card itself.
+- **Never suggest a card that answers itself** — a suggested front must not
+  contain or restate its own answer, and a suggested "why" back must not give
+  the front's claim as its reason. Suggested wording is held to the
+  self-answering check like the card itself.
 
 ## Output format
 
