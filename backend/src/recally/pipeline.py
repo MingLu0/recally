@@ -58,6 +58,7 @@ and the failed unit's highlights retryable.
 """
 
 import logging
+import re
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field, replace
@@ -100,6 +101,11 @@ logger = logging.getLogger(__name__)
 # docs/agents.md §3: a unit yields 1–3 cards, and a revision's split-off drafts
 # count against the same cap (#305).
 MAX_CARDS_PER_UNIT = 3
+
+# The one `{{c1::...}}` deletion the Writer guarantees on a cloze front (docs/agents.md §3).
+_CLOZE_DELETION = re.compile(r"\{\{c\d+::(.*?)\}\}", flags=re.DOTALL)
+# A shown word counts only if it holds a letter or digit, so stray punctuation is not one.
+_LETTER_OR_DIGIT = re.compile(r"[^\W_]")
 
 
 class _CorrelatedLlm(LlmCaller):
@@ -367,6 +373,7 @@ def rewrite_leech_card(
             card_id=leech.id,
         )
         outcome = _check_accept_quotes(outcome, unit.curated_text, source_highlights)
+        outcome = _check_accept_blank(outcome)
         rewrite = _write_card(session, unit, outcome, settings)
         rewrite.supersedes_card_id = leech.id
         session.commit()
@@ -867,6 +874,7 @@ def _resolve_unit_cards(
             round_one_verdict=round_one_verdict,
         )
         outcome = _check_accept_quotes(outcome, unit.curated_text, source_highlights)
+        outcome = _check_accept_blank(outcome)
         outcomes.append(outcome)
         for split_draft in outcome.split_drafts:
             if next_draft_index >= MAX_CARDS_PER_UNIT:
@@ -1056,6 +1064,41 @@ def _check_accept_quotes(
         status="needs_human",
         status_reason="; ".join(
             f'Critic quote not in source: "{quote}"' for quote in missing_quotes
+        ),
+    )
+
+
+def _check_accept_blank(outcome: _CardOutcome) -> _CardOutcome:
+    """Send an accepted cloze to `needs_human` when it hides more words than it shows.
+
+    In cycle 7 the Critic accepted cards 93 and 94, whose blanks swallowed most of
+    the sentence, and no approved cloze hid more words than it showed (#355). A
+    length cap would not work — approved clozes hide 5 words or more — so this
+    compares the two counts instead. It flags rather than rewrites: no extra LLM
+    call, and the human decides. Like the quote check it overrides `approved` under
+    `AUTO_APPROVE_ROUND1_ACCEPT`, and when the quote check already flagged the card
+    its reason is kept and this one appended. QA cards are never checked.
+    """
+    if outcome.terminal != "accept" or outcome.draft.type != "cloze":
+        return outcome
+    deletion = _CLOZE_DELETION.search(outcome.draft.front)
+    if deletion is None:
+        return outcome
+    hidden_word_count = len(deletion.group(1).split())
+    shown_text = (
+        outcome.draft.front[: deletion.start()] + " " + outcome.draft.front[deletion.end() :]
+    )
+    shown_word_count = sum(
+        1 for word in shown_text.split() if _LETTER_OR_DIGIT.search(word) is not None
+    )
+    if hidden_word_count <= shown_word_count:
+        return outcome
+    blank_reason = f"Cloze hides {hidden_word_count} words and shows {shown_word_count}."
+    return replace(
+        outcome,
+        status="needs_human",
+        status_reason=(
+            f"{outcome.status_reason}; {blank_reason}" if outcome.status_reason else blank_reason
         ),
     )
 

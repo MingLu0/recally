@@ -485,3 +485,33 @@ def test_leech_rewrite_accept_with_a_quote_not_in_the_source_goes_to_needs_human
     assert rewrite.status == "needs_human"
     assert rewrite.status_reason is not None
     assert "words the source lacks" in rewrite.status_reason
+
+
+def test_leech_rewrite_cloze_hiding_more_words_than_it_shows_goes_to_needs_human(
+    make_container: Callable[..., Container],
+) -> None:
+    """The leech path runs the blank-size check as initial generation does (#355)."""
+    cloze_rewrite = CardDraft(
+        type="cloze",
+        front="The {{c1::explanation never matched how the reader thinks}} here.",
+        back="explanation never matched how the reader thinks",
+        rationale="Alternative cloze for a card that keeps failing.",
+        guidance_version=None,
+    )
+    stub_learner = StubLearner(LearnerResult(guidance=None, rationale="r"))
+    container = make_container(
+        learner=stub_learner,
+        writer=StubWriter([cloze_rewrite]),
+        critic=StubCritic("accept"),
+        LEARNER_MIN_REVIEWS=3,
+    )
+    leech_id = _seed_leech(container)
+    stub_learner.result = LearnerResult(guidance=None, rationale="r", leech_card_ids=[leech_id])
+
+    _run_job(container)
+
+    rewrite = _rewrite_of(container, leech_id)
+    assert rewrite is not None
+    assert rewrite.type == "cloze"
+    assert rewrite.status == "needs_human"
+    assert rewrite.status_reason == "Cloze hides 7 words and shows 2."
