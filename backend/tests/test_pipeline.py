@@ -1734,6 +1734,146 @@ def test_agent_exception_is_recorded_in_ingest_run_error(
     assert run.finished_at is not None
 
 
+# --- Highlights the Curator's reply leaves out (#356) -------------------------------
+
+
+def script_reply_omitting(
+    monkeypatch: pytest.MonkeyPatch, highlights: list[Highlight], omitted_id: int
+) -> ScriptedLlm:
+    """One Curator reply that keeps the first highlight, drops the rest bar `omitted_id`,
+    and never mentions `omitted_id` — the h182 shape from cycle 7."""
+    kept_id = highlights[0].id
+    dropped_ids = [
+        highlight.id for highlight in highlights if highlight.id not in (kept_id, omitted_id)
+    ]
+    return ScriptedLlm(
+        monkeypatch,
+        [
+            curator_response(keep_unit([kept_id]), drop_unit(dropped_ids)),
+            writer_response("Kept card?"),
+            critic_response(ACCEPT),
+        ],
+    )
+
+
+def test_unreturned_highlight_stays_unprocessed(
+    container: Container, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A highlight no unit names reached no terminal outcome, so it stays
+    `processed=false` for the next run to retry; its neighbours still finish."""
+    run_id, highlights = ingest_fixture(container)
+    omitted_id = highlights[1].id
+    script_reply_omitting(monkeypatch, highlights, omitted_id)
+
+    container.run_pipeline(run_id)
+
+    assert fetch_highlight(container, omitted_id).processed is False
+    assert fetch_highlight(container, highlights[0].id).processed is True
+    assert fetch_highlight(container, highlights[2].id).processed is True
+    assert fetch_run(container, run_id).error is None
+
+
+def test_unreturned_highlight_ids_are_recorded_on_the_ingest_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The run accumulates unreturned ids across batches: with `CURATOR_MAX_BATCH=5`
+    the 15-highlight chapter is three Curator calls, and each leaves one id out."""
+    batch_container, engine = make_container(LLM_CONCURRENCY=1, CURATOR_MAX_BATCH=5)
+    try:
+        run_id, highlights = ingest_fixture(batch_container)
+        ids = [highlight.id for highlight in highlights]
+        omitted_ids = [ids[1], ids[7], ids[14]]
+        ScriptedLlm(
+            monkeypatch,
+            [
+                curator_response(drop_unit([ids[0], ids[2], ids[3], ids[4]])),
+                curator_response(drop_unit([ids[5], ids[6], ids[8], ids[9]])),
+                curator_response(drop_unit(ids[10:14])),
+            ],
+        )
+
+        batch_container.run_pipeline(run_id)
+
+        run = fetch_run(batch_container, run_id)
+        assert run.unreturned_highlight_ids == omitted_ids
+        assert run.error is None
+    finally:
+        engine.dispose()
+
+
+def test_units_returned_beside_a_missing_id_are_kept(
+    container: Container, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The batch is not failed or discarded: the units the reply did return are
+    persisted and carried through the Writer ⇄ Critic phase."""
+    run_id, highlights = ingest_fixture(container)
+    script_reply_omitting(monkeypatch, highlights, highlights[1].id)
+
+    container.run_pipeline(run_id)
+
+    units = all_units(container)
+    assert [unit.decision for unit in units] == ["keep", "drop"]
+    assert [card.front for card in all_cards(container)] == ["Kept card?"]
+    run = fetch_run(container, run_id)
+    assert run.units_kept == 1
+    assert run.units_dropped == 1
+    assert run.highlights_dropped == len(highlights) - 2
+
+
+def test_run_with_every_highlight_returned_records_no_unreturned_ids(
+    container: Container, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    run_id, highlights = ingest_fixture(container)
+    ScriptedLlm(
+        monkeypatch,
+        [
+            curator_response(
+                keep_unit([highlights[0].id]), drop_unit([h.id for h in highlights[1:]])
+            ),
+            writer_response("Kept card?"),
+            critic_response(ACCEPT),
+        ],
+    )
+
+    container.run_pipeline(run_id)
+
+    assert fetch_run(container, run_id).unreturned_highlight_ids == []
+
+
+def test_unreturned_highlight_is_curated_on_the_next_run(
+    container: Container, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The retry path is the existing `processed=false` selection: the next run sends
+    the left-out highlight, and only it, back to the Curator."""
+    run_id, highlights = ingest_fixture(container)
+    omitted_id = highlights[1].id
+    script_reply_omitting(monkeypatch, highlights, omitted_id)
+    container.run_pipeline(run_id)
+    assert fetch_run(container, run_id).unreturned_highlight_ids == [omitted_id]
+
+    ScriptedLlm(
+        monkeypatch,
+        [
+            curator_response(keep_unit([omitted_id], "The retried highlight.")),
+            writer_response("Retried card?"),
+            critic_response(ACCEPT),
+        ],
+    )
+    second_run_id = new_ingest_run(container)
+    container.run_pipeline(second_run_id)
+
+    curator_calls = [
+        call
+        for call in all_llm_calls(container, second_run_id)
+        if call.agent.startswith("curator/")
+    ]
+    assert len(curator_calls) == 1
+    assert curator_batch_highlight_ids(curator_calls[0]) == {omitted_id}
+    assert fetch_highlight(container, omitted_id).processed is True
+    assert fetch_run(container, second_run_id).unreturned_highlight_ids == []
+    assert {card.front for card in all_cards(container)} == {"Kept card?", "Retried card?"}
+
+
 # --- Approval-queue API -----------------------------------------------------------
 
 

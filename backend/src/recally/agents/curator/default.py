@@ -11,10 +11,17 @@ well-formed response with invalid *content* — a hallucinated highlight id, a
 `decision` outside keep|drop, a `truncated_highlight_ids` entry not covered by the
 unit — raises `CuratorValidationError` here, so the runner's failure path
 (docs/architecture.md, "Failure handling") records it and the next run retries.
+
+A batch id the reply leaves out of every unit is the one content gap that does not
+raise (#356): the returned units are kept, the missing ids are logged and reported on
+`CuratorResult.unreturned_highlight_ids`, and the runner leaves those highlights
+unprocessed so the next run retries them. Failing the batch would discard the units
+the Curator did return.
 """
 
 import dataclasses
 import json
+import logging
 from pathlib import Path
 from typing import Any, Literal, cast
 
@@ -29,6 +36,8 @@ from recally.agents.registry import register
 
 PROMPT_PATH = Path(__file__).parent / "prompts" / "curator.md"
 AGENT_NAME = "curator/default"
+
+logger = logging.getLogger(__name__)
 
 
 class CuratorValidationError(ValueError):
@@ -47,10 +56,13 @@ class DefaultCurator:
         max_batch = ctx.settings.curator_max_batch
         prompt = load_prompt()
         units: list[CuratedUnitDraft] = []
+        unreturned_highlight_ids: list[int] = []
         for start in range(0, len(request.highlights), max_batch):
             batch = request.highlights[start : start + max_batch]
-            units.extend(self._curate_batch(request, batch, prompt, ctx))
-        return CuratorResult(units=units)
+            batch_units = self._curate_batch(request, batch, prompt, ctx)
+            units.extend(batch_units)
+            unreturned_highlight_ids.extend(_unreturned_ids(batch, batch_units, request))
+        return CuratorResult(units=units, unreturned_highlight_ids=unreturned_highlight_ids)
 
     def _curate_batch(
         self,
@@ -78,6 +90,23 @@ class DefaultCurator:
             dataclasses.replace(unit, llm_call_id=llm_call_id)
             for unit in _parse_units(response_text, batch)
         ]
+
+
+def _unreturned_ids(
+    batch: list[HighlightInput], batch_units: list[CuratedUnitDraft], request: CuratorRequest
+) -> list[int]:
+    """The batch's ids that appear in no returned unit, in export order, logged."""
+    returned_ids = {highlight_id for unit in batch_units for highlight_id in unit.highlight_ids}
+    missing_ids = [highlight.id for highlight in batch if highlight.id not in returned_ids]
+    if missing_ids:
+        logger.warning(
+            "Curator reply for %r / %r left out highlight ids %s; "
+            "they stay unprocessed for the next run",
+            request.book_title,
+            request.chapter,
+            missing_ids,
+        )
+    return missing_ids
 
 
 def _render_user_message(book_title: str, chapter: str | None, batch: list[HighlightInput]) -> str:

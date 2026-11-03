@@ -17,6 +17,8 @@ No LLM. Watch folder → adapter → dedupe → `highlights` rows with `processe
 
 **Output**: curated units, each `{highlight_ids: [...], curated_text, tags, truncated_highlight_ids: [...], decision[keep|drop], reason}`. A unit with more than one `highlight_id` is a group. `truncated_highlight_ids` is written back to the `highlights` rows by the runner (agents hold no DB session, ADR-007); the unit itself does not store the flag.
 
+**A highlight the reply leaves out.** Every batch id should appear in exactly one unit. An id outside the batch is an error and fails the batch, but an id from the batch that appears in no unit is recorded, not raised (#356: in cycle 7 highlight 182 was sent and never mentioned, and nothing recorded the loss). The runner keeps the units the reply did return, logs a warning naming the missing ids, leaves those highlights `processed=false` so the next run's normal selection retries them, and records the ids on `ingest_runs.unreturned_highlight_ids`. There is no same-run re-ask and no extra LLM call.
+
 ### 3. Card Writer Agent — LLM
 **Input**: one curated unit plus the current `writer_guidance` version. The unit's source highlights arrive as separate, numbered blocks of their exported text, in export order, each marked when clipped — not as the joined `curated_text`, whose run-together words let one highlight's words pass as a claim about another's subject (#319; cards 78, 80, 119, 128 in cycle 6).
 **Output**: 1–3 cards, each `{type: qa|cloze, front, back, rationale}`, stamped with `guidance_version`, plus `skipped: [{concept, reason}]`, empty when nothing is skipped (#327). The parser reads only `cards`; `skipped` is stored nowhere but the reply in `llm_calls.response`.

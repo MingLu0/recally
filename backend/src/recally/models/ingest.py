@@ -2,7 +2,17 @@
 
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Date,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from recally.models.base import Base, UserScopedMixin, utc_now
@@ -89,3 +99,8 @@ class IngestRun(UserScopedMixin, Base):
     started_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Highlight ids a Curator reply left out of every unit (#356), accumulated across
+    # the run's chapters and batches; `[]` when every highlight came back, null on
+    # runs from before the column. Those highlights stay `processed=false`, so the
+    # next run retries them.
+    unreturned_highlight_ids: Mapped[list[int] | None] = mapped_column(JSON, nullable=True)
