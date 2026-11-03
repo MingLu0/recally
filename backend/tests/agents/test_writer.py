@@ -620,6 +620,49 @@ def test_what_versus_why_rule_applies_only_when_a_reason_is_stated() -> None:
     assert '"why" is available only when the source states a reason or mechanism' in prompt
 
 
+# --- The #354 gate: the deletion is the key term, the context stays visible ---
+# Cycle 7's cards 17, 93 and 94 hid a whole term-plus-modifier, a clause, or a
+# sentence, and the Critic accepted all three: writer.md told the Writer that
+# "the definition or key fact is the deletion" and set no limit on how much a
+# deletion hides. The fix is prompt guidance, so these assert on the prompt as
+# rendered through DefaultWriter. All three were confirmed red against the
+# unedited prompts/writer.md — the red output is in the PR. #355 enforces the
+# same bar in code after an accept.
+
+
+def test_writer_prompt_makes_the_key_term_the_deletion() -> None:
+    """The prompt says the deletion is the key term — a word or short phrase —
+    and never a definition, a clause or a sentence."""
+    fake_llm = FakeLlm(ONE_CARD_RESPONSE)
+    DefaultWriter()(_request(), _ctx(fake_llm))
+
+    prompt = _normalised_prompt(fake_llm)
+    assert "the deletion is the key term" in prompt
+    assert "a word or short phrase" in prompt
+    assert "never a definition, a clause or a sentence" in prompt
+
+
+def test_writer_prompt_no_longer_makes_the_definition_the_deletion() -> None:
+    """The old "The definition or key fact is the deletion" wording, which
+    pushed whole definitions into the blank, is gone."""
+    fake_llm = FakeLlm(ONE_CARD_RESPONSE)
+    DefaultWriter()(_request(), _ctx(fake_llm))
+
+    prompt = _normalised_prompt(fake_llm)
+    assert "the definition or key fact is the deletion" not in prompt
+
+
+def test_writer_prompt_keeps_the_context_visible() -> None:
+    """The prompt asks the Writer to keep the context-setting words visible, so
+    the visible text is longer than the deletion."""
+    fake_llm = FakeLlm(ONE_CARD_RESPONSE)
+    DefaultWriter()(_request(), _ctx(fake_llm))
+
+    prompt = _normalised_prompt(fake_llm)
+    assert "keep the words that set the context visible" in prompt
+    assert "the visible text is longer than the deletion" in prompt
+
+
 # --- Skipped concepts have somewhere to go in the reply (#327) ---
 #
 # The coverage rule asks for "a card or an explicit skip reason", but the reply
