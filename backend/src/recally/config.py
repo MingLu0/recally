@@ -73,6 +73,8 @@ class Settings(BaseSettings):
         default="claude-haiku-4-5-20251001", validation_alias="LLM_MODEL_CRITIC"
     )
     llm_model_learner: str = Field(default="claude-sonnet-5", validation_alias="LLM_MODEL_LEARNER")
+    # The eval judge (evals/judge.py, #244) — an eval tool, not a pipeline agent.
+    llm_model_judge: str = Field(default="claude-sonnet-5", validation_alias="LLM_MODEL_JUDGE")
     # Off only if `llm_calls` bloats (ADR-006); the replay corpus is the default.
     llm_log_payloads: bool = Field(default=True, validation_alias="LLM_LOG_PAYLOADS")
 
