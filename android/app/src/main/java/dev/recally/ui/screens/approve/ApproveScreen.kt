@@ -96,10 +96,24 @@ fun ApproveScreen(
     onBulkApproveClick: () -> Unit,
     onConfirmBulkApprove: () -> Unit,
     onDismissBulkApproveConfirm: () -> Unit,
+    onDismissDrop: (Long) -> Unit,
+    onGenerateDrop: (Long) -> Unit,
+    onStartManualCard: (Long) -> Unit,
+    onManualCardChange: (ManualCardDraft) -> Unit,
+    onCancelManualCard: () -> Unit,
+    onSubmitManualCard: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier.fillMaxSize()) {
-        ApproveHeader(pendingCount = uiState.pendingCount, onNavigateBack = onNavigateBack)
+        ApproveHeader(
+            countLabel =
+                if (uiState.filter == QueueFilter.DROPPED) {
+                    uiState.droppedCount?.let { "$it dropped" }
+                } else {
+                    uiState.pendingCount?.let { "$it pending" }
+                },
+            onNavigateBack = onNavigateBack,
+        )
         FilterRow(filter = uiState.filter, onFilterChange = onFilterChange)
         HorizontalDivider(color = MaterialTheme.recallyColors.lineSoft)
 
@@ -107,12 +121,31 @@ fun ApproveScreen(
             UnauthorizedBanner(onOpenSettings = onOpenSettings)
         }
         if (uiState.isOffline) {
-            OfflineRow(onRetry = onRetry)
+            OfflineRow(
+                message =
+                    if (uiState.filter == QueueFilter.DROPPED) {
+                        "Offline — Dismiss, Write card and Generate need a connection."
+                    } else {
+                        "Offline — approving needs a connection. Approve, reject and edit are disabled."
+                    },
+                onRetry = onRetry,
+            )
         }
 
         Box(modifier = Modifier.weight(1f)) {
             when {
                 uiState.isLoading -> LoadingSkeletons()
+                uiState.isDroppedEmpty && !uiState.isOffline -> DroppedEmpty()
+                uiState.filter == QueueFilter.DROPPED ->
+                    DroppedList(
+                        uiState = uiState,
+                        onDismissDrop = onDismissDrop,
+                        onGenerateDrop = onGenerateDrop,
+                        onStartManualCard = onStartManualCard,
+                        onManualCardChange = onManualCardChange,
+                        onCancelManualCard = onCancelManualCard,
+                        onSubmitManualCard = onSubmitManualCard,
+                    )
                 uiState.isQueueClear && !uiState.isOffline -> QueueClear()
                 else ->
                     QueueList(
@@ -262,9 +295,10 @@ private fun BulkApproveConfirmDialog(
     )
 }
 
+/** The count is the active list's collection-wide total: "N pending" from `counts`, or "N dropped" from `GET /units/dropped`'s `count`. */
 @Composable
 private fun ApproveHeader(
-    pendingCount: Int?,
+    countLabel: String?,
     onNavigateBack: () -> Unit,
 ) {
     Row(
@@ -288,9 +322,9 @@ private fun ApproveHeader(
             style = MaterialTheme.typography.titleLarge,
             color = MaterialTheme.recallyColors.ink,
         )
-        if (pendingCount != null) {
+        if (countLabel != null) {
             Text(
-                text = "$pendingCount pending",
+                text = countLabel,
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.recallyColors.inkMuted,
             )
@@ -298,7 +332,7 @@ private fun ApproveHeader(
     }
 }
 
-/** All / Needs you (docs/android.md, "Screens → 3"). The count lives in the header, not on the chips. */
+/** All / Needs you / Dropped (docs/android.md, "Screens → 3"). The count lives in the header, not on the chips. */
 @Composable
 private fun FilterRow(
     filter: QueueFilter,
@@ -322,6 +356,7 @@ private fun FilterRow(
                             when (option) {
                                 QueueFilter.ALL -> "All"
                                 QueueFilter.NEEDS_YOU -> "Needs you"
+                                QueueFilter.DROPPED -> "Dropped"
                             },
                     )
                 },
@@ -376,7 +411,10 @@ private fun UnauthorizedBanner(onOpenSettings: () -> Unit) {
  * offline it is disabled with an explanatory row rather than queued.
  */
 @Composable
-private fun OfflineRow(onRetry: () -> Unit) {
+private fun OfflineRow(
+    message: String,
+    onRetry: () -> Unit,
+) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier =
@@ -386,7 +424,7 @@ private fun OfflineRow(onRetry: () -> Unit) {
                 .padding(horizontal = RecallySpacing.screenPadding, vertical = RecallySpacing.md),
     ) {
         Text(
-            text = "Offline — approving needs a connection. Approve, reject and edit are disabled.",
+            text = message,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.recallyColors.warn,
             modifier = Modifier.weight(1f),
@@ -660,7 +698,7 @@ private fun BadgeRow(card: PendingCard) {
 }
 
 @Composable
-private fun Badge(
+internal fun Badge(
     text: String,
     textColor: Color,
     fill: Color?,
@@ -751,7 +789,7 @@ private fun ActionRow(
 
 /** Hairline divider between the Reject and Edit cells. */
 @Composable
-private fun RowScope.VerticalDivider() {
+internal fun RowScope.VerticalDivider() {
     Box(
         modifier =
             Modifier
@@ -762,7 +800,7 @@ private fun RowScope.VerticalDivider() {
 }
 
 @Composable
-private fun ActionCell(
+internal fun ActionCell(
     label: String,
     icon: @Composable () -> Unit,
     labelColor: Color,
@@ -933,7 +971,7 @@ private fun RejectDialog(
     )
 }
 
-private val HAIRLINE = 1.dp
+internal val HAIRLINE = 1.dp
 private val SKELETON_HEADER_WIDTH = 180.dp
 private val SKELETON_CARD_HEIGHT = 180.dp
 private val QUEUE_CLEAR_ICON_HALO = 48.dp
@@ -954,6 +992,9 @@ internal const val BULK_APPROVE_PILL_TAG = "bulkApprovePill"
 internal const val BULK_APPROVE_CONFIRM_DIALOG_TAG = "bulkApproveConfirmDialog"
 internal const val APPROVE_CONFIRM_DIALOG_TAG = "approveConfirmDialog"
 internal const val REJECT_DIALOG_TAG = "rejectDialog"
+internal const val DROPPED_LIST_TAG = "droppedList"
+internal const val DISMISS_DROP_DIALOG_TAG = "dismissDropDialog"
+internal const val GENERATE_DROP_DIALOG_TAG = "generateDropDialog"
 
 // --- Previews (docs/android.md, "Every previewable composable has a preview") ---
 
@@ -1025,6 +1066,12 @@ private fun ApproveScreenPreviewHost(uiState: ApproveUiState) {
             onBulkApproveClick = {},
             onConfirmBulkApprove = {},
             onDismissBulkApproveConfirm = {},
+            onDismissDrop = {},
+            onGenerateDrop = {},
+            onStartManualCard = {},
+            onManualCardChange = {},
+            onCancelManualCard = {},
+            onSubmitManualCard = {},
         )
     }
 }

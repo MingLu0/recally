@@ -103,6 +103,12 @@ fun RecallyNavHost(
                 onBulkApproveClick = approveViewModel::onBulkApproveClick,
                 onConfirmBulkApprove = approveViewModel::onConfirmBulkApprove,
                 onDismissBulkApproveConfirm = approveViewModel::onDismissBulkApproveConfirm,
+                onDismissDrop = approveViewModel::dismissDrop,
+                onGenerateDrop = approveViewModel::generateDrop,
+                onStartManualCard = approveViewModel::onStartManualCard,
+                onManualCardChange = approveViewModel::onManualCardChange,
+                onCancelManualCard = approveViewModel::onCancelManualCard,
+                onSubmitManualCard = approveViewModel::submitManualCard,
             )
         }
         composable(Screen.Decks.route) {

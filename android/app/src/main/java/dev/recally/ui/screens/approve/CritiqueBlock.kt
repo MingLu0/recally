@@ -54,11 +54,16 @@ import dev.recally.ui.theme.recallyColors
  * 25-line critique buries the card's own Reject / Edit / Approve row. The
  * toggle only appears when the text actually overflows the clamp; a
  * one-liner renders bare.
+ *
+ * [label] is "CRITIC" for a card's critique; the Dropped item reuses the
+ * block for the Curator's drop reason under "WHY IT WAS DROPPED" (issue
+ * #365) — the same subordinate-context role, a different author.
  */
 @Composable
 fun CritiqueBlock(
     critique: String,
     modifier: Modifier = Modifier,
+    label: String = "CRITIC",
 ) {
     val colors = MaterialTheme.recallyColors
     val darkTheme = isSystemInDarkTheme()
@@ -96,7 +101,7 @@ fun CritiqueBlock(
                 ),
     ) {
         Text(
-            text = "CRITIC",
+            text = label,
             style = MaterialTheme.typography.labelSmall,
             color = colors.warn,
         )

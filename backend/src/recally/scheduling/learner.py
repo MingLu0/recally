@@ -58,6 +58,7 @@ from recally.models import (
     WriterGuidance,
 )
 from recally.models.base import utc_now
+from recally.models.cards import HUMAN_AUTHORED_MODEL
 from recally.services.cards import QUEUE_STATUSES
 
 if TYPE_CHECKING:
@@ -248,6 +249,10 @@ def build_review_aggregates(session: Session, *, now: datetime | None = None) ->
         if card.type == "cloze":
             deletions = str(_cloze_deletion_count(card.front))
             _accumulate(by_deletions[deletions], review)
+        if card.model == HUMAN_AUTHORED_MODEL:
+            # A card the human typed from a dropped unit (#365) came from no
+            # guidance, so it is outside guidance attribution — edited or not.
+            continue
         version_key = str(card.guidance_version) if card.guidance_version is not None else "none"
         if card.edited_at is not None:
             # Segmented, not pooled (ADR-008): a hand-fixed card must not credit

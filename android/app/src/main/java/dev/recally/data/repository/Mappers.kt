@@ -4,6 +4,8 @@ import dev.recally.data.local.DueCardEntity
 import dev.recally.data.local.DueSummaryMetaEntity
 import dev.recally.data.remote.DeckCardDto
 import dev.recally.data.remote.DeckDto
+import dev.recally.data.remote.DroppedUnitDto
+import dev.recally.data.remote.DroppedUnitsResponse
 import dev.recally.data.remote.DueCardDto
 import dev.recally.data.remote.DueCardsResponse
 import dev.recally.data.remote.ForecastDayDto
@@ -15,6 +17,8 @@ import dev.recally.data.remote.StatsResponse
 import dev.recally.domain.model.Card
 import dev.recally.domain.model.Deck
 import dev.recally.domain.model.DeckCard
+import dev.recally.domain.model.DroppedUnit
+import dev.recally.domain.model.DroppedUnits
 import dev.recally.domain.model.DueSummary
 import dev.recally.domain.model.ForecastDay
 import dev.recally.domain.model.PendingCard
@@ -75,6 +79,24 @@ fun PendingCardsResponse.toDomain(): PendingQueue =
     PendingQueue(
         cards = cards.map { it.toDomain() },
         counts = counts.toDomain(),
+    )
+
+fun DroppedUnitDto.toDomain(): DroppedUnit =
+    DroppedUnit(
+        id = id,
+        reason = reason,
+        curatedText = curatedText,
+        sourceHighlights = sourceHighlights,
+        truncated = truncated,
+        bookId = bookId,
+        book = book,
+        chapter = chapter.orEmpty(),
+    )
+
+fun DroppedUnitsResponse.toDomain(): DroppedUnits =
+    DroppedUnits(
+        units = units.map { it.toDomain() },
+        count = count,
     )
 
 fun PendingCountsDto.toDomain(): PendingCounts =

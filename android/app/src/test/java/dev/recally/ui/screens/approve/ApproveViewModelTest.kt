@@ -2,6 +2,8 @@ package dev.recally.ui.screens.approve
 
 import androidx.lifecycle.SavedStateHandle
 import dev.recally.domain.model.ApproveBatchResult
+import dev.recally.domain.model.DroppedUnit
+import dev.recally.domain.model.DroppedUnits
 import dev.recally.domain.model.PendingCard
 import dev.recally.domain.model.PendingCounts
 import dev.recally.domain.model.PendingQueue
@@ -9,6 +11,7 @@ import dev.recally.domain.repository.ApprovalRepository
 import dev.recally.domain.repository.RejectReasonDraftsRepository
 import dev.recally.domain.repository.Result
 import dev.recally.ui.navigation.ARG_FILTER
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -112,6 +115,56 @@ class ApproveViewModelTest {
         override suspend fun approveBatch(cardIds: List<Long>): Result<List<ApproveBatchResult>> {
             batchCalls += cardIds
             return batchResult(cardIds)
+        }
+
+        // --- Dropped units (issue #365) ---
+
+        var droppedResult: Result<DroppedUnits> = Result.Success(DroppedUnits(emptyList(), 0))
+        var droppedCalls = 0
+
+        override suspend fun droppedUnits(): Result<DroppedUnits> {
+            droppedCalls++
+            return droppedResult
+        }
+
+        val dismissCalls = mutableListOf<Long>()
+        var dismissResult: Result<Unit> = Result.Success(Unit)
+
+        override suspend fun dismissDroppedUnit(unitId: Long): Result<Unit> {
+            dismissCalls += unitId
+            return dismissResult
+        }
+
+        val generateCalls = mutableListOf<Long>()
+        var generateResult: Result<List<PendingCard>> = Result.Success(emptyList())
+
+        /** When set, generate suspends until completed — the 30–90 s server call, held open. */
+        var generateGate: CompletableDeferred<Unit>? = null
+
+        override suspend fun generateCardsForDroppedUnit(unitId: Long): Result<List<PendingCard>> {
+            generateCalls += unitId
+            generateGate?.await()
+            return generateResult
+        }
+
+        data class ManualCall(
+            val unitId: Long,
+            val type: String,
+            val front: String,
+            val back: String,
+        )
+
+        val manualCalls = mutableListOf<ManualCall>()
+        var manualResult: Result<PendingCard> = Result.HttpError(status = 500, detail = "unset")
+
+        override suspend fun createCardForDroppedUnit(
+            unitId: Long,
+            type: String,
+            front: String,
+            back: String,
+        ): Result<PendingCard> {
+            manualCalls += ManualCall(unitId, type, front, back)
+            return manualResult
         }
     }
 
@@ -924,7 +977,253 @@ class ApproveViewModelTest {
 
     private fun ChapterGroup.key(): Triple<Long, String, String> = Triple(bookId, book, chapter)
 
+    // --- Dropped units (issue #365) ---------------------------------------------
+
+    private fun droppedViewModel(
+        units: List<DroppedUnit>,
+        count: Int = units.size,
+        cards: List<PendingCard> = emptyList(),
+    ): Pair<ApproveViewModel, FakeApprovalRepository> {
+        val (viewModel, repository) = loadedViewModel(cards)
+        repository.droppedResult = Result.Success(DroppedUnits(units, count))
+        return viewModel to repository
+    }
+
+    private fun ApproveUiState.droppedIds(): List<Long> = droppedGroups.flatMap { group -> group.units.map { it.id } }
+
+    private fun ApproveUiState.cardIds(): List<Long> = groups.flatMap { group -> group.cards.map { it.id } }
+
+    @Test
+    fun test_dropped_list_loads_with_queue_and_on_refresh() =
+        runTest {
+            val (viewModel, repository) = droppedViewModel(listOf(droppedUnit(id = 7), droppedUnit(id = 8)))
+            advanceUntilIdle()
+
+            assertEquals("the drops load on screen entry, with the queue", 1, repository.droppedCalls)
+            assertEquals(1, repository.pendingCalls)
+            assertEquals(listOf(7L, 8L), viewModel.uiState.value.droppedIds())
+
+            repository.droppedResult = Result.Success(DroppedUnits(listOf(droppedUnit(id = 9)), 1))
+            viewModel.refresh()
+            advanceUntilIdle()
+
+            assertEquals("refresh reloads the drops", 2, repository.droppedCalls)
+            assertEquals(2, repository.pendingCalls)
+            assertEquals(listOf(9L), viewModel.uiState.value.droppedIds())
+        }
+
+    @Test
+    fun test_dropped_header_count_comes_from_server_count_not_list_length() =
+        runTest {
+            val (viewModel, _) = droppedViewModel(listOf(droppedUnit(id = 7)), count = 19)
+            advanceUntilIdle()
+
+            assertEquals(19, viewModel.uiState.value.droppedCount)
+        }
+
+    @Test
+    fun test_dismiss_success_removes_item() =
+        runTest {
+            val (viewModel, repository) = droppedViewModel(listOf(droppedUnit(id = 7), droppedUnit(id = 8)))
+            advanceUntilIdle()
+
+            viewModel.dismissDrop(7)
+            advanceUntilIdle()
+
+            assertEquals(listOf(7L), repository.dismissCalls)
+            assertEquals(listOf(8L), viewModel.uiState.value.droppedIds())
+            assertEquals(1, viewModel.uiState.value.droppedCount)
+            assertNull(viewModel.uiState.value.busyDropUnitId)
+        }
+
+    @Test
+    fun test_dismiss_failure_keeps_item_and_shows_error() =
+        runTest {
+            val (viewModel, repository) = droppedViewModel(listOf(droppedUnit(id = 7)))
+            advanceUntilIdle()
+            repository.dismissResult = Result.HttpError(status = 409, detail = "Unit 7 is already resolved (dismissed).")
+
+            viewModel.dismissDrop(7)
+            advanceUntilIdle()
+
+            assertEquals(listOf(7L), repository.dismissCalls)
+            assertEquals("a failed dismiss keeps the item (negative)", listOf(7L), viewModel.uiState.value.droppedIds())
+            assertEquals(1, viewModel.uiState.value.droppedCount)
+            assertEquals("Unit 7 is already resolved (dismissed).", viewModel.uiState.value.dropErrors[7L])
+            assertNull(viewModel.uiState.value.busyDropUnitId)
+        }
+
+    @Test
+    fun test_generate_success_moves_returned_cards_into_queue() =
+        runTest {
+            val existing = pendingCard(id = 1, chapter = "1. Introduction")
+            val (viewModel, repository) =
+                droppedViewModel(
+                    units = listOf(droppedUnit(id = 7, chapter = "2. Error Analysis"), droppedUnit(id = 8)),
+                    cards = listOf(existing),
+                )
+            advanceUntilIdle()
+            val generated =
+                listOf(
+                    pendingCard(id = 40, chapter = "2. Error Analysis"),
+                    pendingCard(id = 41, chapter = "2. Error Analysis", status = PendingCard.STATUS_NEEDS_HUMAN),
+                )
+            repository.generateResult = Result.Success(generated)
+
+            viewModel.generateDrop(7)
+            advanceUntilIdle()
+
+            val state = viewModel.uiState.value
+            assertEquals(listOf(7L), repository.generateCalls)
+            assertEquals("the item leaves Dropped", listOf(8L), state.droppedIds())
+            assertEquals(1, state.droppedCount)
+            assertEquals(
+                "the cards land in their own chapter group, after the existing one",
+                listOf("1. Introduction" to listOf(1L), "2. Error Analysis" to listOf(40L, 41L)),
+                state.groups.map { group -> group.chapter to group.cards.map { it.id } },
+            )
+            assertEquals("no refetch: the cards came from the response", 1, repository.pendingCalls)
+            assertEquals(3, state.pendingCount)
+            assertEquals("only the pending_review card is bulk-approvable", 2, state.bulkApprovableCount)
+            assertNull(state.busyDropUnitId)
+            assertNull(state.generatingUnitId)
+        }
+
+    @Test
+    fun test_generate_in_flight_marks_item_busy_and_blocks_second_tap() =
+        runTest {
+            val (viewModel, repository) = droppedViewModel(listOf(droppedUnit(id = 7), droppedUnit(id = 8)))
+            advanceUntilIdle()
+            val gate = CompletableDeferred<Unit>()
+            repository.generateGate = gate
+            repository.generateResult = Result.Success(listOf(pendingCard(id = 40)))
+
+            viewModel.generateDrop(7)
+            advanceUntilIdle()
+
+            assertEquals(7L, viewModel.uiState.value.generatingUnitId)
+            assertEquals(7L, viewModel.uiState.value.busyDropUnitId)
+
+            viewModel.generateDrop(7)
+            viewModel.generateDrop(8)
+            viewModel.dismissDrop(7)
+            viewModel.onStartManualCard(7)
+            advanceUntilIdle()
+
+            assertEquals("a second Generate makes no second call (negative)", listOf(7L), repository.generateCalls)
+            assertTrue("no other Dropped action runs meanwhile (negative)", repository.dismissCalls.isEmpty())
+            assertNull("the editor cannot open on the busy item (negative)", viewModel.uiState.value.manualCardDraft)
+
+            gate.complete(Unit)
+            advanceUntilIdle()
+
+            assertNull(viewModel.uiState.value.generatingUnitId)
+            assertEquals(listOf(8L), viewModel.uiState.value.droppedIds())
+        }
+
+    @Test
+    fun test_generate_failure_keeps_item() =
+        runTest {
+            val (viewModel, repository) = droppedViewModel(listOf(droppedUnit(id = 7)))
+            advanceUntilIdle()
+            repository.generateResult =
+                Result.HttpError(status = 502, detail = "Card generation failed (RuntimeError); the highlight is still in Dropped.")
+
+            viewModel.generateDrop(7)
+            advanceUntilIdle()
+
+            val state = viewModel.uiState.value
+            assertEquals(listOf(7L), repository.generateCalls)
+            assertEquals("a failed Generate keeps the item (negative)", listOf(7L), state.droppedIds())
+            assertTrue("no card enters the queue (negative)", state.groups.isEmpty())
+            assertEquals(
+                "Card generation failed (RuntimeError); the highlight is still in Dropped.",
+                state.dropErrors[7L],
+            )
+            assertNull(state.generatingUnitId)
+            assertNull(state.busyDropUnitId)
+        }
+
+    @Test
+    fun test_manual_card_success_moves_card_into_queue_as_pending_review() =
+        runTest {
+            val (viewModel, repository) = droppedViewModel(listOf(droppedUnit(id = 7, chapter = "2. Error Analysis")))
+            advanceUntilIdle()
+            repository.manualResult =
+                Result.Success(pendingCard(id = 50, chapter = "2. Error Analysis", status = PendingCard.STATUS_PENDING_REVIEW))
+
+            viewModel.onStartManualCard(7)
+            viewModel.onManualCardChange(
+                ManualCardDraft(unitId = 7, type = PendingCard.TYPE_QA, front = "What is error analysis?", back = "Reading traces."),
+            )
+            viewModel.submitManualCard()
+            advanceUntilIdle()
+
+            val state = viewModel.uiState.value
+            assertEquals(
+                listOf(FakeApprovalRepository.ManualCall(7, PendingCard.TYPE_QA, "What is error analysis?", "Reading traces.")),
+                repository.manualCalls,
+            )
+            assertTrue("the item leaves Dropped", state.droppedIds().isEmpty())
+            assertEquals(0, state.droppedCount)
+            assertEquals(listOf(50L), state.cardIds())
+            assertEquals(
+                PendingCard.STATUS_PENDING_REVIEW,
+                state.groups
+                    .single()
+                    .cards
+                    .single()
+                    .status,
+            )
+            assertEquals(1, state.pendingCount)
+            assertEquals(1, state.bulkApprovableCount)
+            assertNull("the editor closes", state.manualCardDraft)
+            assertTrue("writing a card never approves it (hard rule 1)", repository.approveCalls.isEmpty())
+        }
+
+    @Test
+    fun test_manual_card_422_keeps_typed_text_and_shows_detail() =
+        runTest {
+            val (viewModel, repository) = droppedViewModel(listOf(droppedUnit(id = 7)))
+            advanceUntilIdle()
+            val detail = "Value error, a cloze front needs exactly one {{c1::…}} deletion"
+            repository.manualResult = Result.HttpError(status = 422, detail = detail)
+            val typed =
+                ManualCardDraft(unitId = 7, type = PendingCard.TYPE_CLOZE, front = "Two {{c1::blanks}} {{c2::here}}", back = "")
+
+            viewModel.onStartManualCard(7)
+            viewModel.onManualCardChange(typed)
+            viewModel.submitManualCard()
+            advanceUntilIdle()
+
+            val state = viewModel.uiState.value
+            assertEquals(1, repository.manualCalls.size)
+            assertEquals("the typed text survives the 422 (negative)", typed.copy(error = detail), state.manualCardDraft)
+            assertEquals("the item stays listed (negative)", listOf(7L), state.droppedIds())
+            assertTrue("no card enters the queue (negative)", state.groups.isEmpty())
+        }
+
     private companion object {
+        fun droppedUnit(
+            id: Long,
+            bookId: Long = 1,
+            book: String = "Evals for AI Engineers",
+            chapter: String = "1. Introduction",
+            truncated: Boolean = false,
+            sourceHighlights: List<String> = listOf("A dropped highlight $id."),
+            reason: String? = "Narrative framing with no retrievable claim.",
+        ): DroppedUnit =
+            DroppedUnit(
+                id = id,
+                reason = reason,
+                curatedText = sourceHighlights.joinToString(" "),
+                sourceHighlights = sourceHighlights,
+                truncated = truncated,
+                bookId = bookId,
+                book = book,
+                chapter = chapter,
+            )
+
         fun pendingCard(
             id: Long,
             bookId: Long = 1,

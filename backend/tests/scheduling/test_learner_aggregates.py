@@ -280,3 +280,37 @@ def test_aggregates_carry_no_raw_review_rows(session: Session) -> None:
     assert aggregates["review_count"] == 3
     bucket = _lapse_bucket(aggregates, "lapse_rate_by_card_type", "qa")
     assert bucket == {"reviews": 3, "lapses": 1, "lapse_rate": round(1 / 3, 4)}
+
+
+def test_hand_written_cards_are_excluded_from_guidance_version_attribution(
+    session: Session,
+) -> None:
+    """A card typed by the human from a dropped unit (`model='human'`, #365) came
+    from no guidance, so its lapses must not land in any guidance-version bucket —
+    edited or not. It still counts everywhere else (type, book, tag)."""
+    from recally.scheduling import learner
+
+    written = _seed_card(session, guidance_version=1)
+    hand_written = _seed_card(session, guidance_version=None, tags=["rescued"])
+    hand_written.model = "human"
+    hand_written_edited = _seed_card(
+        session, guidance_version=None, edited_at=NOW - timedelta(days=1)
+    )
+    hand_written_edited.model = "human"
+    session.flush()
+    _seed_reviews(session, written.id, [3, 3])
+    _seed_reviews(session, hand_written.id, [1, 1, 1])
+    _seed_reviews(session, hand_written_edited.id, [1, 1])
+
+    aggregates = learner.build_review_aggregates(session, now=NOW)
+
+    assert aggregates["lapse_rate_by_guidance_version"] == {
+        "1": {"reviews": 2, "lapses": 0, "lapse_rate": 0.0}
+    }, "a hand-written card's lapses leaked into guidance attribution"
+    assert aggregates["post_approval_edits"]["lapse_rate_by_guidance_version"] == {}, (
+        "an edited hand-written card leaked into the edited guidance segment"
+    )
+    tag_bucket = _lapse_bucket(aggregates, "lapse_rate_by_tag", "rescued")
+    assert tag_bucket == {"reviews": 3, "lapses": 3, "lapse_rate": 1.0}
+    type_bucket = _lapse_bucket(aggregates, "lapse_rate_by_card_type", "qa")
+    assert type_bucket is not None and type_bucket["reviews"] == 7

@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.height
 import androidx.compose.ui.unit.width
+import dev.recally.domain.model.DroppedUnit
 import dev.recally.domain.model.PendingCard
 import dev.recally.shadows.ShadowMagnifier
 import dev.recally.ui.components.SHIMMER_TAG
@@ -771,6 +772,12 @@ class ApproveScreenTest {
                             onBulkApproveClick = {},
                             onConfirmBulkApprove = {},
                             onDismissBulkApproveConfirm = {},
+                            onDismissDrop = {},
+                            onGenerateDrop = {},
+                            onStartManualCard = {},
+                            onManualCardChange = {},
+                            onCancelManualCard = {},
+                            onSubmitManualCard = {},
                             modifier = Modifier.padding(innerPadding),
                         )
                     }
@@ -945,6 +952,281 @@ class ApproveScreenTest {
         bulkApprovableCount = bulkApprovableCount,
     )
 
+    // --- Dropped (issue #365) -------------------------------------------------
+
+    private fun droppedUnit(
+        id: Long,
+        sourceHighlights: List<String> = listOf("A dropped highlight $id."),
+        truncated: Boolean = false,
+        reason: String? = "Narrative framing with no retrievable claim.",
+    ) = DroppedUnit(
+        id = id,
+        reason = reason,
+        curatedText = sourceHighlights.joinToString(" "),
+        sourceHighlights = sourceHighlights,
+        truncated = truncated,
+        bookId = 1,
+        book = "Evals for AI Engineers",
+        chapter = "1. Introduction",
+    )
+
+    private fun droppedState(
+        units: List<DroppedUnit>,
+        isOffline: Boolean = false,
+        manualCardDraft: ManualCardDraft? = null,
+        bulkApprovableCount: Int? = null,
+        cards: List<PendingCard> = emptyList(),
+    ) = ApproveUiState(
+        groups = groupIntoChapters(cards),
+        pendingCount = cards.size,
+        bulkApprovableCount = bulkApprovableCount,
+        droppedGroups = groupDropsIntoChapters(units),
+        droppedCount = units.size,
+        filter = QueueFilter.DROPPED,
+        isLoading = false,
+        isOffline = isOffline,
+        manualCardDraft = manualCardDraft,
+    )
+
+    /** A Dropped item's action cell — inside the Dropped list, not a dialog button of the same name. */
+    private fun droppedAction(label: String): SemanticsMatcher =
+        hasText(label) and hasClickAction() and hasAnyAncestor(hasTestTagValue(DROPPED_LIST_TAG))
+
+    private fun dialogButton(
+        label: String,
+        dialogTag: String,
+    ): SemanticsMatcher = hasText(label) and hasClickAction() and hasAnyAncestor(hasTestTagValue(dialogTag))
+
+    @Test
+    fun test_filter_row_shows_dropped_chip_after_needs_you() {
+        setApproveContent(queueState(listOf(queueCard(1)), bulkApprovableCount = null))
+
+        val chipLefts =
+            listOf("All", "Needs you", "Dropped").map { label ->
+                composeTestRule
+                    .onNode(hasText(label) and hasClickAction())
+                    .assertIsDisplayed()
+                    .getBoundsInRoot()
+                    .left
+            }
+        assertEquals("chips read All, Needs you, Dropped", chipLefts.sorted(), chipLefts)
+        assertEquals(3, chipLefts.distinct().size)
+    }
+
+    @Test
+    fun test_dropped_item_shows_highlights_and_reason() {
+        val unit =
+            droppedUnit(
+                id = 7,
+                sourceHighlights = listOf("First dropped heading.", "Second dropped heading."),
+                reason = "Sibling headings with no content of their own.",
+            )
+        setApproveContent(droppedState(listOf(unit)))
+
+        // Nothing is expanded or tapped: the sources are the content here.
+        composeTestRule.onNodeWithText("First dropped heading.").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Second dropped heading.").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Source 1").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Source 2").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Why it was dropped", substring = true, ignoreCase = true).assertIsDisplayed()
+        composeTestRule.onNodeWithText("Sibling headings with no content of their own.").assertIsDisplayed()
+    }
+
+    @Test
+    fun test_dropped_item_shows_truncated_chip_when_flagged() {
+        setApproveContent(droppedState(listOf(droppedUnit(id = 7, truncated = true), droppedUnit(id = 8))))
+
+        composeTestRule.onAllNodesWithText("TRUNCATED SOURCE").assertCountEquals(1)
+        composeTestRule.onNodeWithText("TRUNCATED SOURCE").assertIsDisplayed()
+    }
+
+    @Test
+    fun test_bulk_approve_bar_is_not_shown_on_dropped() {
+        // Clean cards exist, so on All the bar would show; on Dropped it acts
+        // on nothing listed and must be absent.
+        setApproveContent(droppedState(listOf(droppedUnit(id = 7)), bulkApprovableCount = 3, cards = listOf(queueCard(1))))
+
+        composeTestRule.onNodeWithTag(BULK_APPROVE_BAR_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithText("Approve 3 ready").assertDoesNotExist()
+        composeTestRule.onNodeWithText("A dropped highlight 7.").assertIsDisplayed()
+    }
+
+    @Test
+    fun test_dropped_actions_are_disabled_offline() {
+        val calls = mutableListOf<String>()
+        setApproveContent(
+            droppedState(listOf(droppedUnit(id = 7)), isOffline = true),
+            onDismissDrop = { calls += "dismiss $it" },
+            onGenerateDrop = { calls += "generate $it" },
+            onStartManualCard = { calls += "write $it" },
+        )
+
+        for (label in listOf("Dismiss", "Write card", "Generate")) {
+            composeTestRule.onNode(droppedAction(label)).assertIsNotEnabled()
+            composeTestRule.onNode(droppedAction(label)).performClick()
+            composeTestRule.waitForIdle()
+        }
+
+        assertEquals("offline, no Dropped action runs (negative)", emptyList<String>(), calls)
+        composeTestRule.onNodeWithTag(DISMISS_DROP_DIALOG_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(GENERATE_DROP_DIALOG_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithText("Offline", substring = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun test_dismiss_requires_confirmation() {
+        val dismissed = mutableListOf<Long>()
+        setApproveContent(droppedState(listOf(droppedUnit(id = 7))), onDismissDrop = { dismissed += it })
+
+        composeTestRule.onNode(droppedAction("Dismiss")).performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag(DISMISS_DROP_DIALOG_TAG).assertIsDisplayed()
+        assertEquals("the first tap only opens the dialog (negative)", emptyList<Long>(), dismissed)
+
+        composeTestRule.onNode(dialogButton("Cancel", DISMISS_DROP_DIALOG_TAG)).performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag(DISMISS_DROP_DIALOG_TAG).assertDoesNotExist()
+        assertEquals("cancelling the dialog makes no call (negative)", emptyList<Long>(), dismissed)
+
+        composeTestRule.onNode(droppedAction("Dismiss")).performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNode(dialogButton("Dismiss", DISMISS_DROP_DIALOG_TAG)).performClick()
+        composeTestRule.waitForIdle()
+        assertEquals("confirm dismisses exactly once", listOf(7L), dismissed)
+    }
+
+    @Test
+    fun test_generate_requires_confirmation() {
+        val generated = mutableListOf<Long>()
+        setApproveContent(droppedState(listOf(droppedUnit(id = 7))), onGenerateDrop = { generated += it })
+
+        composeTestRule.onNode(droppedAction("Generate")).performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag(GENERATE_DROP_DIALOG_TAG).assertIsDisplayed()
+        composeTestRule.onNodeWithText("Writer", substring = true).assertIsDisplayed()
+        assertEquals("the first tap only opens the dialog (negative)", emptyList<Long>(), generated)
+
+        composeTestRule.onNode(dialogButton("Cancel", GENERATE_DROP_DIALOG_TAG)).performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag(GENERATE_DROP_DIALOG_TAG).assertDoesNotExist()
+        assertEquals("cancelling the dialog makes no call (negative)", emptyList<Long>(), generated)
+
+        composeTestRule.onNode(droppedAction("Generate")).performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNode(dialogButton("Generate", GENERATE_DROP_DIALOG_TAG)).performClick()
+        composeTestRule.waitForIdle()
+        assertEquals("confirm generates exactly once", listOf(7L), generated)
+    }
+
+    @Test
+    fun test_manual_cloze_add_disabled_without_deletion() {
+        var submits = 0
+        var state by mutableStateOf(
+            droppedState(
+                listOf(droppedUnit(id = 7)),
+                manualCardDraft = ManualCardDraft(unitId = 7, type = PendingCard.TYPE_CLOZE, front = "Evals produce a number."),
+            ),
+        )
+        setApproveContent(state, onSubmitManualCard = { submits++ }, readState = { state })
+
+        composeTestRule.onNodeWithText("{{c1::", substring = true).assertIsDisplayed() // the syntax hint
+        composeTestRule.onNode(hasText("Add to queue") and hasClickAction()).assertIsNotEnabled()
+        composeTestRule.onNode(hasText("Add to queue") and hasClickAction()).performClick()
+        composeTestRule.waitForIdle()
+        assertEquals("a cloze without a deletion cannot be added (negative)", 0, submits)
+
+        // The same editor with a deletion enables Add: the gate is the deletion, not the editor.
+        state = state.copy(manualCardDraft = state.manualCardDraft?.copy(front = "Evals produce a {{c1::number}}."))
+        composeTestRule.waitForIdle()
+        composeTestRule.onNode(hasText("Add to queue") and hasClickAction()).assertIsEnabled()
+    }
+
+    @Test
+    fun test_manual_qa_add_disabled_with_blank_back() {
+        var submits = 0
+        var state by mutableStateOf(
+            droppedState(
+                listOf(droppedUnit(id = 7)),
+                manualCardDraft = ManualCardDraft(unitId = 7, type = PendingCard.TYPE_QA, front = "What do evals produce?", back = "  "),
+            ),
+        )
+        setApproveContent(state, onSubmitManualCard = { submits++ }, readState = { state })
+
+        composeTestRule.onNode(hasText("Add to queue") and hasClickAction()).assertIsNotEnabled()
+        composeTestRule.onNode(hasText("Add to queue") and hasClickAction()).performClick()
+        composeTestRule.waitForIdle()
+        assertEquals("a Q&A with a blank back cannot be added (negative)", 0, submits)
+
+        state = state.copy(manualCardDraft = state.manualCardDraft?.copy(back = "A trackable number."))
+        composeTestRule.waitForIdle()
+        composeTestRule.onNode(hasText("Add to queue") and hasClickAction()).assertIsEnabled()
+    }
+
+    @Test
+    fun test_dropped_empty_state_is_distinct_from_queue_clear() {
+        // Both lists are empty: All would read "Queue clear"; Dropped reads its own state.
+        setApproveContent(droppedState(emptyList()))
+
+        composeTestRule.onNodeWithText("No dropped highlights").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Queue clear").assertDoesNotExist()
+    }
+
+    @Test
+    fun test_chip_row_visible_when_queue_clear_but_drops_exist() {
+        val filters = mutableListOf<QueueFilter>()
+        setApproveContent(
+            droppedState(listOf(droppedUnit(id = 7))).copy(filter = QueueFilter.ALL),
+            onFilterChange = { filters += it },
+        )
+
+        composeTestRule.onNodeWithText("Queue clear").assertIsDisplayed()
+        composeTestRule.onNode(hasText("Dropped") and hasClickAction()).assertIsDisplayed().performClick()
+        composeTestRule.waitForIdle()
+        assertEquals(listOf(QueueFilter.DROPPED), filters)
+    }
+
+    /**
+     * Emulator verification found the Write-card toggle rendering in Material's
+     * default lavender. Its selected segment must be `primary-wash` and the
+     * unselected one the item's own `surface`, in both themes — tokens only.
+     */
+    @Test
+    fun test_manual_card_toggle_uses_design_tokens() {
+        var darkTheme by mutableStateOf(false)
+        setApproveContent(
+            droppedState(
+                listOf(droppedUnit(id = 7)),
+                manualCardDraft = ManualCardDraft(unitId = 7, type = PendingCard.TYPE_CLOZE),
+            ),
+            readDarkTheme = { darkTheme },
+        )
+        for (theme in listOf(false, true)) {
+            darkTheme = theme
+            composeTestRule.waitForIdle()
+            val tokens = if (darkTheme) DarkRecallyColorTokens else LightRecallyColorTokens
+            val themeName = if (darkTheme) "dark" else "light"
+            val frame = captureComposeRoot()
+            val selected = composeTestRule.onNode(hasText("Cloze") and hasClickAction()).getBoundsInRoot()
+            val unselected = composeTestRule.onNode(hasText("Q&A") and hasClickAction()).getBoundsInRoot()
+            val inset = 16f
+
+            assertPixelApprox(
+                "$themeName: selected segment fill",
+                frame,
+                (selected.right.value - inset).toPx(),
+                selected.centreY(),
+                tokens.primaryWash,
+            )
+            assertPixelApprox(
+                "$themeName: unselected segment fill",
+                frame,
+                (unselected.right.value - inset).toPx(),
+                unselected.centreY(),
+                tokens.surface,
+            )
+        }
+    }
+
     /** A card's Approve action row — a descendant of the queue list, unlike the dialog's own Approve button. */
     private fun approveActionInQueue(): SemanticsMatcher =
         hasText("Approve") and hasClickAction() and hasAnyAncestor(hasTestTagValue(QUEUE_LIST_TAG))
@@ -977,6 +1259,12 @@ class ApproveScreenTest {
         onBulkApproveClick: () -> Unit = {},
         onConfirmBulkApprove: () -> Unit = {},
         onDismissBulkApproveConfirm: () -> Unit = {},
+        onFilterChange: (QueueFilter) -> Unit = {},
+        onDismissDrop: (Long) -> Unit = {},
+        onGenerateDrop: (Long) -> Unit = {},
+        onStartManualCard: (Long) -> Unit = {},
+        onManualCardChange: (ManualCardDraft) -> Unit = {},
+        onSubmitManualCard: () -> Unit = {},
         readState: (() -> ApproveUiState)? = null,
         readDarkTheme: (() -> Boolean)? = null,
     ) {
@@ -985,7 +1273,7 @@ class ApproveScreenTest {
                 Scaffold { innerPadding ->
                     ApproveScreen(
                         uiState = readState?.invoke() ?: uiState,
-                        onFilterChange = {},
+                        onFilterChange = onFilterChange,
                         onToggleHighlights = onToggleHighlights,
                         onApproveCard = onApproveCard,
                         onStartEdit = onStartEdit,
@@ -999,6 +1287,12 @@ class ApproveScreenTest {
                         onBulkApproveClick = onBulkApproveClick,
                         onConfirmBulkApprove = onConfirmBulkApprove,
                         onDismissBulkApproveConfirm = onDismissBulkApproveConfirm,
+                        onDismissDrop = onDismissDrop,
+                        onGenerateDrop = onGenerateDrop,
+                        onStartManualCard = onStartManualCard,
+                        onManualCardChange = onManualCardChange,
+                        onCancelManualCard = {},
+                        onSubmitManualCard = onSubmitManualCard,
                         modifier = Modifier.padding(innerPadding),
                     )
                 }

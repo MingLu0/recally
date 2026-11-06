@@ -4,7 +4,9 @@ Spec: docs/agents.md, "Pipeline runner and handoffs". Agents never call each oth
 and hold no DB session; this module resolves them through `agents/registry.py`
 (ADR-007 — never a direct variant import), drives them in order, and is the only
 writer of `cards.status`, `highlights.processed`, `highlights.truncated` and the
-`curated_units` rows.
+`curated_units` rows. (A unit's `drop_resolution` is the one exception: a human
+action, written through `services/units.py` — dismiss and the hand-written card
+there, the generated rescue here, #365.)
 
 Handoffs:
 
@@ -95,6 +97,7 @@ from recally.models import (
 )
 from recally.models.base import utc_now
 from recally.near_duplicates import find_near_duplicates
+from recally.services.units import mark_rescued, require_unresolved_drop
 
 logger = logging.getLogger(__name__)
 
@@ -381,6 +384,83 @@ def rewrite_leech_card(
         rewrite.supersedes_card_id = leech.id
         session.commit()
         return rewrite.id
+
+
+def generate_cards_for_dropped_unit(
+    *,
+    settings: Settings,
+    session_factory: sessionmaker[Session],
+    llm_caller: LlmCaller,
+    unit_id: int,
+    agent_registry: AgentRegistry | None = None,
+) -> list[int]:
+    """A human-requested rescue of a Curator drop, through the normal loop (#365).
+
+    Spec: docs/agents.md, "Pipeline runner and handoffs"; ADR-019. This is
+    `_resolve_unit_cards` unchanged — the 3-round cap (hard rule 9), the quote and
+    blank checks, `MAX_CARDS_PER_UNIT` and the split-off path all apply. What
+    differs is around it:
+
+    - **Never auto-approved** (hard rule 1): `AUTO_APPROVE_ROUND1_ACCEPT` is forced
+      off for this call. The human asked for these cards and still decides them.
+    - **The Curator's drop reason is not sent.** `WriterRequest` has no field for
+      it and none is added: it would argue against the card.
+    - `llm_calls` rows carry the unit's id and `ingest_run_id=NULL`, like a leech
+      rewrite — no ingest run prompted them.
+    - `curated_units.decision` stays `drop`; `drop_resolution='rescued'` is
+      written in the same transaction as the cards, so a failed loop writes
+      neither and the unit stays listed. The resolution is re-checked after the
+      LLM calls, so two concurrent taps cannot both write cards.
+
+    Raises `services.units.UnitActionError` for an unknown, kept or resolved unit
+    (before any LLM call), and whatever the loop raises. Returns the card ids.
+    """
+    registry = agent_registry or default_registry
+    rescue_settings = settings.model_copy(update={"auto_approve_round1_accept": False})
+    with session_factory() as session:
+        unit = require_unresolved_drop(session, unit_id)
+        highlights = _unit_highlights(session, unit.id)
+        guidance_version, guidance = _latest_guidance(session)
+        last_call_id = int(session.scalar(select(func.coalesce(func.max(LlmCall.id), 0))) or 0)
+        session.commit()  # no open transaction while an agent runs (module docstring)
+
+        outcomes = _resolve_unit_cards(
+            registry,
+            rescue_settings,
+            llm_caller,
+            None,
+            unit,
+            highlights,
+            guidance_version,
+            guidance,
+        )
+
+        unit = require_unresolved_drop(session, unit_id)
+        cards = [_write_card(session, unit, outcome, rescue_settings) for outcome in outcomes]
+        mark_rescued(unit)
+        session.flush()
+        _attribute_cost(session, cards, unit_id=unit.id, after_call_id=last_call_id)
+        session.commit()
+        return [card.id for card in cards]
+
+
+def _attribute_cost(
+    session: Session, cards: list[Card], *, unit_id: int, after_call_id: int
+) -> None:
+    """Split this rescue's `llm_calls` cost over its cards, as `_record_outcome` does."""
+    if not cards:
+        return
+    total = int(
+        session.scalar(
+            select(func.coalesce(func.sum(LlmCall.cost_microusd), 0)).where(
+                LlmCall.unit_id == unit_id, LlmCall.id > after_call_id
+            )
+        )
+        or 0
+    )
+    share, remainder = divmod(total, len(cards))
+    for index, card in enumerate(cards):
+        card.cost_microusd = share + (1 if index < remainder else 0)
 
 
 def _leech_rewrite_critique(leech: Card) -> str:
