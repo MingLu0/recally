@@ -48,17 +48,6 @@ backend/
     pipeline.py                   # the runner; resolves agents via registry, owns all DB transitions
     near_duplicates.py            # lexical same-passage check over a chapter; the runner flags
                                   #   `duplicate_of` in the Curator payload, never merges (#291)
-    evals/
-      extract.py                  # builds the committed writer eval set from deliberate
-                                  #   human judgments; opens the database read-only (#242)
-      harness.py                  # replays Writer ⇄ Critic over the eval set via the registry;
-                                  #   runs against a throwaway db copy, refuses the production
-                                  #   path (`uv run python -m recally.evals.harness`) (#243)
-      curator_replay.py           # re-curates a read-only source db's highlights into a
-                                  #   throwaway copy and reports before/after grouping metrics
-                                  #   (`uv run python -m recally.evals.curator_replay`) (#253)
-      score.py                    # scores a run against the human's recorded verdicts;
-                                  #   every rate reported with its denominator
     llm.py                        # sole LiteLLM wrapper; logs every call to llm_calls
     logging_config.py             # configure_logging(): one handler on the `recally` logger, at INFO
     scheduling/
@@ -73,8 +62,8 @@ backend/
     migrate_to_postgres.py        # SQLite -> Postgres ORM-level copy + verify (roadmap step 7)
   alembic/                        # render_as_batch=True
   tests/
-    fixtures/                     # committed trimmed exports (roadmap step 1) + eval/writer_eval.jsonl (#242)
-    agents/  api/  scheduling/  evals/   # per-layer suites; the rest sits flat at tests/
+    fixtures/                     # committed trimmed exports (roadmap step 1)
+    agents/  api/  scheduling/    # per-layer suites; the rest sits flat at tests/
 ```
 
 ## Layering

@@ -76,6 +76,7 @@ def _request(**overrides: Any) -> WriterRequest:
         "guidance_version": GUIDANCE_VERSION,
         "guidance": GUIDANCE_TEXT,
         "critique": None,
+        "highlights": [SourceHighlight(CURATED_TEXT)],
     }
     fields.update(overrides)
     return WriterRequest(**fields)
@@ -230,7 +231,9 @@ def test_truncated_source_is_not_extended() -> None:
     """The clipped text reaches the prompt verbatim, alongside an instruction
     against reconstructing the missing words (hard rule 7)."""
     fake_llm = FakeLlm(TWO_CARD_RESPONSE)
-    DefaultWriter()(_request(curated_text=TRUNCATED_TEXT), _ctx(fake_llm))
+    DefaultWriter()(
+        _request(highlights=[SourceHighlight(TRUNCATED_TEXT, truncated=True)]), _ctx(fake_llm)
+    )
 
     prompt = _rendered_prompt(fake_llm)
     assert TRUNCATED_TEXT in prompt
@@ -736,18 +739,6 @@ def test_clipped_highlight_is_marked_in_its_own_block() -> None:
     prompt = _rendered_prompt(fake_llm)
     assert f"Highlight 1\n{FIRST_HIGHLIGHT}\n" in prompt
     assert f"Highlight 2 (clipped by the export)\n{CLIPPED_HIGHLIGHT}\n" in prompt
-
-
-def test_request_without_highlights_renders_curated_text_as_before() -> None:
-    """The replay harness builds requests without `highlights`: `curated_text` renders
-    alone under the unit heading, with no block numbering."""
-    fake_llm = FakeLlm(ONE_CARD_RESPONSE)
-
-    DefaultWriter()(_request(), _ctx(fake_llm))
-
-    prompt = _rendered_prompt(fake_llm)
-    assert f"## The curated unit\n\n{CURATED_TEXT}\n" in prompt
-    assert "Highlight 1" not in prompt
 
 
 # --- The #353 gate: no card answers itself, a lone card included --------------

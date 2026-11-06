@@ -308,3 +308,22 @@ def test_resolution_helpers_take_no_session() -> None:
         "they run on worker threads under LLM_CONCURRENCY > 1 and SQLAlchemy's "
         "Session is not thread-safe (docs/decisions/015-concurrent-unit-resolution.md)"
     )
+
+
+def test_replay_eval_tooling_is_removed() -> None:
+    """The retired offline replay/eval subsystem must not remain or be imported."""
+    backend_root = PACKAGE_ROOT.parents[1]
+    removed_paths = (
+        PACKAGE_ROOT / "evals",
+        backend_root / "tests" / "evals",
+        backend_root / "tests" / "fixtures" / "eval",
+    )
+    remaining_paths = [
+        str(path.relative_to(backend_root)) for path in removed_paths if path.exists()
+    ]
+    assert not remaining_paths, f"replay/eval tooling paths still exist: {remaining_paths}"
+
+    importers = _modules_importing(("recally." + "evals",))
+    assert not importers, (
+        f"production modules must not import the removed replay/eval tooling: {sorted(importers)}"
+    )

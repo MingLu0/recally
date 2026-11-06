@@ -56,18 +56,17 @@ class DefaultCritic:
 
 def _render_prompt(request: CriticRequest) -> str:
     template = PROMPT_PATH.read_text(encoding="utf-8")
-    highlights = request.highlights
     prompt = _keep_or_strip_block(
         template,
         TRUNCATION_BEGIN,
         TRUNCATION_END,
-        keep=request.source_truncated and not highlights,
+        keep=request.source_truncated and not request.highlights,
     )
     prompt = _keep_or_strip_block(
         prompt,
         CLIPPED_HIGHLIGHT_BEGIN,
         CLIPPED_HIGHLIGHT_END,
-        keep=any(highlight.truncated for highlight in highlights or []),
+        keep=any(highlight.truncated for highlight in request.highlights),
     )
     prompt = _keep_or_strip_block(
         prompt,
@@ -81,7 +80,9 @@ def _render_prompt(request: CriticRequest) -> str:
         for number, card in enumerate(request.cards, start=1)
     )
     return Template(prompt).substitute(
-        source_text=render_source_blocks(highlights) if highlights else request.source_text,
+        source_text=(
+            render_source_blocks(request.highlights) if request.highlights else request.source_text
+        ),
         cards=cards_block,
         previous_critique=request.previous_critique or "",
     )

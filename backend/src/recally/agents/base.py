@@ -144,7 +144,8 @@ class WriterRequest:
 
     `highlights` carries the unit's source highlights, rendered as separate numbered
     blocks in place of `curated_text`, so one highlight's words cannot read as a claim
-    about another's subject (#319). Without it the prompt renders `curated_text`.
+    about another's subject (#319). An empty list renders `curated_text` for a legacy
+    unit with no linked highlights.
     """
 
     curated_text: str
@@ -152,8 +153,8 @@ class WriterRequest:
     guidance_version: int | None
     guidance: str | None
     critique: str | None
+    highlights: list[SourceHighlight]
     previous_draft: CardDraft | None = None
-    highlights: list[SourceHighlight] | None = None
 
 
 @dataclass(frozen=True)
@@ -186,15 +187,15 @@ class CriticRequest:
     faulted wording it had suggested itself (#306).
 
     `highlights` carries the unit's source highlights, rendered as separate numbered
-    blocks in place of `source_text`, each marked when clipped (#319). Without it the
-    prompt renders `source_text` and `source_truncated` marks it as a whole.
+    blocks in place of `source_text`, each marked when clipped (#319). An empty list
+    renders `source_text` for a legacy unit with no linked highlights.
     """
 
     cards: list[CardDraft]
     source_text: str
+    highlights: list[SourceHighlight]
     source_truncated: bool = False
     previous_critique: str | None = None
-    highlights: list[SourceHighlight] | None = None
 
 
 @dataclass(frozen=True)
