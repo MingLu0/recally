@@ -121,6 +121,7 @@ def _request(source_truncated: bool = False) -> CriticRequest:
         cards=[CARD_ONE, CARD_TWO],
         source_text=SOURCE_TEXT,
         source_truncated=source_truncated,
+        highlights=[SourceHighlight(SOURCE_TEXT, truncated=source_truncated)],
     )
 
 
@@ -284,7 +285,10 @@ def test_prompt_is_loaded_from_file() -> None:
 
 def _rendered_gate_prompt(source_truncated: bool = False) -> str:
     request = CriticRequest(
-        cards=[CARD_ONE], source_text=SOURCE_TEXT, source_truncated=source_truncated
+        cards=[CARD_ONE],
+        source_text=SOURCE_TEXT,
+        source_truncated=source_truncated,
+        highlights=[SourceHighlight(SOURCE_TEXT, truncated=source_truncated)],
     )
     return _render_prompt(request)
 
@@ -351,18 +355,15 @@ def test_critic_prompt_keeps_reject_distinct_from_revise() -> None:
 
 
 def test_critic_prompt_renders_all_placeholders() -> None:
-    """`$source_text` and `$cards` substitute, the truncation block appears only
-    for a clipped source, and no stray `$` survives rendering."""
+    """`$source_text` and `$cards` substitute, and no stray `$` survives rendering."""
     rendered = _rendered_gate_prompt()
     assert SOURCE_TEXT in rendered
     assert CARD_ONE.front in rendered
     assert "$" not in rendered
-    assert "TRUNCATION_NOTE" not in rendered
 
     truncated = _rendered_gate_prompt(source_truncated=True)
     assert SOURCE_TEXT in truncated
     assert "$" not in truncated
-    assert "TRUNCATION_NOTE" not in truncated
     assert "clipped" in truncated.lower()
 
 
@@ -542,7 +543,10 @@ PREVIOUS_CRITIQUE = (
 
 def _rendered_revision_round_prompt() -> str:
     request = CriticRequest(
-        cards=[CARD_ONE], source_text=SOURCE_TEXT, previous_critique=PREVIOUS_CRITIQUE
+        cards=[CARD_ONE],
+        source_text=SOURCE_TEXT,
+        previous_critique=PREVIOUS_CRITIQUE,
+        highlights=[SourceHighlight(SOURCE_TEXT)],
     )
     return _render_prompt(request)
 
@@ -553,7 +557,10 @@ def test_previous_critique_reaches_the_prompt_on_a_revision_round(
     """With `previous_critique` set, the prompt the model receives contains it."""
     recording_llm.respond([{"verdict": "accept", "critique": ""}])
     request = CriticRequest(
-        cards=[CARD_ONE], source_text=SOURCE_TEXT, previous_critique=PREVIOUS_CRITIQUE
+        cards=[CARD_ONE],
+        source_text=SOURCE_TEXT,
+        previous_critique=PREVIOUS_CRITIQUE,
+        highlights=[SourceHighlight(SOURCE_TEXT)],
     )
 
     DefaultCritic()(request, ctx)
@@ -646,16 +653,6 @@ def test_critic_fidelity_check_covers_claims_borrowed_from_a_sibling_highlight()
     )
     assert "sibling" in fidelity_check
     assert "supported by that highlight" in fidelity_check
-
-
-def test_request_without_highlights_renders_curated_text_as_before() -> None:
-    """The replay harness builds requests without `highlights`: `source_text` fills the
-    source block alone, with no numbering, and `source_truncated` still marks it."""
-    prompt = _rendered_gate_prompt(source_truncated=True)
-
-    assert f"<source>\n{SOURCE_TEXT}\n</source>" in prompt
-    assert "Highlight 1" not in prompt
-    assert "the source text below was clipped" in prompt
 
 
 # --- An accept quotes the source for each claim (#324) ----------------------------

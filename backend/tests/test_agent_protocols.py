@@ -30,6 +30,7 @@ from recally.agents.base import (
     Learner,
     LearnerRequest,
     LearnerResult,
+    SourceHighlight,
     Writer,
     WriterRequest,
     WriterResult,
@@ -103,11 +104,16 @@ def test_conforming_stub_satisfies_protocol(ctx: AgentContext) -> None:
             guidance_version=None,
             guidance=None,
             critique=None,
+            highlights=[SourceHighlight("text")],
         ),
         ctx,
     )
     critic_result = critic(
-        CriticRequest(cards=writer_result.cards, source_text="text"),
+        CriticRequest(
+            cards=writer_result.cards,
+            source_text="text",
+            highlights=[SourceHighlight("text")],
+        ),
         ctx,
     )
     assert [v.verdict for v in critic_result.verdicts] == ["accept"]
