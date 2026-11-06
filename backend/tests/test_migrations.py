@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import Engine, create_engine, inspect
+from sqlalchemy import Engine, create_engine, inspect, text
 
 from recally.models import Base
 
@@ -143,6 +143,57 @@ def test_unreturned_highlight_ids_column_migrates_up_and_down(
 
     command.upgrade(config, "head")
     assert column_present()
+
+
+def test_migration_adds_drop_resolution_columns_nullable(
+    migration_target: tuple[Config, Engine],
+) -> None:
+    """#365: `curated_units.drop_resolution` / `drop_resolved_at` apply under
+    `render_as_batch=True` (ADR-004) as nullable columns, existing rows read NULL —
+    every historical drop is unresolved — and the downgrade removes both."""
+    config, engine = migration_target
+    resolution_columns = {"drop_resolution", "drop_resolved_at"}
+
+    def present_columns() -> dict[str, dict[str, object]]:
+        with engine.connect() as connection:
+            return {
+                str(column["name"]): dict(column)
+                for column in inspect(connection).get_columns("curated_units")
+                if column["name"] in resolution_columns
+            }
+
+    # The revision just below the new one: seed a drop the way production holds it.
+    command.upgrade(config, "8e1f4a6b2c3d")
+    assert present_columns() == {}
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO ingest_runs (id, filename, rows_seen, rows_new, rows_updated, "
+                "rows_removed, units_kept, units_dropped, highlights_dropped, "
+                "cards_generated, cost_microusd, started_at) "
+                "VALUES (1, 'old.csv', 0, 0, 0, 0, 0, 1, 1, 0, 0, '2026-09-01 00:00:00')"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO curated_units (id, ingest_run_id, curated_text, tags, decision, "
+                "reason, created_at) VALUES (1, 1, 'old drop', '[]', 'drop', 'no claim', "
+                "'2026-09-01 00:00:00')"
+            )
+        )
+
+    command.upgrade(config, "head")
+    columns = present_columns()
+    assert set(columns) == resolution_columns
+    assert all(column["nullable"] for column in columns.values())
+    with engine.connect() as connection:
+        row = connection.execute(
+            text("SELECT decision, drop_resolution, drop_resolved_at FROM curated_units")
+        ).one()
+    assert tuple(row) == ("drop", None, None)
+
+    command.downgrade(config, "8e1f4a6b2c3d")
+    assert present_columns() == {}
 
 
 def test_every_table_carries_user_id() -> None:
