@@ -147,6 +147,20 @@ class Container:
             agent_registry=self._agent_registry,
         )
 
+    def generate_cards_for_dropped_unit(self, unit_id: int) -> list[int]:
+        """Rescue a Curator drop through the Writer ⇄ Critic loop (#365, ADR-019).
+
+        At the composition root for the same reason `run_pipeline` is: the route
+        binds the container's registry and `LlmCaller`, test stubs included.
+        """
+        return pipeline.generate_cards_for_dropped_unit(
+            settings=self.settings,
+            session_factory=self._session_factory,
+            llm_caller=self.llm_caller,
+            unit_id=unit_id,
+            agent_registry=self._agent_registry,
+        )
+
 
 @lru_cache(maxsize=1)
 def get_container() -> Container:

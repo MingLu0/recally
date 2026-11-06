@@ -18,7 +18,17 @@ from apscheduler.triggers.interval import IntervalTrigger
 from fastapi import FastAPI
 
 from recally.api.errors import register_error_handlers
-from recally.api.routers import cards, decks, devices, health, ingest, jobs, reviews, stats
+from recally.api.routers import (
+    cards,
+    decks,
+    devices,
+    health,
+    ingest,
+    jobs,
+    reviews,
+    stats,
+    units,
+)
 from recally.config import get_settings
 from recally.container import get_container
 from recally.logging_config import configure_logging
@@ -97,6 +107,7 @@ def create_app() -> FastAPI:
     app.include_router(ingest.router)
     app.include_router(decks.router)
     app.include_router(cards.router)
+    app.include_router(units.router)
     app.include_router(reviews.router)
     app.include_router(stats.router)
     app.include_router(devices.router)

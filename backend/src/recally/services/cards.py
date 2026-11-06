@@ -78,35 +78,14 @@ def list_pending_cards(
 
     pending: list[PendingCard] = []
     for card in cards:
-        sources = session.scalars(
-            select(Highlight)
-            .join(CuratedUnitHighlight, CuratedUnitHighlight.highlight_id == Highlight.id)
-            .where(CuratedUnitHighlight.unit_id == card.unit_id)
-            .order_by(Highlight.export_position)
-        ).all()
-        if not sources:
+        queued = pending_card(session, card)
+        if queued is None:
             continue  # provenance is mandatory; a sourceless card cannot be reviewed
-        first = sources[0]
-        if book_id is not None and first.book_id != book_id:
+        if book_id is not None and queued.book_id != book_id:
             continue
-        if chapter is not None and first.chapter != chapter:
+        if chapter is not None and queued.chapter != chapter:
             continue
-        pending.append(
-            PendingCard(
-                id=card.id,
-                status=card.status,
-                type=card.type,
-                front=card.front,
-                back=card.back,
-                status_reason=card.status_reason,
-                source_highlights=[source.raw_text for source in sources],
-                truncated=any(source.truncated for source in sources),
-                book_id=first.book_id,
-                book=first.book.title,
-                chapter=first.chapter,
-                first_export_position=first.export_position,
-            )
-        )
+        pending.append(queued)
 
     # `id` breaks the tie cards of one unit share on every preceding key, so the
     # order is defined no matter what arrival order the unordered select had
@@ -115,6 +94,38 @@ def list_pending_cards(
         key=lambda card: (card.book, card.chapter or "", card.first_export_position, card.id)
     )
     return pending
+
+
+def pending_card(session: Session, card: Card) -> PendingCard | None:
+    """One card in the queue's shape, or None when its unit has no source highlight.
+
+    Shared by the queue listing and the dropped-unit rescue (#365), whose responses
+    are documented as the `GET /cards/pending` card shape so the client can drop a
+    rescued card straight into its queue groups.
+    """
+    sources = session.scalars(
+        select(Highlight)
+        .join(CuratedUnitHighlight, CuratedUnitHighlight.highlight_id == Highlight.id)
+        .where(CuratedUnitHighlight.unit_id == card.unit_id)
+        .order_by(Highlight.export_position)
+    ).all()
+    if not sources:
+        return None
+    first = sources[0]
+    return PendingCard(
+        id=card.id,
+        status=card.status,
+        type=card.type,
+        front=card.front,
+        back=card.back,
+        status_reason=card.status_reason,
+        source_highlights=[source.raw_text for source in sources],
+        truncated=any(source.truncated for source in sources),
+        book_id=first.book_id,
+        book=first.book.title,
+        chapter=first.chapter,
+        first_export_position=first.export_position,
+    )
 
 
 def pending_counts(session: Session, *, user_id: int = 1) -> dict[str, int]:

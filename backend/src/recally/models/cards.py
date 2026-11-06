@@ -8,6 +8,10 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from recally.models.base import Base, UserScopedMixin, utc_now
 
+# `cards.model` for a card the human typed from a dropped unit (#365, ADR-019): no
+# Writer wrote it, so it sits outside guidance-version attribution in the Learner.
+HUMAN_AUTHORED_MODEL = "human"
+
 
 class CuratedUnit(UserScopedMixin, Base):
     """One Curator output. Most units wrap a single highlight; a group wraps several.
@@ -26,6 +30,13 @@ class CuratedUnit(UserScopedMixin, Base):
     tags: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     decision: Mapped[str] = mapped_column(String(16), nullable=False)
     reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # The human's answer to a `drop` (#365, ADR-019); `decision` itself is the
+    # Curator's output and eval truth, so it is never rewritten. NULL = unresolved
+    # (listed by `GET /units/dropped`), `dismissed` = the human agreed with the drop,
+    # `rescued` = the human made a card from it — the Curator false-negative signal.
+    # Only ever set on a `decision='drop'` unit.
+    drop_resolution: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    drop_resolved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     # The Curator batch call that produced this unit (not the chapter: a long chapter
     # is several calls). `use_alter` because `llm_calls.unit_id` points back here.
     llm_call_id: Mapped[int | None] = mapped_column(
