@@ -1,15 +1,19 @@
 package dev.recally.ui.screens.approve
 
+import dev.recally.domain.model.DroppedUnit
 import dev.recally.domain.model.PendingCard
 
 /**
- * The "needs you" filter chip (docs/android.md, "Screens → 3. Approval
- * queue"): `needs_human` cards are the ones the Writer ⇄ Critic loop could
- * not clear, so they get their own filter rather than folding into the queue.
+ * The Approve filter chips (docs/android.md, "Screens → 3. Approval queue"),
+ * rendered in this order. `needs_human` cards are the ones the Writer ⇄
+ * Critic loop could not clear, so they get their own filter rather than
+ * folding into the queue. DROPPED is not a card filter at all: it shows the
+ * Curator's drops, a separate list (issue #365).
  */
 enum class QueueFilter {
     ALL,
     NEEDS_YOU,
+    DROPPED,
 }
 
 /**
@@ -42,6 +46,49 @@ fun groupIntoChapters(cards: List<PendingCard>): List<ChapterGroup> {
         }
     }
     return groups
+}
+
+/** A run of dropped units from one book chapter — the same run-based grouping as [ChapterGroup]. */
+data class DroppedChapterGroup(
+    val bookId: Long,
+    val book: String,
+    val chapter: String,
+    val units: List<DroppedUnit>,
+)
+
+/** Groups `GET /units/dropped`'s ordered list into runs, preserving the server order. */
+fun groupDropsIntoChapters(units: List<DroppedUnit>): List<DroppedChapterGroup> {
+    val groups = mutableListOf<DroppedChapterGroup>()
+    for (unit in units) {
+        val last = groups.lastOrNull()
+        if (last != null && last.bookId == unit.bookId && last.chapter == unit.chapter) {
+            groups[groups.lastIndex] = last.copy(units = last.units + unit)
+        } else {
+            groups += DroppedChapterGroup(bookId = unit.bookId, book = unit.book, chapter = unit.chapter, units = listOf(unit))
+        }
+    }
+    return groups
+}
+
+/**
+ * The open "Write card" editor on one dropped unit (issue #365). Held in the
+ * UiState, not in Compose, so a failed submit keeps the typed text and shows
+ * the server's 422 [error] inline.
+ */
+data class ManualCardDraft(
+    val unitId: Long,
+    val type: String = PendingCard.TYPE_QA,
+    val front: String = "",
+    val back: String = "",
+    val error: String? = null,
+) {
+    /**
+     * Add is enabled only for a plausible card: a Q&A needs both sides, a
+     * cloze a `{{c1::…}}` deletion in its front. Nothing parses the cloze
+     * beyond that — the server validates.
+     */
+    val canSubmit: Boolean
+        get() = false
 }
 
 /**
@@ -86,6 +133,17 @@ data class ApproveUiState(
      * confirm passes the text to the server.
      */
     val rejectReasonDrafts: Map<Long, String> = emptyMap(),
+    /** The Curator's drops (issue #365), grouped by chapter in server order. */
+    val droppedGroups: List<DroppedChapterGroup> = emptyList(),
+    /** The header's "N dropped": `GET /units/dropped`'s collection-wide `count`, never the list length. */
+    val droppedCount: Int? = null,
+    /** The dropped unit with an action in flight; every Dropped action waits for it. */
+    val busyDropUnitId: Long? = null,
+    /** The dropped unit whose Generate call is running — it shows the progress state. */
+    val generatingUnitId: Long? = null,
+    /** A failed Dropped action's message, keyed by unit; the item stays listed. */
+    val dropErrors: Map<Long, String> = emptyMap(),
+    val manualCardDraft: ManualCardDraft? = null,
 ) {
     /**
      * The bulk bar shows only when there is clean work to do. It is hidden on
@@ -108,6 +166,8 @@ data class ApproveUiState(
                         val kept = group.cards.filter(PendingCard::isNeedsHuman)
                         if (kept.isEmpty()) null else group.copy(cards = kept)
                     }
+                // Dropped units are not cards; the Dropped list renders from droppedGroups.
+                QueueFilter.DROPPED -> emptyList()
             }
 
     /** Source highlights are collapsed by default (design-system.md, "Source-highlight disclosure"). */

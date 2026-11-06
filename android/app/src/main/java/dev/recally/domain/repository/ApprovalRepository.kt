@@ -1,6 +1,8 @@
 package dev.recally.domain.repository
 
 import dev.recally.domain.model.ApproveBatchResult
+import dev.recally.domain.model.DroppedUnits
+import dev.recally.domain.model.PendingCard
 import dev.recally.domain.model.PendingQueue
 
 /**
@@ -54,4 +56,34 @@ interface ApprovalRepository {
         cardId: Long,
         reason: String? = null,
     ): Result<Unit>
+
+    /**
+     * The Curator's unresolved drops, from every ingest run, in the server's
+     * order (book, chapter, export position), with the collection-wide count
+     * (issue #365).
+     */
+    suspend fun droppedUnits(): Result<DroppedUnits>
+
+    /** The Curator was right: hide the drop (`POST /units/{id}/dismiss`). */
+    suspend fun dismissDroppedUnit(unitId: Long): Result<Unit>
+
+    /**
+     * Run the Writer ⇄ Critic loop on a drop (`POST /units/{id}/generate`).
+     * The server answers only after the cards are written — often 30–90 s —
+     * so this rides the long-read-timeout client. Returns the new cards in
+     * queue shape; none is approved (hard rule 1).
+     */
+    suspend fun generateCardsForDroppedUnit(unitId: Long): Result<List<PendingCard>>
+
+    /**
+     * A hand-written card on a drop (`POST /units/{id}/cards`), queued as
+     * `pending_review` — still decided in Approve (hard rule 1). A 422 carries
+     * the server's `detail`.
+     */
+    suspend fun createCardForDroppedUnit(
+        unitId: Long,
+        type: String,
+        front: String,
+        back: String,
+    ): Result<PendingCard>
 }

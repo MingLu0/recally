@@ -96,6 +96,12 @@ fun ApproveScreen(
     onBulkApproveClick: () -> Unit,
     onConfirmBulkApprove: () -> Unit,
     onDismissBulkApproveConfirm: () -> Unit,
+    onDismissDrop: (Long) -> Unit,
+    onGenerateDrop: (Long) -> Unit,
+    onStartManualCard: (Long) -> Unit,
+    onManualCardChange: (ManualCardDraft) -> Unit,
+    onCancelManualCard: () -> Unit,
+    onSubmitManualCard: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier.fillMaxSize()) {
@@ -312,7 +318,7 @@ private fun FilterRow(
                 vertical = RecallySpacing.sm,
             ),
     ) {
-        QueueFilter.entries.forEach { option ->
+        QueueFilter.entries.filter { it != QueueFilter.DROPPED }.forEach { option ->
             FilterChip(
                 selected = filter == option,
                 onClick = { onFilterChange(option) },
@@ -322,6 +328,7 @@ private fun FilterRow(
                             when (option) {
                                 QueueFilter.ALL -> "All"
                                 QueueFilter.NEEDS_YOU -> "Needs you"
+                                QueueFilter.DROPPED -> ""
                             },
                     )
                 },
@@ -954,6 +961,9 @@ internal const val BULK_APPROVE_PILL_TAG = "bulkApprovePill"
 internal const val BULK_APPROVE_CONFIRM_DIALOG_TAG = "bulkApproveConfirmDialog"
 internal const val APPROVE_CONFIRM_DIALOG_TAG = "approveConfirmDialog"
 internal const val REJECT_DIALOG_TAG = "rejectDialog"
+internal const val DROPPED_LIST_TAG = "droppedList"
+internal const val DISMISS_DROP_DIALOG_TAG = "dismissDropDialog"
+internal const val GENERATE_DROP_DIALOG_TAG = "generateDropDialog"
 
 // --- Previews (docs/android.md, "Every previewable composable has a preview") ---
 
@@ -1025,6 +1035,12 @@ private fun ApproveScreenPreviewHost(uiState: ApproveUiState) {
             onBulkApproveClick = {},
             onConfirmBulkApprove = {},
             onDismissBulkApproveConfirm = {},
+            onDismissDrop = {},
+            onGenerateDrop = {},
+            onStartManualCard = {},
+            onManualCardChange = {},
+            onCancelManualCard = {},
+            onSubmitManualCard = {},
         )
     }
 }

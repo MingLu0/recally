@@ -391,6 +391,20 @@ class ApproveViewModel
             }
         }
 
+        /** Dismiss a drop after its confirm dialog (issue #365). */
+        fun dismissDrop(unitId: Long) {}
+
+        /** Generate cards for a drop after its confirm dialog (issue #365). */
+        fun generateDrop(unitId: Long) {}
+
+        fun onStartManualCard(unitId: Long) {}
+
+        fun onManualCardChange(draft: ManualCardDraft) {}
+
+        fun onCancelManualCard() {}
+
+        fun submitManualCard() {}
+
         private companion object {
             const val MESSAGE_GENERIC = "Something went wrong — try again."
 

@@ -6,8 +6,11 @@ import dev.recally.data.remote.EditCardRequest
 import dev.recally.data.remote.RecallyApi
 import dev.recally.data.remote.RejectCardRequest
 import dev.recally.data.remote.apiCall
+import dev.recally.di.IngestApi
 import dev.recally.di.IoDispatcher
 import dev.recally.domain.model.ApproveBatchResult
+import dev.recally.domain.model.DroppedUnits
+import dev.recally.domain.model.PendingCard
 import dev.recally.domain.model.PendingQueue
 import dev.recally.domain.repository.ApprovalRepository
 import dev.recally.domain.repository.Result
@@ -24,6 +27,7 @@ class ApprovalRepositoryImpl
     @Inject
     constructor(
         private val api: RecallyApi,
+        @IngestApi private val longReadApi: RecallyApi,
         @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     ) : ApprovalRepository {
         override suspend fun pendingCards(): Result<PendingQueue> =
@@ -67,6 +71,20 @@ class ApprovalRepositoryImpl
             withContext(ioDispatcher) {
                 apiCall { api.rejectCard(cardId, RejectCardRequest(reason = reason)) }.toUnit()
             }
+
+        override suspend fun droppedUnits(): Result<DroppedUnits> = Result.UnexpectedError(NotImplementedError())
+
+        override suspend fun dismissDroppedUnit(unitId: Long): Result<Unit> = Result.UnexpectedError(NotImplementedError())
+
+        override suspend fun generateCardsForDroppedUnit(unitId: Long): Result<List<PendingCard>> =
+            Result.UnexpectedError(NotImplementedError())
+
+        override suspend fun createCardForDroppedUnit(
+            unitId: Long,
+            type: String,
+            front: String,
+            back: String,
+        ): Result<PendingCard> = Result.UnexpectedError(NotImplementedError())
 
         /** The updated card in the response is of no use to a queue that drops the row. */
         private fun <T> Result<T>.toUnit(): Result<Unit> =

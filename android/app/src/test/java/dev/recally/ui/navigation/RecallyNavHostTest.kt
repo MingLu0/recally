@@ -18,8 +18,10 @@ import androidx.test.core.app.ApplicationProvider
 import dev.recally.domain.model.ApproveBatchResult
 import dev.recally.domain.model.Deck
 import dev.recally.domain.model.DeckCard
+import dev.recally.domain.model.DroppedUnits
 import dev.recally.domain.model.DueSummary
 import dev.recally.domain.model.ForecastDay
+import dev.recally.domain.model.PendingCard
 import dev.recally.domain.model.PendingQueue
 import dev.recally.domain.model.Stats
 import dev.recally.domain.repository.ApprovalRepository
@@ -353,6 +355,21 @@ class RecallyNavHostTest {
 
         override suspend fun approveBatch(cardIds: List<Long>): Result<List<ApproveBatchResult>> =
             throw UnsupportedOperationException("Today never bulk-approves")
+
+        override suspend fun droppedUnits(): Result<DroppedUnits> = Result.NetworkError(IOException("no route to host"))
+
+        override suspend fun dismissDroppedUnit(unitId: Long): Result<Unit> =
+            throw UnsupportedOperationException("Today never dismisses drops")
+
+        override suspend fun generateCardsForDroppedUnit(unitId: Long): Result<List<PendingCard>> =
+            throw UnsupportedOperationException("Today never generates cards")
+
+        override suspend fun createCardForDroppedUnit(
+            unitId: Long,
+            type: String,
+            front: String,
+            back: String,
+        ): Result<PendingCard> = throw UnsupportedOperationException("Today never writes cards")
     }
 
     /** Decks are remote-only; the rail stays empty when /decks is unreachable. */
