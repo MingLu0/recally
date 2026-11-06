@@ -905,11 +905,11 @@ def _resolve_card(
     source_truncated: bool,
     guidance_version: int | None,
     guidance: str | None,
+    highlights: list[SourceHighlight],
     card_id: int | None = None,
     draft_index: int | None = None,
     born_in_revision: bool = False,
     round_one_verdict: CardVerdict | None = None,
-    highlights: list[SourceHighlight] | None = None,
 ) -> _CardOutcome:
     """One card's Critic ⇄ Writer rounds, bounded by LLM_MAX_ROUNDS (hard rule 9).
 
@@ -923,8 +923,8 @@ def _resolve_card(
     round 1, so `AUTO_APPROVE_ROUND1_ACCEPT` never approves it (hard rule 1).
 
     `round_one_verdict` is this draft's verdict from the unit's one round-1 Critic
-    call (#316), which counts as its round 1. Without it, as for a split-off or a
-    direct call from the eval harness, this makes its own round-1 Critic call.
+    call (#316), which counts as its round 1. Without it, as for a split-off, this
+    makes its own round-1 Critic call.
 
     Session-free by construction (ADR-015): this returns a `_CardOutcome` and the
     caller writes it. That is what lets a whole unit resolve on a worker thread —
@@ -1043,8 +1043,8 @@ def _check_accept_quotes(
     An accept used to record no reason, so the logs could not show what the Critic
     checked (#324). This overrides whatever status the accept earned, including
     `approved` under `AUTO_APPROVE_ROUND1_ACCEPT` (hard rule 1). The source is what
-    the Critic was shown: the highlights, or the curated text when there are none.
-    Each quote is one contiguous span, so it must lie within a single block.
+    the Critic was shown: the highlights, or the curated text for a unit with no
+    linked highlights. Each quote is one contiguous span within a single block.
     """
     if outcome.terminal != "accept":
         return outcome

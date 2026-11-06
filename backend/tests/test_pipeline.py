@@ -32,7 +32,6 @@ from sqlalchemy.pool import StaticPool
 
 from recally.agents.base import (
     AgentContext,
-    CardDraft,
     CriticRequest,
     CriticResult,
     WriterRequest,
@@ -56,7 +55,6 @@ from recally.models import (
     IngestRun,
     LlmCall,
 )
-from recally.pipeline import _resolve_card
 
 TEST_API_KEY = "test-key-not-a-real-secret"
 FIXTURE_A = Path(__file__).parent / "fixtures" / "oreilly-annotations-a.csv"
@@ -102,8 +100,7 @@ def _fill_source_quote(scripted: str, messages: list[dict[str, Any]]) -> str:
         return scripted
     prompt = messages[0]["content"]
     first_highlight = re.search(r"^Highlight 1.*\n(.+)$", prompt, flags=re.MULTILINE)
-    if first_highlight is None:  # a direct `_resolve_card` call; nothing checks its quotes
-        return scripted
+    assert first_highlight is not None, "the prompt must contain numbered source highlights"
     return scripted.replace(SOURCE_QUOTE, json.dumps(first_highlight.group(1))[1:-1])
 
 
@@ -1514,37 +1511,6 @@ def test_unit_critic_call_is_logged_with_round_one_and_no_draft_index(
         for call in all_llm_calls(container, run_id)
         if call.agent == "critic/default"
     ] == [(1, None), (2, 1)]
-
-
-def test_resolve_card_alone_still_runs_its_own_round_one(
-    container: Container, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """The eval harness calls `_resolve_card` per draft with these arguments
-    (`evals/harness.py`), so without a unit verdict it makes its own round-1 call."""
-    _, critic_requests = record_agent_requests(monkeypatch)
-    ScriptedLlm(monkeypatch, [critic_response(ACCEPT)])
-    unit = CuratedUnit(id=1, curated_text="The curated unit text.", tags=["agents"])
-    draft = CardDraft(
-        type="qa", front="Card A?", back="Answer.", rationale="r", guidance_version=None
-    )
-
-    outcome = _resolve_card(
-        container.agent_registry,
-        container.settings,
-        container.llm_caller,
-        None,
-        unit,
-        draft,
-        source_truncated=False,
-        guidance_version=None,
-        guidance=None,
-    )
-
-    assert outcome.status == "pending_review"
-    assert outcome.generation_rounds == 1
-    assert [request.cards for request in critic_requests] == [[draft]]
-    critic_calls = [call for call in all_llm_calls(container) if call.agent == "critic/default"]
-    assert [call.round for call in critic_calls] == [1]
 
 
 # --- Idempotency and crash recovery ----------------------------------------------

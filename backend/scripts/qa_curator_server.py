@@ -1,5 +1,5 @@
-"""Seed the evals database with real production highlights, for phone
-approval-queue passes and eval harness runs (#253, #256).
+"""Seed a QA database with real production highlights for phone
+approval-queue passes (#253, #256).
 
 Not a test and not part of `src/recally/` — a developer tool, same precedent as
 `scripts/seed_demo.py`. Unlike the demo seed, what lands in the queue is real
@@ -8,7 +8,7 @@ LLM output: this script only copies `books` + `highlights` (reset to
 fresh, migrated target. The pipeline trigger and the phone then do the rest.
 
 The default target is `evals.db` in the main checkout's `data/` dir — the
-canonical eval set (#256), which accumulates human labels and must survive
+QA database (#256), which accumulates human labels and must survive
 worktree cleanup. Because those labels are irreplaceable, an existing target
 is never silently overwritten: re-seeding it requires `--overwrite`.
 
