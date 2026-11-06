@@ -48,6 +48,8 @@ One row per Curator output. Most units wrap a single highlight; a group (e.g. th
 | decision | text | `keep` / `drop` |
 | reason | text, nullable | Curator rationale |
 | llm_call_id | FK llm_calls, nullable | the Curator call that produced this unit — the specific batch call, not the chapter, since a chapter over `CURATOR_MAX_BATCH` is several calls. Null for units written before the link existed (no backfill) |
+| drop_resolution | text, nullable | the human's answer to a drop (ADR-019). NULL = unresolved (listed by `GET /units/dropped`); `dismissed` = the human agreed with the drop; `rescued` = the human made a card from it, by generation or by hand — the Curator false-negative signal. Only ever set on a `decision='drop'` unit; `decision` itself is never rewritten, it is the Curator's output and eval truth |
+| drop_resolved_at | datetime, nullable | when the human resolved it |
 | created_at | datetime | |
 
 ### curated_unit_highlights
@@ -75,9 +77,9 @@ PK (`unit_id`, `highlight_id`). Gives every card full provenance back to each so
 | approved_at | datetime, nullable | when the human approved; `card_state` is created at the same time |
 | edited_at | datetime, nullable | last **post-approval** `PATCH` of `front`/`back`/`tags`. FSRS state is untouched by an edit; the timestamp lets the Learner segment hand-fixed cards so they do not flatter the `guidance_version` that wrote the flawed original (ADR-008). A pre-approval save of a queued card does not set it — pre-approval edits are read through `original_front`/`original_back` vs `front`/`back` (ADR-018) |
 | suspended_until | datetime, nullable | NULL = in rotation. Bury sets the next day boundary in `RECALLY_TIMEZONE`; suspend sets a far-future sentinel. `GET /reviews/due` excludes any card whose value is in the future; FSRS state is never recomputed (ADR-008) |
-| generation_rounds | int | Writer⇄Critic rounds used for this card (per card, not per unit) |
+| generation_rounds | int | Writer⇄Critic rounds used for this card (per card, not per unit); `0` for a hand-written card |
 | draft_index | int, nullable | which draft of the unit's round-1 Writer call (0, 1, 2) this card resolved from; its round-2+ Critic and revision-Writer calls carry the same `llm_calls.draft_index`, so `(unit_id, draft_index)` joins a card to its own loop; the unit's round-1 Critic call judges every first draft at once and carries none, and verdict order maps to `draft_index` (#316). A split-off draft's own round-1 Critic call does carry it. Null for a leech rewrite (its calls carry the leech's `card_id`) and for cards written before the column existed |
-| model | text | generating model (for quality analysis) |
+| model | text | generating model (for quality analysis); `human` for a card the human typed on a dropped unit (`POST /units/{id}/cards`, ADR-019) — such a card has `generation_rounds=0`, `guidance_version=NULL`, `cost_microusd=0` and `original_*` equal to the typed text, and is excluded from the Learner's guidance-version attribution |
 | guidance_version | int, nullable FK writer_guidance | which Learner guidance was in the Writer prompt |
 | cost_microusd | int | generation cost |
 | created_at | datetime | |

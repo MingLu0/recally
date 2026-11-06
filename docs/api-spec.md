@@ -124,6 +124,53 @@ There is deliberately no bulk reject: a rejection carries a reason that feeds th
 `{ "reason": "..." }` → status `rejected`. Reasons feed the Learner.
 **Response**: the updated card (same shape as `PATCH /cards/{id}` below).
 
+## Dropped units
+
+The Curator's drops, listed and resolved by the human (issue #365, ADR-019). A dropped highlight produces no card, so before these routes it was visible only as a count on `GET /ingest/status`. **`curated_units.decision` is never rewritten** — it stays `drop`, the Curator's output and eval truth; the human's answer is `drop_resolution` (`dismissed` / `rescued`) and `drop_resolved_at` (docs/data-model.md). Both rescues land in the approval queue and still need Approve (hard rule 1).
+
+### GET /units/dropped
+`?book_id=&chapter=`. Unresolved drops (`drop_resolution` NULL) from **every** ingest run, ordered book, chapter, then the smallest `export_position` among the unit's highlights — the same order as `GET /cards/pending`. Each unit carries every source highlight (a group has several); `truncated` is true if any is clipped.
+
+Excluded, because there is nothing left to rescue: a unit whose highlights are **all** `removed_at` set, and a **stale** drop — one any of whose highlights has since been curated into a newer unit (a changed re-import resets `processed=false`, hard rule 6, and the Curator writes a new unit, so the old drop no longer describes the current text).
+
+`count` is the **collection-wide** unresolved total and ignores the filters, for the same reason `GET /cards/pending` carries `counts`: the Approve header's "N dropped" must be right whatever the list shows.
+```json
+{
+  "count": 19,
+  "units": [
+    {
+      "id": 412, "reason": "Sibling headings with no content of their own.",
+      "curated_text": "Error analysis. Axial coding.",
+      "source_highlights": ["Error analysis", "Axial coding"],
+      "truncated": false,
+      "book_id": 1, "book": "Evals for AI Engineers", "chapter": "3. Error Analysis",
+      "created_at": "2026-09-04T09:01:12Z",
+      "drop_resolution": null, "drop_resolved_at": null
+    }
+  ]
+}
+```
+
+### POST /units/{id}/dismiss
+The Curator was right → `drop_resolution='dismissed'`, `drop_resolved_at` set. No body. **Response**: the unit, in the shape above, with the resolution filled in. No undo.
+
+### POST /units/{id}/generate
+Runs the Writer ⇄ Critic loop on the unit and **responds after the cards are written**, like `POST /ingest` — the client reports a real result, not "accepted". The loop is the pipeline's own (docs/agents.md, "Pipeline runner and handoffs"): the 3-round cap, the post-accept checks and the 3-card cap all apply, and the Curator's drop reason is not sent to the Writer. **Never auto-approved**: cards land `pending_review` / `needs_human` even with `AUTO_APPROVE_ROUND1_ACCEPT` on. `drop_resolution='rescued'` is written in the same transaction as the cards. No body.
+
+**Response**: `{ "cards": [...] }`, each in the `GET /cards/pending` card shape, so the client can insert them into its queue groups without a refetch.
+
+A loop failure is a `502` and writes nothing: the unit stays unresolved and listed. Takes as long as one unit's Writer ⇄ Critic chain (often 30–90 s); clients must set a long read timeout.
+
+### POST /units/{id}/cards
+A hand-written card. Body `{ "type": "qa" | "cloze", "front": "...", "back": "..." }` (`back` may be empty for a cloze). Creates one card on the unit with `status='pending_review'`, `original_front`/`original_back` = the typed text, `generation_rounds=0`, `model='human'`, `guidance_version=null`, `cost_microusd=0` and the unit's tags; sets `drop_resolution='rescued'`. No LLM call.
+
+**Response**: the card, in the `GET /cards/pending` card shape.
+
+`422` for a blank `front`, a `qa` card with a blank `back`, or a `cloze` whose front does not hold exactly one `{{c1::…}}` deletion (the Writer's single-deletion rule, docs/agents.md §3).
+
+### Errors (all three actions)
+`404` unknown unit; `409` a `keep` unit (there is no drop to resolve); `409` an already-resolved unit — a second tap must not generate twice, and `generate` refuses before any LLM call.
+
 ## Card edits
 
 `PATCH /cards/{id}` saves a wording edit. It is deterministic, involves no LLM
@@ -254,7 +301,7 @@ Idempotent by hard rule 6: re-uploading an unchanged file reports `0` new / `0` 
 `422` if the body is not a CSV the adapter can parse. `401` without a valid `X-API-Key`.
 
 ### GET /ingest/status
-Latest `ingest_runs` row; 404 before the first ingest, so "never ingested" stays distinguishable from "ingested nothing". `units_dropped`/`highlights_dropped` are the Curator's filter output: a dropped highlight produces no card, so without them a wrongly-dropped highlight is invisible everywhere (a wrongly-*grouped* one is not — `GET /cards/pending` shows every source highlight of a unit). They are also what makes the PRD's curation-yield metric computable.
+Latest `ingest_runs` row; 404 before the first ingest, so "never ingested" stays distinguishable from "ingested nothing". `units_dropped`/`highlights_dropped` are the Curator's filter output: a dropped highlight produces no card, so without them a wrongly-dropped highlight would be invisible — `GET /units/dropped` now lists each drop itself, with its reason, for the human to dismiss or rescue (see *Dropped units*) (a wrongly-*grouped* one is not — `GET /cards/pending` shows every source highlight of a unit). They are also what makes the PRD's curation-yield metric computable.
 ```json
 {
   "filename": "30-agents-every-oreilly-annotations.csv",

@@ -84,6 +84,28 @@ interface RecallyApi {
     ): SuspendedUntilResponse
 
     // Decks & browsing
+    // --- Dropped units (docs/api-spec.md, "Dropped units"; issue #365) ---
+
+    @GET("units/dropped")
+    suspend fun droppedUnits(): DroppedUnitsResponse
+
+    @POST("units/{unit_id}/dismiss")
+    suspend fun dismissUnit(
+        @Path("unit_id") unitId: Long,
+    ): DroppedUnitDto
+
+    /** Answers only after the Writer ⇄ Critic loop has run: call it on the long-read client. */
+    @POST("units/{unit_id}/generate")
+    suspend fun generateUnitCards(
+        @Path("unit_id") unitId: Long,
+    ): GeneratedCardsResponse
+
+    @POST("units/{unit_id}/cards")
+    suspend fun createUnitCard(
+        @Path("unit_id") unitId: Long,
+        @Body body: HandWrittenCardRequest,
+    ): PendingCardDto
+
     @GET("decks")
     suspend fun decks(): DeckListResponse
 

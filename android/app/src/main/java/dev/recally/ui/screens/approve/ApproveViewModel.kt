@@ -5,6 +5,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.recally.di.IoDispatcher
+import dev.recally.domain.model.DroppedUnits
+import dev.recally.domain.model.PendingCard
+import dev.recally.domain.model.PendingQueue
 import dev.recally.domain.repository.ApprovalRepository
 import dev.recally.domain.repository.RejectReasonDraftsRepository
 import dev.recally.domain.repository.Result
@@ -70,6 +73,16 @@ class ApproveViewModel
                 }
             }
 
+        /** A Dropped action that throws keeps its item and frees the Dropped actions. */
+        private val dropExceptionHandler =
+            CoroutineExceptionHandler { _, _ ->
+                mutableUiState.update { state ->
+                    val unitId = state.busyDropUnitId
+                    val idle = state.copy(busyDropUnitId = null, generatingUnitId = null)
+                    if (unitId == null) idle.copy(errorMessage = MESSAGE_GENERIC) else idle.withDropError(unitId, MESSAGE_GENERIC)
+                }
+            }
+
         /**
          * Draft writes funnel through one actor coroutine so they land in the
          * order they were typed (issue #343). DataStore serialises edits to a
@@ -122,38 +135,58 @@ class ApproveViewModel
             mutableUiState.update { it.copy(rejectReasonDrafts = drafts) }
         }
 
+        /**
+         * Loads the queue and the Curator's drops together (issue #365): one
+         * screen entry, one refresh, both lists. The queue's result decides the
+         * screen-level state (offline, 401, error) exactly as before; a drops
+         * failure adds its own, and the queue's error message wins a tie.
+         */
         fun refresh() {
             viewModelScope.launch(exceptionHandler) {
                 mutableUiState.update { it.copy(isLoading = true, errorMessage = null) }
-                when (val result = withContext(ioDispatcher) { approvalRepository.pendingCards() }) {
-                    is Result.Success ->
-                        mutableUiState.update {
-                            it.copy(
-                                groups = groupIntoChapters(result.data.cards),
-                                pendingCount = result.data.counts.total,
-                                bulkApprovableCount = result.data.counts.pendingReview,
-                                isLoading = false,
-                                isOffline = false,
-                                isUnauthorized = false,
-                            )
-                        }
-                    Result.Unauthorized ->
-                        mutableUiState.update { it.copy(isLoading = false, isUnauthorized = true) }
-                    is Result.NetworkError ->
-                        mutableUiState.update { it.copy(isLoading = false, isOffline = true) }
-                    is Result.HttpError ->
-                        mutableUiState.update {
-                            it.copy(isLoading = false, errorMessage = result.detail ?: MESSAGE_GENERIC)
-                        }
-                    // The server answered and the answer could not be read —
-                    // not a connectivity failure (issue #188).
-                    is Result.UnexpectedError ->
-                        mutableUiState.update {
-                            it.copy(isLoading = false, errorMessage = result.displayMessage())
-                        }
-                }
+                val pending = withContext(ioDispatcher) { approvalRepository.pendingCards() }
+                val dropped = withContext(ioDispatcher) { approvalRepository.droppedUnits() }
+                mutableUiState.update { applyDropped(applyPending(it, pending), dropped).copy(isLoading = false) }
             }
         }
+
+        private fun applyPending(
+            state: ApproveUiState,
+            result: Result<PendingQueue>,
+        ): ApproveUiState =
+            when (result) {
+                is Result.Success ->
+                    state.copy(
+                        groups = groupIntoChapters(result.data.cards),
+                        pendingCount = result.data.counts.total,
+                        bulkApprovableCount = result.data.counts.pendingReview,
+                        isOffline = false,
+                        isUnauthorized = false,
+                    )
+                Result.Unauthorized -> state.copy(isUnauthorized = true)
+                is Result.NetworkError -> state.copy(isOffline = true)
+                is Result.HttpError -> state.copy(errorMessage = result.detail ?: MESSAGE_GENERIC)
+                // The server answered and the answer could not be read —
+                // not a connectivity failure (issue #188).
+                is Result.UnexpectedError -> state.copy(errorMessage = result.displayMessage())
+            }
+
+        private fun applyDropped(
+            state: ApproveUiState,
+            result: Result<DroppedUnits>,
+        ): ApproveUiState =
+            when (result) {
+                is Result.Success ->
+                    state.copy(
+                        droppedGroups = groupDropsIntoChapters(result.data.units),
+                        droppedCount = result.data.count,
+                        dropErrors = emptyMap(),
+                    )
+                Result.Unauthorized -> state.copy(isUnauthorized = true)
+                is Result.NetworkError -> state.copy(isOffline = true)
+                is Result.HttpError -> state.copy(errorMessage = state.errorMessage ?: result.detail ?: MESSAGE_GENERIC)
+                is Result.UnexpectedError -> state.copy(errorMessage = state.errorMessage ?: result.displayMessage())
+            }
 
         fun onFilterChange(filter: QueueFilter) {
             mutableUiState.update { it.copy(filter = filter) }
@@ -391,19 +424,105 @@ class ApproveViewModel
             }
         }
 
-        /** Dismiss a drop after its confirm dialog (issue #365). */
-        fun dismissDrop(unitId: Long) {}
+        /**
+         * Dismiss a drop — the Curator was right (issue #365). Called from the
+         * confirm dialog only. Requires connectivity and is never queued; a
+         * failure keeps the item and names the error on it.
+         */
+        fun dismissDrop(unitId: Long) =
+            actOnDrop(unitId) {
+                when (val result = approvalRepository.dismissDroppedUnit(unitId)) {
+                    is Result.Success -> Result.Success(emptyList())
+                    else -> result.failureAs()
+                }
+            }
 
-        /** Generate cards for a drop after its confirm dialog (issue #365). */
-        fun generateDrop(unitId: Long) {}
+        /**
+         * Generate cards for a drop through the Writer ⇄ Critic loop (issue
+         * #365). The call answers after the cards are written (often 30–90 s);
+         * meanwhile the item shows progress and every Dropped action waits, so
+         * a second tap cannot generate twice. On success the item leaves
+         * Dropped and the returned cards join the queue groups — none approved
+         * (hard rule 1).
+         */
+        fun generateDrop(unitId: Long) =
+            actOnDrop(unitId, isGenerate = true) {
+                approvalRepository.generateCardsForDroppedUnit(unitId)
+            }
 
-        fun onStartManualCard(unitId: Long) {}
+        /** Open the "Write card" editor on a drop; one editor at a time, never while busy. */
+        fun onStartManualCard(unitId: Long) {
+            if (!mutableUiState.value.dropActionsEnabled) return
+            mutableUiState.update { it.copy(manualCardDraft = ManualCardDraft(unitId = unitId)) }
+        }
 
-        fun onManualCardChange(draft: ManualCardDraft) {}
+        /** Every edit to the open editor; the server's last 422 clears once the text changes. */
+        fun onManualCardChange(draft: ManualCardDraft) {
+            mutableUiState.update { state ->
+                val open = state.manualCardDraft ?: return@update state
+                if (open.unitId != draft.unitId) return@update state
+                state.copy(manualCardDraft = draft.copy(error = null))
+            }
+        }
 
-        fun onCancelManualCard() {}
+        fun onCancelManualCard() {
+            mutableUiState.update { it.copy(manualCardDraft = null) }
+        }
 
-        fun submitManualCard() {}
+        /**
+         * Add the typed card to the queue (`POST /units/{id}/cards`). It lands
+         * `pending_review` and still needs Approve (hard rule 1). A 422 keeps
+         * the editor open with the typed text and the server's `detail`.
+         */
+        fun submitManualCard() {
+            val draft = mutableUiState.value.manualCardDraft ?: return
+            if (!draft.canSubmit) return
+            actOnDrop(draft.unitId) {
+                when (
+                    val result =
+                        approvalRepository.createCardForDroppedUnit(draft.unitId, draft.type, draft.front, draft.back)
+                ) {
+                    is Result.Success -> Result.Success(listOf(result.data))
+                    else -> result.failureAs()
+                }
+            }
+        }
+
+        /**
+         * Runs one Dropped action. A success removes the unit from Dropped and
+         * inserts the cards it produced into the queue locally — no refetch.
+         * Offline, or while another Dropped action runs, nothing happens: the
+         * action is disabled, never queued (docs/android.md, "Ratings are the
+         * only queued write").
+         */
+        private fun actOnDrop(
+            unitId: Long,
+            isGenerate: Boolean = false,
+            call: suspend () -> Result<List<PendingCard>>,
+        ) {
+            if (!mutableUiState.value.dropActionsEnabled) return
+            mutableUiState.update {
+                it.copy(
+                    busyDropUnitId = unitId,
+                    generatingUnitId = if (isGenerate) unitId else null,
+                    dropErrors = it.dropErrors - unitId,
+                    errorMessage = null,
+                )
+            }
+            viewModelScope.launch(dropExceptionHandler) {
+                val result = withContext(ioDispatcher) { call() }
+                mutableUiState.update { state ->
+                    val idle = state.copy(busyDropUnitId = null, generatingUnitId = null)
+                    when (result) {
+                        is Result.Success -> resolveDrop(idle, unitId, result.data)
+                        Result.Unauthorized -> idle.copy(isUnauthorized = true)
+                        is Result.NetworkError -> idle.copy(isOffline = true)
+                        is Result.HttpError -> idle.withDropError(unitId, result.detail ?: MESSAGE_GENERIC)
+                        is Result.UnexpectedError -> idle.withDropError(unitId, result.displayMessage())
+                    }
+                }
+            }
+        }
 
         private companion object {
             const val MESSAGE_GENERIC = "Something went wrong — try again."
@@ -422,6 +541,90 @@ class ApproveViewModel
                                 if (card.id == cardId) card.copy(front = front, back = back) else card
                             },
                     )
+                }
+
+            /** The unit leaves Dropped; its cards join the queue, counted like any queued card. */
+            fun resolveDrop(
+                state: ApproveUiState,
+                unitId: Long,
+                cards: List<PendingCard>,
+            ): ApproveUiState =
+                state.copy(
+                    droppedGroups = removeDrop(state.droppedGroups, unitId),
+                    droppedCount = state.droppedCount?.let { (it - 1).coerceAtLeast(0) },
+                    groups = insertCards(state.groups, cards),
+                    pendingCount = state.pendingCount?.let { it + cards.size } ?: cards.size,
+                    bulkApprovableCount =
+                        cards.count { !it.isNeedsHuman }.let { added -> state.bulkApprovableCount?.plus(added) ?: added },
+                    manualCardDraft = state.manualCardDraft?.takeIf { it.unitId != unitId },
+                    dropErrors = state.dropErrors - unitId,
+                )
+
+            /**
+             * A failed action keeps the unit listed. A 422 on the open editor
+             * lands inline in it, keeping the typed text; anything else is named
+             * on the item.
+             */
+            fun ApproveUiState.withDropError(
+                unitId: Long,
+                message: String,
+            ): ApproveUiState {
+                val draft = manualCardDraft
+                return if (draft != null && draft.unitId == unitId) {
+                    copy(manualCardDraft = draft.copy(error = message))
+                } else {
+                    copy(dropErrors = dropErrors + (unitId to message))
+                }
+            }
+
+            fun removeDrop(
+                groups: List<DroppedChapterGroup>,
+                unitId: Long,
+            ): List<DroppedChapterGroup> =
+                groups.mapNotNull { group ->
+                    val kept = group.units.filterNot { it.id == unitId }
+                    if (kept.size == group.units.size) {
+                        group
+                    } else {
+                        kept.takeIf { it.isNotEmpty() }?.let { group.copy(units = it) }
+                    }
+                }
+
+            /**
+             * Places each card in its chapter: appended to the last run of the
+             * same (book, chapter), or as a new group where the server's
+             * (book, chapter) order puts it. Export position within a chapter
+             * is not known client-side, so a card lands at its chapter's end;
+             * the next refresh restores the exact server order.
+             */
+            fun insertCards(
+                groups: List<ChapterGroup>,
+                cards: List<PendingCard>,
+            ): List<ChapterGroup> =
+                cards.fold(groups) { current, card ->
+                    val sameChapter = current.indexOfLast { it.bookId == card.bookId && it.chapter == card.chapter }
+                    if (sameChapter >= 0) {
+                        current.toMutableList().apply {
+                            this[sameChapter] = this[sameChapter].copy(cards = this[sameChapter].cards + card)
+                        }
+                    } else {
+                        val newGroup = ChapterGroup(bookId = card.bookId, book = card.book, chapter = card.chapter, cards = listOf(card))
+                        val position =
+                            current.indexOfFirst { group ->
+                                compareValuesBy(group, newGroup, ChapterGroup::book, ChapterGroup::chapter) > 0
+                            }
+                        current.toMutableList().apply { add(if (position < 0) size else position, newGroup) }
+                    }
+                }
+
+            /** A non-success [Result] of one type re-typed as another, for the action plumbing. */
+            fun <T> Result<*>.failureAs(): Result<T> =
+                when (this) {
+                    is Result.Success -> error("failureAs called on a success")
+                    Result.Unauthorized -> Result.Unauthorized
+                    is Result.HttpError -> this
+                    is Result.NetworkError -> this
+                    is Result.UnexpectedError -> this
                 }
 
             /** Drops the card and any group it leaves empty. */

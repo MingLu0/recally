@@ -1185,6 +1185,48 @@ class ApproveScreenTest {
         assertEquals(listOf(QueueFilter.DROPPED), filters)
     }
 
+    /**
+     * Emulator verification found the Write-card toggle rendering in Material's
+     * default lavender. Its selected segment must be `primary-wash` and the
+     * unselected one the item's own `surface`, in both themes — tokens only.
+     */
+    @Test
+    fun test_manual_card_toggle_uses_design_tokens() {
+        var darkTheme by mutableStateOf(false)
+        setApproveContent(
+            droppedState(
+                listOf(droppedUnit(id = 7)),
+                manualCardDraft = ManualCardDraft(unitId = 7, type = PendingCard.TYPE_CLOZE),
+            ),
+            readDarkTheme = { darkTheme },
+        )
+        for (theme in listOf(false, true)) {
+            darkTheme = theme
+            composeTestRule.waitForIdle()
+            val tokens = if (darkTheme) DarkRecallyColorTokens else LightRecallyColorTokens
+            val themeName = if (darkTheme) "dark" else "light"
+            val frame = captureComposeRoot()
+            val selected = composeTestRule.onNode(hasText("Cloze") and hasClickAction()).getBoundsInRoot()
+            val unselected = composeTestRule.onNode(hasText("Q&A") and hasClickAction()).getBoundsInRoot()
+            val inset = 16f
+
+            assertPixelApprox(
+                "$themeName: selected segment fill",
+                frame,
+                (selected.right.value - inset).toPx(),
+                selected.centreY(),
+                tokens.primaryWash,
+            )
+            assertPixelApprox(
+                "$themeName: unselected segment fill",
+                frame,
+                (unselected.right.value - inset).toPx(),
+                unselected.centreY(),
+                tokens.surface,
+            )
+        }
+    }
+
     /** A card's Approve action row — a descendant of the queue list, unlike the dialog's own Approve button. */
     private fun approveActionInQueue(): SemanticsMatcher =
         hasText("Approve") and hasClickAction() and hasAnyAncestor(hasTestTagValue(QUEUE_LIST_TAG))

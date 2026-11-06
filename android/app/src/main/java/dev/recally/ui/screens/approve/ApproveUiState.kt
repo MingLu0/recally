@@ -88,7 +88,29 @@ data class ManualCardDraft(
      * beyond that — the server validates.
      */
     val canSubmit: Boolean
-        get() = false
+        get() =
+            when (type) {
+                PendingCard.TYPE_CLOZE -> hasClozeDeletion(front)
+                else -> front.isNotBlank() && back.isNotBlank()
+            }
+
+    /** The cloze editor's hint shows while the front lacks a deletion. */
+    val showsClozeHint: Boolean
+        get() = type == PendingCard.TYPE_CLOZE
+
+    private companion object {
+        const val CLOZE_OPEN = "{{c1::"
+        const val CLOZE_CLOSE = "}}"
+
+        /** `{{c1::` followed, later, by a non-empty answer and `}}`. */
+        fun hasClozeDeletion(front: String): Boolean {
+            val open = front.indexOf(CLOZE_OPEN)
+            if (open < 0) return false
+            val answerStart = open + CLOZE_OPEN.length
+            val close = front.indexOf(CLOZE_CLOSE, answerStart)
+            return close > answerStart && front.substring(answerStart, close).isNotBlank()
+        }
+    }
 }
 
 /**
@@ -149,11 +171,13 @@ data class ApproveUiState(
      * The bulk bar shows only when there is clean work to do. It is hidden on
      * the NEEDS_YOU filter: every card there is `needs_human`, which the bulk
      * path excludes (hard rule 1), so the button would claim work it cannot do.
+     * It is hidden on DROPPED too: it acts on cards, and none is listed there
+     * (issue #365).
      */
     val showBulkApprove: Boolean
         get() =
             !isLoading &&
-                filter != QueueFilter.NEEDS_YOU &&
+                filter == QueueFilter.ALL &&
                 (bulkApprovableCount ?: 0) > 0
 
     /** The groups the current filter shows; NEEDS_YOU keeps only `needs_human` cards. */
@@ -173,7 +197,19 @@ data class ApproveUiState(
     /** Source highlights are collapsed by default (design-system.md, "Source-highlight disclosure"). */
     fun isHighlightsExpanded(cardId: Long): Boolean = cardId in expandedHighlightCardIds
 
-    /** Queue-drained is its own state: centred success check, "Queue clear" (design-system.md, "States"). */
+    /**
+     * Queue-drained is its own state: centred success check, "Queue clear"
+     * (design-system.md, "States"). It covers the card filters only — the
+     * chip row stays above it, so drops are still reachable (issue #365).
+     */
     val isQueueClear: Boolean
-        get() = !isLoading && !isUnauthorized && groups.isEmpty()
+        get() = !isLoading && !isUnauthorized && filter != QueueFilter.DROPPED && groups.isEmpty()
+
+    /** Dropped has its own empty state, "No dropped highlights" — never "Queue clear". */
+    val isDroppedEmpty: Boolean
+        get() = !isLoading && !isUnauthorized && filter == QueueFilter.DROPPED && droppedGroups.isEmpty()
+
+    /** A Dropped action can start: online, and no other Dropped action in flight. */
+    val dropActionsEnabled: Boolean
+        get() = !isOffline && busyDropUnitId == null
 }

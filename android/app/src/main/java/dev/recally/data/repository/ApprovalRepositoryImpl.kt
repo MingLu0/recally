@@ -3,6 +3,7 @@ package dev.recally.data.repository
 import dev.recally.data.remote.ApproveBatchRequest
 import dev.recally.data.remote.ApproveCardRequest
 import dev.recally.data.remote.EditCardRequest
+import dev.recally.data.remote.HandWrittenCardRequest
 import dev.recally.data.remote.RecallyApi
 import dev.recally.data.remote.RejectCardRequest
 import dev.recally.data.remote.apiCall
@@ -19,7 +20,7 @@ import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 /**
- * Approval queue over the API only — no Room cache, because the queue
+ * Approval queue — and the Curator's drops beside it (issue #365) — over the API only — no Room cache, because the queue
  * requires connectivity and its writes are never queued (docs/android.md,
  * "Offline-first sync"). Failures surface as [Result] cases, never throws.
  */
@@ -72,19 +73,36 @@ class ApprovalRepositoryImpl
                 apiCall { api.rejectCard(cardId, RejectCardRequest(reason = reason)) }.toUnit()
             }
 
-        override suspend fun droppedUnits(): Result<DroppedUnits> = Result.UnexpectedError(NotImplementedError())
+        override suspend fun droppedUnits(): Result<DroppedUnits> =
+            withContext(ioDispatcher) {
+                apiCall { api.droppedUnits().toDomain() }
+            }
 
-        override suspend fun dismissDroppedUnit(unitId: Long): Result<Unit> = Result.UnexpectedError(NotImplementedError())
+        override suspend fun dismissDroppedUnit(unitId: Long): Result<Unit> =
+            withContext(ioDispatcher) {
+                apiCall { api.dismissUnit(unitId) }.toUnit()
+            }
 
+        /**
+         * The long-read client (issue #365): the server answers after the
+         * Writer ⇄ Critic loop, which outlasts OkHttp's default read timeout.
+         */
         override suspend fun generateCardsForDroppedUnit(unitId: Long): Result<List<PendingCard>> =
-            Result.UnexpectedError(NotImplementedError())
+            withContext(ioDispatcher) {
+                apiCall { longReadApi.generateUnitCards(unitId).cards.map { it.toDomain() } }
+            }
 
         override suspend fun createCardForDroppedUnit(
             unitId: Long,
             type: String,
             front: String,
             back: String,
-        ): Result<PendingCard> = Result.UnexpectedError(NotImplementedError())
+        ): Result<PendingCard> =
+            withContext(ioDispatcher) {
+                apiCall {
+                    api.createUnitCard(unitId, HandWrittenCardRequest(type = type, front = front, back = back)).toDomain()
+                }
+            }
 
         /** The updated card in the response is of no use to a queue that drops the row. */
         private fun <T> Result<T>.toUnit(): Result<Unit> =
